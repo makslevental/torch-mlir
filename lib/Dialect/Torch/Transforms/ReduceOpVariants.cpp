@@ -39,7 +39,8 @@ public:
         opOperand.set(rewriter.create<CopyToValueTensorOp>(op->getLoc(),
                                                            opOperand.get()));
       } else if (auto listType = operandType.dyn_cast<ListType>()) {
-        if (!listType.getContainedType().isa<NonValueTensorType>())
+        if (!(listType.getContainedType().isa<NonValueTensorType>() ||
+              listType.getContainedType().isa<OptionalType>()))
           continue;
 
         // Construct a new list whose elements are value tensors copied from
