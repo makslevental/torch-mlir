@@ -75,15 +75,15 @@ LOWERING_PIPELINE = ",".join([
     "builtin.func(finalizing-bufferize)",
     "torch-drop-public-return",
     # # Lower to LLVM
-    # "builtin.func(convert-linalg-to-loops)",
-    # "builtin.func(lower-affine)",
-    # "builtin.func(convert-scf-to-std)",
-    # "builtin.func(refback-expand-ops-for-llvm)",
-    # "builtin.func(arith-expand)",
-    # "builtin.func(convert-math-to-llvm)",
-    # "convert-memref-to-llvm",
-    # "convert-std-to-llvm",
-    # "reconcile-unrealized-casts",
+    "builtin.func(convert-linalg-to-loops)",
+    "builtin.func(lower-affine)",
+    "builtin.func(convert-scf-to-std)",
+    "builtin.func(refback-expand-ops-for-llvm)",
+    "builtin.func(arith-expand)",
+    "builtin.func(convert-math-to-llvm)",
+    "convert-memref-to-llvm",
+    "convert-std-to-llvm",
+    "reconcile-unrealized-casts",
 ])
 
 if __name__ == "__main__":
