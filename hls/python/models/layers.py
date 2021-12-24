@@ -320,14 +320,15 @@ class MyBasicBlock(nn.Module):
 def make_layer(test_module, annotations):
     class_annotator = ClassAnnotator()
     recursivescriptmodule = torch.jit.script(test_module)
-    frozen_recursivescriptmodule = torch.jit.freeze(recursivescriptmodule)
+    # frozen_recursivescriptmodule = torch.jit.freeze(recursivescriptmodule)
+    frozen_recursivescriptmodule = recursivescriptmodule
     class_annotator.exportNone(frozen_recursivescriptmodule._c._type())
     class_annotator.exportPath(frozen_recursivescriptmodule._c._type(), ["forward"])
     class_annotator.annotateArgs(
         frozen_recursivescriptmodule._c._type(), ["forward"], annotations
     )
     # extract_annotations(test_module, frozen_recursivescriptmodule, class_annotator)
-    # torch._C._jit_pass_inline(frozen_recursivescriptmodule.graph)
+    torch._C._jit_pass_inline(frozen_recursivescriptmodule.graph)
     return frozen_recursivescriptmodule, class_annotator
 
 
