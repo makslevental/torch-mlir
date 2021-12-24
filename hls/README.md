@@ -1,4 +1,12 @@
-
+- [Reprs](#reprs)
+    - [PyTorch](#pytorch)
+    - [Torch](#torch)
+    - [LinAlg](#linalg)
+    - [Bufferized](#bufferized)
+    - [LLVM](#llvm)
+    - [LLVMIR](#llvmir)
+    - [Verilog](#verilog)
+- [Test it out](#test-it-out)
 
 # Reprs
 
