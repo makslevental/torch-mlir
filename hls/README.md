@@ -42,6 +42,8 @@ module attributes {llvm.data_layout = "", torch.debug_module_name = "MatmulDotOu
 }
 ```
 
+Note no return.
+
 ### LinAlg
 
 ```mlir
@@ -53,7 +55,7 @@ module attributes {torch.debug_module_name = "MatmulDotOut"}  {
 }
 ```
 
-Note `{variant = "out"}` and annotated output.
+Note `{variant = "out"}` and fully refined output.
 
 ### Affine
 
