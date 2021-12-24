@@ -64,7 +64,7 @@ def make_mat_mul_out():
 
 
 LOWERING_PIPELINE = ",".join([
-    # Bufferize.
+    # # Bufferize.
     "tensor-constant-bufferize",
     "builtin.func(scf-bufferize)",
     "builtin.func(my-linalg-bufferize)",
@@ -74,16 +74,16 @@ LOWERING_PIPELINE = ",".join([
     # "buffer-results-to-out-params",
     "builtin.func(finalizing-bufferize)",
     "torch-drop-public-return",
-    # Lower to LLVM
-    "builtin.func(convert-linalg-to-loops)",
-    "builtin.func(lower-affine)",
-    "builtin.func(convert-scf-to-std)",
-    "builtin.func(refback-expand-ops-for-llvm)",
-    "builtin.func(arith-expand)",
-    "builtin.func(convert-math-to-llvm)",
-    "convert-memref-to-llvm",
-    "convert-std-to-llvm",
-    "reconcile-unrealized-casts",
+    # # Lower to LLVM
+    # "builtin.func(convert-linalg-to-loops)",
+    # "builtin.func(lower-affine)",
+    # "builtin.func(convert-scf-to-std)",
+    # "builtin.func(refback-expand-ops-for-llvm)",
+    # "builtin.func(arith-expand)",
+    # "builtin.func(convert-math-to-llvm)",
+    # "convert-memref-to-llvm",
+    # "convert-std-to-llvm",
+    # "reconcile-unrealized-casts",
 ])
 
 if __name__ == "__main__":
@@ -93,7 +93,7 @@ if __name__ == "__main__":
     with mb.module.context:
         pm = PassManager.parse(",".join([
             'torchscript-module-to-torch-backend-pipeline',
-            # 'torch-backend-to-linalg-on-tensors-backend-pipeline'
+            'torch-backend-to-linalg-on-tensors-backend-pipeline'
         ]))
         pm.run(mb.module)
 
