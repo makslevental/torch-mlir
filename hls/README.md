@@ -97,7 +97,7 @@ module attributes {torch.debug_module_name = "MatmulDotOut"}  {
 }
 ```
 
-Note no return.
+Note no return and no munging.
 
 ### LLVM
 
