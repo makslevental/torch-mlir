@@ -46,6 +46,8 @@ class TorchOpTrait<string name> : OpTrait, NativeTrait<"", ""> {
 def HasValueSemantics : TorchOpTrait<"HasValueSemantics">;
 def IsTrailingUnderscoreInplaceVariant
   : TorchOpTrait<"IsTrailingUnderscoreInplaceVariant">;
+def IsOutOfPlaceVariant
+  : TorchOpTrait<"IsOutOfPlaceVariant">;
 def AllowsTypeRefinement : TorchOpTrait<"AllowsTypeRefinement">;
 
 #endif // TORCH_BASE

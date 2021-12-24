@@ -8,6 +8,8 @@ add_mlir_library(TorchMLIRTorchPasses
   PrepareForGlobalizeObjectGraph.cpp
   ReduceOpVariants.cpp
   RefinePublicReturn.cpp
+  DropPublicReturn.cpp
+  MyLinalgBufferize.cpp
   RefineTypes.cpp
 
   ADDITIONAL_HEADER_DIRS

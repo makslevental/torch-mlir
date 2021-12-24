@@ -440,6 +440,14 @@ def emit_aten_ops(torch_ir_dir: str, registry: Registry):
                     f,
                     traits=["IsTrailingUnderscoreInplaceVariant"])
 
+        def emit_with_out_variants(key, **kwargs):
+            operator = registry[key]
+            emit_op(operator, f, **kwargs)
+            ns, unqual, _overload = operator.triple
+            emit_op(registry.get_by_triple((ns, unqual, "out")),
+                    f,
+                    traits=["IsOutOfPlaceVariant"])
+
         # Elementwise tensor compute ops
         for key in [
                 "aten::tanh : (Tensor) -> (Tensor)",
@@ -501,6 +509,8 @@ def emit_aten_ops(torch_ir_dir: str, registry: Registry):
         emit("aten::mm : (Tensor, Tensor) -> (Tensor)")
         emit("aten::addmm : (Tensor, Tensor, Tensor, Scalar, Scalar) -> (Tensor)")
         emit("aten::matmul : (Tensor, Tensor) -> (Tensor)")
+        emit("aten::mm.out : (Tensor, Tensor, Tensor) -> (Tensor)", traits=["HasValueSemantics"])
+        emit("aten::matmul.out : (Tensor, Tensor, Tensor) -> (Tensor)", traits=["HasValueSemantics"])
         emit(
             "aten::conv2d : (Tensor, Tensor, Tensor?, int[], int[], int[], int) -> (Tensor)"
         )

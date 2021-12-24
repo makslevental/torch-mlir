@@ -54,6 +54,10 @@ std::unique_ptr<OperationPass<FuncOp>> createMaximizeValueSemanticsPass();
 
 std::unique_ptr<OperationPass<ModuleOp>> createRefinePublicReturnPass();
 
+std::unique_ptr<OperationPass<ModuleOp>> createDropPublicReturnPass();
+
+std::unique_ptr<OperationPass<FuncOp>> createMyLinalgBufferizePass();
+
 std::unique_ptr<OperationPass<FuncOp>> createDecomposeComplexOpsPass();
 
 } // namespace Torch

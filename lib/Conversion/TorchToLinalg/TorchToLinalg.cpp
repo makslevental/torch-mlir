@@ -988,6 +988,65 @@ public:
 } // namespace
 
 namespace {
+class ConvertAtenMmOutOp : public OpConversionPattern<AtenMmOutOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(AtenMmOutOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Location loc = op->getLoc();
+    Value lhs = adaptor.self();
+    Value rhs = adaptor.mat2();
+    Value out = adaptor.out();
+
+    // A user can write an errorneous program where `aten.mm` is in fact called
+    // with operands of invalid rank or dtype. We cannot convert to linalg in
+    // this case or we will get a verifier error, which corresponds to breaking
+    // of *internal* compiler invariants, and for a user manifests as a compiler
+    // crash in the worst case (such as we try to canonicalize/fold/print the
+    // invalid op before the verifier gets to see it -- also release builds of a
+    // mature compiler usually have the verifier turned off for compile time
+    // reasons).
+    //
+    // The compiler cannot crash even if the user wrote an erroneous program!
+    if (failed(verifyLinalgCompatibleTypes(op, rewriter)))
+      return failure();
+    if (lhs.getType().cast<RankedTensorType>().getRank() != 2 ||
+        rhs.getType().cast<RankedTensorType>().getRank() != 2) {
+      return rewriter.notifyMatchFailure(
+          op, "expected both operands to aten.mm to be rank 2");
+    }
+
+    Value lhsDim0 = rewriter.create<tensor::DimOp>(loc, lhs, 0);
+    Value lhsDim1 = rewriter.create<tensor::DimOp>(loc, lhs, 1);
+    Value rhsDim0 = rewriter.create<tensor::DimOp>(loc, rhs, 0);
+    Value rhsDim1 = rewriter.create<tensor::DimOp>(loc, rhs, 1);
+    Value contractingDimEqual = rewriter.create<arith::CmpIOp>(
+        loc, arith::CmpIPredicate::eq, lhsDim1, rhsDim0);
+    rewriter.create<AssertOp>(
+        loc, contractingDimEqual,
+        rewriter.getStringAttr(
+            "mismatching contracting dimension for torch.aten.mm"));
+
+    Type newResultType = getTypeConverter()->convertType(op.getType());
+    NamedAttribute variant(rewriter.getStringAttr("variant"), rewriter.getStringAttr("out"));
+    Value matmul = rewriter
+                       .create<linalg::MatmulOp>(loc, out.getType(),
+                                                 ValueRange{lhs, rhs}, out, variant)
+                       .getResult(0);
+    // When constructed with just dynamic sizes, InitTensorOp will have a result
+    // type which has all `?`'s for dimensions, which might not be the result
+    // type of `op`. The constraints on later linalg ops means that the result
+    // of the MatmulOp will have this type too. So cast it to the desired type
+    // so that in the end we have the original result type.
+    rewriter.replaceOpWithNewOp<tensor::CastOp>(op, newResultType, matmul);
+
+    return success();
+  }
+};
+} // namespace
+
+namespace {
 class ConvertAtenMatmulOp : public OpConversionPattern<AtenMatmulOp> {
 public:
   using OpConversionPattern::OpConversionPattern;
@@ -1116,6 +1175,154 @@ public:
           rewriter
               .create<linalg::GenericOp>(
                   loc, newResultType, ValueRange{lhs, rhs}, initTensor0,
+                  /*indexingMaps=*/indexingMaps,
+                  /*iteratorTypes=*/iteratorTypes,
+                  [&](OpBuilder &b, Location loc, ValueRange args) {
+                    Value l = args[0], r = args[1], res = args[2];
+                    Value mul = b.create<arith::MulFOp>(loc, l, r);
+                    Value add = b.create<arith::AddFOp>(loc, mul, res);
+                    b.create<linalg::YieldOp>(loc, add);
+                  })
+              .getResult(0);
+
+      rewriter.replaceOpWithNewOp<tensor::CastOp>(op, newResultType, finalRes);
+      return success();
+    }
+    return failure();
+  }
+};
+} // namespace
+
+namespace {
+class ConvertAtenMatmulOutOp : public OpConversionPattern<AtenMatmulOutOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(AtenMatmulOutOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Location loc = op->getLoc();
+    Value lhs = adaptor.self();
+    Value rhs = adaptor.other();
+    Value out = adaptor.out();
+
+    if (failed(verifyLinalgCompatibleTypes(op, rewriter)))
+      return failure();
+
+    unsigned lhsRank = lhs.getType().cast<RankedTensorType>().getRank();
+    unsigned rhsRank = rhs.getType().cast<RankedTensorType>().getRank();
+
+    Type newResultType = getTypeConverter()->convertType(op.getType());
+    Type elementType = newResultType.cast<TensorType>().getElementType();
+
+    // The different cases of torch_matmul op is mentioned here:
+    // https://pytorch.org/docs/stable/generated/torch.matmul.html
+
+    // First Case: Dot Product.
+    if (lhsRank == 1 && rhsRank == 1) {
+      Value lhsDim0 = getDimOp(rewriter, loc, lhs, 0);
+      Value rhsDim0 = getDimOp(rewriter, loc, rhs, 0);
+
+      checkDimEqualHelper(rewriter, loc, lhsDim0, rhsDim0);
+
+//      Value zeroTensor = createZeroInitTensor(rewriter, loc, {}, elementType);
+      Value dotProd =
+          rewriter
+              .create<linalg::DotOp>(loc, out.getType(),
+                                     ValueRange{lhs, rhs}, out)
+              .getResult(0);
+      rewriter.replaceOpWithNewOp<tensor::CastOp>(op, newResultType, dotProd);
+      return success();
+    }
+
+    // Second Case: Vec-Mat Multiplication.
+    if (lhsRank == 1 && rhsRank == 2) {
+      Value lhsDim0 = getDimOp(rewriter, loc, lhs, 0);
+      Value rhsDim0 = getDimOp(rewriter, loc, rhs, 0);
+      Value rhsDim1 = getDimOp(rewriter, loc, rhs, 1);
+      checkDimEqualHelper(rewriter, loc, lhsDim0, rhsDim0);
+
+//      Value zeroTensor =
+//          createZeroInitTensor(rewriter, loc, ValueRange{rhsDim1}, elementType);
+      Value matmul =
+          rewriter
+              .create<linalg::VecmatOp>(loc, out.getType(),
+                                        ValueRange{lhs, rhs}, out)
+              .getResult(0);
+      rewriter.replaceOpWithNewOp<tensor::CastOp>(op, newResultType, matmul);
+      return success();
+    }
+
+    // Third Case: Matrix-Vec Multiplication.
+    if (lhsRank == 2 && rhsRank == 1) {
+      Value lhsDim0 = getDimOp(rewriter, loc, lhs, 0);
+      Value lhsDim1 = getDimOp(rewriter, loc, lhs, 1);
+      Value rhsDim0 = getDimOp(rewriter, loc, rhs, 0);
+      checkDimEqualHelper(rewriter, loc, lhsDim1, rhsDim0);
+
+//      Value zeroTensor =
+//          createZeroInitTensor(rewriter, loc, ValueRange{lhsDim0}, elementType);
+      Value matmul =
+          rewriter
+              .create<linalg::MatvecOp>(loc, out.getType(),
+                                        ValueRange{lhs, rhs}, out)
+              .getResult(0);
+      rewriter.replaceOpWithNewOp<tensor::CastOp>(op, newResultType, matmul);
+      return success();
+    }
+
+    // Fourth Case: Batch-Matrix Multiplication.
+    // TODO: Broadcasting of batch dimension is remaining.
+    if (lhsRank >= 3 && rhsRank >= 3 && lhsRank == rhsRank) {
+
+      unsigned batchRank = lhsRank - 2;
+      SmallVector<Value, 4> resultShape;
+
+      SmallVector<AffineExpr> lhsExpr;
+      SmallVector<AffineExpr> rhsExpr;
+      SmallVector<AffineExpr> outExpr;
+      SmallVector<StringRef> iteratorTypes;
+
+      // Since broadcasting is a TODO, check whether the lhs and rhs batch
+      // dimension match.
+      for (unsigned i = 0; i < batchRank; i++) {
+        Value lhsBatch = getDimOp(rewriter, loc, lhs, i);
+        Value rhsBatch = getDimOp(rewriter, loc, rhs, i);
+        resultShape.push_back(lhsBatch);
+        lhsExpr.push_back(rewriter.getAffineDimExpr(i));
+        rhsExpr.push_back(rewriter.getAffineDimExpr(i));
+        outExpr.push_back(rewriter.getAffineDimExpr(i));
+        iteratorTypes.push_back(getParallelIteratorTypeName());
+        checkDimEqualHelper(rewriter, loc, lhsBatch, rhsBatch);
+      }
+
+      Value lhsDim0 = getDimOp(rewriter, loc, lhs, batchRank);
+      Value lhsDim1 = getDimOp(rewriter, loc, lhs, batchRank + 1);
+      Value rhsDim0 = getDimOp(rewriter, loc, rhs, batchRank);
+      Value rhsDim1 = getDimOp(rewriter, loc, rhs, batchRank + 1);
+      checkDimEqualHelper(rewriter, loc, lhsDim1, rhsDim0);
+
+      // Push the final matrix dimension.
+      resultShape.insert(resultShape.end(), {lhsDim0, rhsDim1});
+
+      lhsExpr.insert(lhsExpr.end(), {rewriter.getAffineDimExpr(batchRank),
+                                     rewriter.getAffineDimExpr(batchRank + 1)});
+      rhsExpr.insert(rhsExpr.end(), {rewriter.getAffineDimExpr(batchRank + 1),
+                                     rewriter.getAffineDimExpr(batchRank + 2)});
+      outExpr.insert(outExpr.end(), {rewriter.getAffineDimExpr(batchRank),
+                                     rewriter.getAffineDimExpr(batchRank + 2)});
+
+//      Value initTensor0 =
+//          createZeroInitTensor(rewriter, loc, resultShape, elementType);
+
+      auto indexingMaps =
+          AffineMap::inferFromExprList({lhsExpr, rhsExpr, outExpr});
+      iteratorTypes.insert(iteratorTypes.end(),
+                           {"parallel", "reduction", "parallel"});
+
+      Value finalRes =
+          rewriter
+              .create<linalg::GenericOp>(
+                  loc, newResultType, ValueRange{lhs, rhs}, out,
                   /*indexingMaps=*/indexingMaps,
                   /*iteratorTypes=*/iteratorTypes,
                   [&](OpBuilder &b, Location loc, ValueRange args) {
@@ -4016,8 +4223,12 @@ public:
     RewritePatternSet patterns(context);
     target.addIllegalOp<AtenMmOp>();
     patterns.add<ConvertAtenMmOp>(typeConverter, context);
+    target.addIllegalOp<AtenMmOutOp>();
+    patterns.add<ConvertAtenMmOutOp>(typeConverter, context);
     target.addIllegalOp<AtenMatmulOp>();
     patterns.add<ConvertAtenMatmulOp>(typeConverter, context);
+    target.addIllegalOp<AtenMatmulOutOp>();
+    patterns.add<ConvertAtenMatmulOutOp>(typeConverter, context);
     target.addIllegalOp<AtenBmmOp>();
     patterns.add<ConvertAtenBmmOp>(typeConverter, context);
     target.addIllegalOp<AtenLinearOp>();

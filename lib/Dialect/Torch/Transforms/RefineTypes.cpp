@@ -301,6 +301,8 @@ public:
 
     if (auto mm = llvm::dyn_cast<AtenMmOp>(op)) {
       return visitAtenMmOp(mm, operands);
+    } else if (auto mmout = llvm::dyn_cast<AtenMmOutOp>(op)) {
+      return visitAtenMmOutOp(mmout, operands);
     } else if (auto addmm = llvm::dyn_cast<AtenAddmmOp>(op)) {
       return visitAtenAddmmOp(addmm, operands);
     } else if (auto linear = llvm::dyn_cast<AtenLinearOp>(op)) {
@@ -454,6 +456,8 @@ public:
       return visitAtenEmbeddingOp(embedding, operands);
     } else if (auto bmm = dyn_cast<AtenBmmOp>(op)) {
       return visitAtenBmmOp(bmm, operands);
+    } else if (auto matmulout = dyn_cast<AtenMatmulOutOp>(op)) {
+      return visitAtenMatmulOutOp(matmulout, operands);
     } else if (auto matmul = dyn_cast<AtenMatmulOp>(op)) {
       return visitAtenMatmulOp(matmul, operands);
     } else if (auto mean = dyn_cast<AtenMeanOp>(op)) {
@@ -487,6 +491,9 @@ public:
 private:
   ChangeResult
   visitAtenMmOp(AtenMmOp op,
+                ArrayRef<LatticeElement<ValueKnowledge> *> operands);
+  ChangeResult
+  visitAtenMmOutOp(AtenMmOutOp op,
                 ArrayRef<LatticeElement<ValueKnowledge> *> operands);
   ChangeResult
   visitAtenAddmmOp(AtenAddmmOp op,
@@ -599,6 +606,9 @@ private:
                  ArrayRef<LatticeElement<ValueKnowledge> *> operands);
   ChangeResult
   visitAtenMatmulOp(AtenMatmulOp op,
+                    ArrayRef<LatticeElement<ValueKnowledge> *> operands);
+  ChangeResult
+  visitAtenMatmulOutOp(AtenMatmulOutOp op,
                     ArrayRef<LatticeElement<ValueKnowledge> *> operands);
 
   template <typename OpTy>
@@ -771,6 +781,21 @@ ChangeResult TypeAnalyzer::visitAtenMmOp(
   // TODO: Investigate promotion rules if element types mismatch.
   // This is conservatively correct, assuming that if both element types are
   // the same, then the result is of that same element type.
+  knowledge.dtype =
+      getPromotedResultTypeAssumingNonZeroRank(op->getContext(), {&lhs, &rhs});
+  return getLatticeElement(op->getResult(0)).join(knowledge);
+}
+
+ChangeResult TypeAnalyzer::visitAtenMmOutOp(
+    AtenMmOutOp op, ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
+  auto &lhs = operands[0]->getValue();
+  auto &rhs = operands[1]->getValue();
+  auto knowledge =
+      ValueKnowledge::getNotNonePessimisticValueState(op->getContext());
+  auto m = lhs.sizes[0];
+  auto k = rhs.sizes[1];
+  knowledge.hasSizes = true;
+  knowledge.sizes = {m, k};
   knowledge.dtype =
       getPromotedResultTypeAssumingNonZeroRank(op->getContext(), {&lhs, &rhs});
   return getLatticeElement(op->getResult(0)).join(knowledge);
@@ -1601,6 +1626,28 @@ ChangeResult TypeAnalyzer::visitAtenMatmulOp(
   unsigned maxRank = self.sizes.size() > other.sizes.size()
                          ? self.sizes.size()
                          : other.sizes.size();
+  unsigned lhsDim = self.sizes.size() > 2 ? 2 : self.sizes.size();
+  unsigned rhsDim = other.sizes.size() > 2 ? 2 : other.sizes.size();
+  unsigned batchDim = maxRank > 2 ? maxRank - 2 : 0;
+  unsigned matDim = (lhsDim - 1) + (rhsDim - 1);
+  unsigned resultRank = batchDim + matDim;
+  knowledge.sizes.resize(resultRank, kUnknownSize);
+  knowledge.dtype = joinElementTypes(self.dtype, other.dtype);
+  knowledge.hasSizes = true;
+  return getLatticeElement(op->getResult(0)).join(knowledge);
+}
+
+ChangeResult TypeAnalyzer::visitAtenMatmulOutOp(
+    AtenMatmulOutOp op, ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
+  auto knowledge =
+      ValueKnowledge::getNotNonePessimisticValueState(op->getContext());
+  auto self = operands[0]->getValue();
+  auto other = operands[1]->getValue();
+  if (!self.hasSizes || !other.hasSizes)
+    return getLatticeElement(op->getResult(0)).join(knowledge);
+  unsigned maxRank = self.sizes.size() > other.sizes.size()
+                     ? self.sizes.size()
+                     : other.sizes.size();
   unsigned lhsDim = self.sizes.size() > 2 ? 2 : self.sizes.size();
   unsigned rhsDim = other.sizes.size() > 2 ? 2 : other.sizes.size();
   unsigned batchDim = maxRank > 2 ? maxRank - 2 : 0;

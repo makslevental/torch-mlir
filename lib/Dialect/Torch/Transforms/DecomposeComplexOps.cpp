@@ -379,6 +379,34 @@ public:
 };
 } // namespace
 
+// Decompose torch.matmul into: torch.mm and torch.bmm according to ranks.
+namespace {
+class DecomposeAtenMatmulOutOp : public OpRewritePattern<AtenMatmulOutOp> {
+public:
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(AtenMatmulOutOp op,
+                                PatternRewriter &rewriter) const override {
+    Value lhs = op.self();
+    Value rhs = op.other();
+    Value out = op.out();
+
+    int lhsRank = getTensorRank(lhs);
+    int rhsRank = getTensorRank(rhs);
+
+    // If both lhs and rhs ranks are 2 then map it to `aten.mm` op.
+    if (lhsRank == 2 && rhsRank == 2)
+      rewriter.replaceOpWithNewOp<AtenMmOutOp>(op, op.getType(), lhs, rhs, out);
+
+    // If both lhs and rhs ranks are 3 then map it to `aten.bmm` op.
+    if (lhsRank == 3 && rhsRank == 3)
+      return rewriter.notifyMatchFailure(op, "not supported yet");
+
+    return success();
+  }
+};
+} // namespace
+
+
 // Decompose torch.expand into torch.broadcast_to op.
 namespace {
 class DecomposeAtenExpandOp : public OpRewritePattern<AtenExpandOp> {
@@ -565,11 +593,20 @@ class DecomposeComplexOpsPass
     patterns.add<DecomposeAtenSelectIntOp>(context);
     target.addIllegalOp<AtenSelectIntOp>();
     patterns.add<DecomposeAtenMatmulOp>(context);
+    patterns.add<DecomposeAtenMatmulOutOp>(context);
     patterns.add<DecomposeAten_LogSoftmaxBackwardDataOp>(context);
     target.addIllegalOp<Aten_LogSoftmaxBackwardDataOp>();
     target.addDynamicallyLegalOp<AtenMatmulOp>([](AtenMatmulOp op) {
       int lhsRank = getTensorRank(op.self());
       int rhsRank = getTensorRank(op.other());
+
+      // Make aten.matmul legal if the following condition is satisfied.
+      return (lhsRank != 2 || rhsRank != 2) && (lhsRank != 3 || rhsRank != 3);
+    });
+    target.addDynamicallyLegalOp<AtenMatmulOutOp>([](AtenMatmulOutOp op) {
+      int lhsRank = getTensorRank(op.self());
+      int rhsRank = getTensorRank(op.other());
+      int outRank = getTensorRank(op.out());
 
       // Make aten.matmul legal if the following condition is satisfied.
       return (lhsRank != 2 || rhsRank != 2) && (lhsRank != 3 || rhsRank != 3);

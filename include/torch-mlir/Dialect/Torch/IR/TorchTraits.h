@@ -39,6 +39,11 @@ class IsTrailingUnderscoreInplaceVariant
     : public ::mlir::OpTrait::TraitBase<ConcreteType,
                                         IsTrailingUnderscoreInplaceVariant> {};
 
+template <typename ConcreteType>
+class IsOutOfPlaceVariant
+    : public ::mlir::OpTrait::TraitBase<ConcreteType,
+                                        IsOutOfPlaceVariant> {};
+
 // If a Torch op has this trait, it means that the op allows all of its operand
 // and result types to be refined. That is, a less specific type is allowed to
 // be replaced by a more specific type, according to PEP 483 subtyping rules.
