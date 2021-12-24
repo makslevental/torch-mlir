@@ -44,7 +44,7 @@ module attributes {torch.debug_module_name = "MatmulDotOut"}  {
 }
 ```
 
-note `{variant = "out"}`.
+Note `{variant = "out"}` and annotated output.
 
 ## Bufferized
 
@@ -57,7 +57,7 @@ module attributes {torch.debug_module_name = "MatmulDotOut"}  {
 }
 ```
 
-note no return.
+Note no return.
 
 ## LLVM
 
