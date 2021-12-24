@@ -9,15 +9,20 @@ ROOT_LIBDIR="${ROOT_DIR}/cmake-build-debug/lib"
 FN=$1
 #  -affine-loop-fusion="fusion-maximal=true mode=greedy" \
 
-$ROOT_BINDIR/mlir-opt -debug \
+time $ROOT_BINDIR/mlir-opt \
   $FN \
   -affine-loop-invariant-code-motion \
   -affine-simplify-structures \
   -affine-loop-normalize \
   -affine-loop-unroll="unroll-full=true" \
-  > $FN.affine_opt1
+  -affine-loop-unroll="unroll-full=true" \
+  -affine-loop-unroll="unroll-full=true" \
+  -affine-loop-unroll="unroll-full=true" \
+  -affine-loop-unroll="unroll-full=true" \
+  -affine-loop-unroll="unroll-full=true" \
+  > $FN.affine_opt7
 
-$ROOT_BINDIR/mlir-opt \
+time $ROOT_BINDIR/mlir-opt \
   -lower-affine \
   -convert-scf-to-cf \
   -convert-memref-to-llvm \
@@ -25,12 +30,12 @@ $ROOT_BINDIR/mlir-opt \
   -convert-arith-to-llvm \
   -convert-func-to-llvm='use-bare-ptr-memref-call-conv=1' \
   -reconcile-unrealized-casts \
-  < $FN.affine_opt1 > $FN.llvm
+  < $FN.affine_opt7 > $FN.llvm
 
-$ROOT_BINDIR/mlir-translate \
+time $ROOT_BINDIR/mlir-translate \
   -mlir-to-llvmir < $FN.llvm > $FN.ll
 
-${ROOT_BINDIR}/opt $FN.ll \
+time ${ROOT_BINDIR}/opt $FN.ll \
   -S \
   -enable-new-pm=0 \
   -load "${ROOT_LIBDIR}/VhlsLLVMRewriter.so" \
