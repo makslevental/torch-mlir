@@ -15,20 +15,6 @@ from torch_mlir_e2e_test.utils import run_pipeline_with_repro_report
 mb = ModuleBuilder()
 
 
-class MatmulDot(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    @export
-    @annotate_args([
-        None,
-        ([4, 5], torch.float32, True),
-        ([5, 10], torch.float32, True),
-    ])
-    def forward(self, lhs, rhs):
-        return torch.matmul(lhs, rhs)
-
-
 class MatmulDotOut(torch.nn.Module):
     def __init__(self):
         super().__init__()
