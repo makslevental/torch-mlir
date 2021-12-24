@@ -1,4 +1,17 @@
-# IRs
+
+
+# Reprs
+
+## PyTorch
+
+```python
+class MatmulDotOut(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, lhs, rhs, out):
+        return torch.mm(lhs, rhs, out=out)
+```
 
 ## Torch
 ```mlir
