@@ -93,7 +93,7 @@ if __name__ == "__main__":
     with mb.module.context:
         pm = PassManager.parse(",".join([
             'torchscript-module-to-torch-backend-pipeline',
-            'torch-backend-to-linalg-on-tensors-backend-pipeline'
+            # 'torch-backend-to-linalg-on-tensors-backend-pipeline'
         ]))
         pm.run(mb.module)
 
