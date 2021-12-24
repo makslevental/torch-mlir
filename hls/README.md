@@ -7,6 +7,11 @@ A proof of concept, taking `torch.mm` from Python all the way to Verilog, throug
 - [Reprs](#reprs)
   - [PyTorch](#pytorch)
   - [MLIR Dialects](#mlir-dialects)
+    - [Torch](#torch)
+    - [LinAlg](#linalg)
+    - [Affine](#affine)
+    - [Bufferized](#bufferized)
+    - [LLVM](#llvm)
   - [LLVMIR](#llvmir)
   - [Verilog](#verilog)
 - [Test it out](#test-it-out)
@@ -26,6 +31,7 @@ class MatmulDotOut(torch.nn.Module):
 ```
 
 ## MLIR Dialects
+
 ### Torch
 ```mlir
 module attributes {llvm.data_layout = "", torch.debug_module_name = "MatmulDotOut"}  {
