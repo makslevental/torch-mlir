@@ -60,12 +60,13 @@ def make_mod():
 
 
 def make_conv():
-    mod = torch.nn.Conv2d(
-        in_channels=3, out_channels=3, kernel_size=3, stride=1, padding=0, bias=False
-    )
-    mod.eval()
-    mod.apply(set_weights)
-    return make_layer(mod, [None, ([1, 3, 32, 32], torch.float32, True)])
+    with torch.no_grad():
+        mod = torch.nn.Conv2d(
+            in_channels=3, out_channels=3, kernel_size=3, stride=1, padding=0, bias=False
+        )
+        mod.eval()
+        mod.apply(set_weights)
+        return make_layer(mod, [None, ([1, 3, 32, 32], torch.float32, True)])
 
 
 def make_mm():
@@ -195,7 +196,8 @@ PIPELINE = (
 
 if __name__ == "__main__":
     mb = ModuleBuilder()
-    recursivescriptmodule, class_annotator = make_braggnn()
+    recursivescriptmodule, class_annotator = make_conv()
+    print(recursivescriptmodule.graph)
     mb.import_module(recursivescriptmodule._c, class_annotator)
 
     print(",".join(PIPELINE))
