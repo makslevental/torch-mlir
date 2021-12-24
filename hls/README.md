@@ -1,14 +1,16 @@
-# PyTorch HLS flow (through Vitis LLVM API)
+# PyTorch HLS flow
+
+A proof of concept, taking `torch.mm` from Python all the way to Verilog, through Vitis' LLVM API.
+
+# Table of contents
 
 - [Reprs](#reprs)
-    - [PyTorch](#pytorch)
-    - [Torch](#torch)
-    - [LinAlg](#linalg)
-    - [Bufferized](#bufferized)
-    - [LLVM](#llvm)
-    - [LLVMIR](#llvmir)
-    - [Verilog](#verilog)
+  - [PyTorch](#pytorch)
+  - [MLIR Dialects](#mlir-dialects)
+  - [LLVMIR](#llvmir)
+  - [Verilog](#verilog)
 - [Test it out](#test-it-out)
+
 
 # Reprs
 
