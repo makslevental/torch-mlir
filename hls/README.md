@@ -1,4 +1,4 @@
-# Table of contents
+# PyTorch HLS flow (through Vitis LLVM API)
 
 - [Reprs](#reprs)
     - [PyTorch](#pytorch)
