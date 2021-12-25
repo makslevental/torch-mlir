@@ -8,6 +8,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetail.h"
+#include "Passes.h"
 
 #include "mlir/Analysis/DataFlowAnalysis.h"
 #include "mlir/IR/BlockAndValueMapping.h"
@@ -25,6 +26,7 @@
 using namespace mlir;
 using namespace mlir::torch;
 using namespace mlir::torch::Torch;
+using namespace mlir::torch::HLS;
 using namespace mlir::torch::torch_upstream; // For ScalarType and type
                                              // promotion related helpers.
 
@@ -301,6 +303,8 @@ public:
 
     if (auto mm = llvm::dyn_cast<AtenMmOp>(op)) {
       return visitAtenMmOp(mm, operands);
+    } else if (auto mmout = llvm::dyn_cast<AtenMmOutOp>(op)) {
+      return visitAtenMmOutOp(mmout, operands);
     } else if (auto addmm = llvm::dyn_cast<AtenAddmmOp>(op)) {
       return visitAtenAddmmOp(addmm, operands);
     } else if (auto linear = llvm::dyn_cast<AtenLinearOp>(op)) {
@@ -454,6 +458,8 @@ public:
       return visitAtenEmbeddingOp(embedding, operands);
     } else if (auto bmm = dyn_cast<AtenBmmOp>(op)) {
       return visitAtenBmmOp(bmm, operands);
+    } else if (auto matmulout = dyn_cast<AtenMatmulOutOp>(op)) {
+      return visitAtenMatmulOutOp(matmulout, operands);
     } else if (auto matmul = dyn_cast<AtenMatmulOp>(op)) {
       return visitAtenMatmulOp(matmul, operands);
     } else if (auto mean = dyn_cast<AtenMeanOp>(op)) {
@@ -488,6 +494,9 @@ private:
   ChangeResult
   visitAtenMmOp(AtenMmOp op,
                 ArrayRef<LatticeElement<ValueKnowledge> *> operands);
+  ChangeResult
+  visitAtenMmOutOp(AtenMmOutOp op,
+                   ArrayRef<LatticeElement<ValueKnowledge> *> operands);
   ChangeResult
   visitAtenAddmmOp(AtenAddmmOp op,
                    ArrayRef<LatticeElement<ValueKnowledge> *> operands);
@@ -600,6 +609,9 @@ private:
   ChangeResult
   visitAtenMatmulOp(AtenMatmulOp op,
                     ArrayRef<LatticeElement<ValueKnowledge> *> operands);
+  ChangeResult
+  visitAtenMatmulOutOp(AtenMatmulOutOp op,
+                       ArrayRef<LatticeElement<ValueKnowledge> *> operands);
 
   template <typename OpTy>
   ChangeResult
@@ -616,7 +628,7 @@ private:
 
   ChangeResult
   visitAtenNllLossForwardOp(AtenNllLossForwardOp op,
-                      ArrayRef<LatticeElement<ValueKnowledge> *> operands);
+                            ArrayRef<LatticeElement<ValueKnowledge> *> operands);
   ChangeResult visitAtenNativeLayerNormOp(
       AtenNativeLayerNormOp op,
       ArrayRef<LatticeElement<ValueKnowledge> *> operands);
@@ -776,6 +788,21 @@ ChangeResult TypeAnalyzer::visitAtenMmOp(
   return getLatticeElement(op->getResult(0)).join(knowledge);
 }
 
+ChangeResult TypeAnalyzer::visitAtenMmOutOp(
+    AtenMmOutOp op, ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
+  auto &lhs = operands[0]->getValue();
+  auto &rhs = operands[1]->getValue();
+  auto knowledge =
+      ValueKnowledge::getNotNonePessimisticValueState(op->getContext());
+  auto m = lhs.sizes[0];
+  auto k = rhs.sizes[1];
+  knowledge.hasSizes = true;
+  knowledge.sizes = {m, k};
+  knowledge.dtype =
+      getPromotedResultTypeAssumingNonZeroRank(op->getContext(), {&lhs, &rhs});
+  return getLatticeElement(op->getResult(0)).join(knowledge);
+}
+
 ChangeResult TypeAnalyzer::visitAtenAddmmOp(
     AtenAddmmOp op, ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
   auto &input = operands[0]->getValue();
@@ -901,7 +928,7 @@ ChangeResult TypeAnalyzer::visitBinaryBroadcastingComparisonOp(
     knowledge.sizes.resize(std::max(lhs.sizes.size(), rhs.sizes.size()),
                            kUnknownSize);
   }
-  knowledge.dtype = IntegerType::get(op->getContext(), 1); 
+  knowledge.dtype = IntegerType::get(op->getContext(), 1);
   return getLatticeElement(op->getResult(0)).join(knowledge);
 }
 
@@ -1612,6 +1639,28 @@ ChangeResult TypeAnalyzer::visitAtenMatmulOp(
   return getLatticeElement(op->getResult(0)).join(knowledge);
 }
 
+ChangeResult TypeAnalyzer::visitAtenMatmulOutOp(
+    AtenMatmulOutOp op, ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
+  auto knowledge =
+      ValueKnowledge::getNotNonePessimisticValueState(op->getContext());
+  auto self = operands[0]->getValue();
+  auto other = operands[1]->getValue();
+  if (!self.hasSizes || !other.hasSizes)
+    return getLatticeElement(op->getResult(0)).join(knowledge);
+  unsigned maxRank = self.sizes.size() > other.sizes.size()
+                         ? self.sizes.size()
+                         : other.sizes.size();
+  unsigned lhsDim = self.sizes.size() > 2 ? 2 : self.sizes.size();
+  unsigned rhsDim = other.sizes.size() > 2 ? 2 : other.sizes.size();
+  unsigned batchDim = maxRank > 2 ? maxRank - 2 : 0;
+  unsigned matDim = (lhsDim - 1) + (rhsDim - 1);
+  unsigned resultRank = batchDim + matDim;
+  knowledge.sizes.resize(resultRank, kUnknownSize);
+  knowledge.dtype = joinElementTypes(self.dtype, other.dtype);
+  knowledge.hasSizes = true;
+  return getLatticeElement(op->getResult(0)).join(knowledge);
+}
+
 ChangeResult TypeAnalyzer::visitAtenAddCLikeOp(
     Operation *op, ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
   auto knowledge =
@@ -1842,7 +1891,7 @@ void optimize(FuncOp func, TypeAnalyzer &analyzer) {
 }
 
 namespace {
-class RefineTypesPass : public RefineTypesBase<RefineTypesPass> {
+class HLSRefineTypesPass : public HLSRefineTypesBase<HLSRefineTypesPass> {
   void runOnOperation() override {
     auto func = getOperation();
     TypeAnalyzer analyzer(&getContext());
@@ -1853,6 +1902,6 @@ class RefineTypesPass : public RefineTypesBase<RefineTypesPass> {
 } // namespace
 
 std::unique_ptr<OperationPass<FuncOp>>
-mlir::torch::Torch::createRefineTypesPass() {
-  return std::make_unique<RefineTypesPass>();
+mlir::torch::HLS::createHLSRefineTypesPass() {
+  return std::make_unique<HLSRefineTypesPass>();
 }
