@@ -581,4 +581,4 @@ endmodule //forward
 # Test it out
 
 Build `torch-mlir` as usual then set `VITIS_DIR="/home/mlevental/dev_projects/Xilinx/Vitis_HLS/2021.2"`
-in `torchmlir.sh` and run `e2e.sh`.
+in `torchmlir.sh` and run `e2e.sh` (inside `examples`).

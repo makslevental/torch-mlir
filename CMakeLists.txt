@@ -142,6 +142,7 @@ endif()
 
 add_subdirectory(include)
 add_subdirectory(lib)
+add_subdirectory(hls)
 add_subdirectory(tools)
 
 add_custom_target(check-torch-mlir-all)
@@ -166,4 +167,3 @@ endif()
 
 add_subdirectory(test)
 
-add_subdirectory(hls/llvm)
