@@ -15,6 +15,20 @@ from torch_mlir_e2e_test.utils import run_pipeline_with_repro_report
 mb = ModuleBuilder()
 
 
+class Matmul(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    @export
+    @annotate_args([
+        None,
+        ([4, 5], torch.float32, True),
+        ([5, 10], torch.float32, True),
+    ])
+    def forward(self, lhs, rhs):
+        return torch.mm(lhs, rhs)
+
+
 class MatmulDotOut(torch.nn.Module):
     def __init__(self):
         super().__init__()
@@ -44,6 +58,24 @@ class RefBackendLinalgOnTensorsBackend(LinalgOnTensorsBackend):
         return RefBackendInvoker(module)
 
 
+def make_mat_mul():
+    test_module = Matmul()
+    class_annotator = ClassAnnotator()
+    recursivescriptmodule = torch.jit.script(test_module)
+    class_annotator.exportNone(recursivescriptmodule._c._type())
+    class_annotator.exportPath(recursivescriptmodule._c._type(), ["forward"])
+    class_annotator.annotateArgs(
+        recursivescriptmodule._c._type(),
+        ["forward"],
+        [
+            None,
+            ([4, 5], torch.float32, True),
+            ([5, 10], torch.float32, True),
+        ],
+    )
+    return recursivescriptmodule._c, class_annotator
+
+
 def make_mat_mul_out():
     test_module = MatmulDotOut()
     class_annotator = ClassAnnotator()
@@ -64,17 +96,20 @@ def make_mat_mul_out():
 
 
 LOWERING_PIPELINE = ",".join([
-    # # Bufferize.
+    # Bufferize.
+
     "tensor-constant-bufferize",
     "builtin.func(scf-bufferize)",
-    "builtin.func(my-linalg-bufferize)",
+    "builtin.func(torch-hls-linalg-bufferize)",
     "builtin.func(std-bufferize)",
     "builtin.func(tensor-bufferize)",
     "func-bufferize",
     # "buffer-results-to-out-params",
     "builtin.func(finalizing-bufferize)",
-    "torch-drop-public-return",
-    # # Lower to LLVM
+    "torch-hls-drop-public-return",
+
+    # Lower to LLVM
+
     "builtin.func(convert-linalg-to-loops)",
     "builtin.func(lower-affine)",
     "builtin.func(convert-scf-to-std)",
@@ -92,10 +127,10 @@ if __name__ == "__main__":
     backend = RefBackendLinalgOnTensorsBackend()
     with mb.module.context:
         pm = PassManager.parse(",".join([
-            'torchscript-module-to-torch-backend-pipeline',
-            'torch-backend-to-linalg-on-tensors-backend-pipeline'
+            'torchscript-module-to-torch-hls-backend-pipeline',
+            'torch-hls-backend-to-linalg-on-tensors-backend-pipeline'
         ]))
         pm.run(mb.module)
 
     compiled = backend.compile(mb.module)
-    open(f"matmul.llvm.mlir", "w").write(str(compiled))
+    open(f"matmul.llvm.mlir", "w").write(str(mb.module))

@@ -21,7 +21,7 @@
 #include "mlir/IR/Operation.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/Bufferize.h"
-#include "torch-mlir/Dialect/Torch/Transforms/Passes.h"
+#include "Passes.h"
 
 using namespace ::mlir;
 using namespace ::mlir::linalg;
@@ -141,7 +141,7 @@ public:
 
 /// Generic conversion pattern that matches any LinalgOp. This avoids template
 /// instantiating one pattern for each LinalgOp.
-class MyBufferizeAnyLinalgOp : public OpInterfaceConversionPattern<LinalgOp> {
+class HLSBufferizeAnyLinalgOp : public OpInterfaceConversionPattern<LinalgOp> {
 public:
   using OpInterfaceConversionPattern<LinalgOp>::OpInterfaceConversionPattern;
 
@@ -288,14 +288,14 @@ public:
 };
 } // namespace
 
-void populateMyLinalgBufferizePatterns(BufferizeTypeConverter &typeConverter,
+void populateHLSLinalgBufferizePatterns(BufferizeTypeConverter &typeConverter,
                                        RewritePatternSet &patterns);
 
 namespace {
 /// Converts Linalg operations that work on tensor-type operands or results to
 /// work on buffers.
-struct MyLinalgBufferizePass
-    : public mlir::torch::Torch::MyLinalgBufferizeBase<MyLinalgBufferizePass> {
+struct HLSLinalgBufferizePass
+    : public mlir::torch::HLS::HLSLinalgBufferizeBase<HLSLinalgBufferizePass> {
   void runOnOperation() override {
     MLIRContext &context = getContext();
     ConversionTarget target(context);
@@ -318,7 +318,7 @@ struct MyLinalgBufferizePass
             isLegalOperation);
 
     RewritePatternSet patterns(&context);
-    populateMyLinalgBufferizePatterns(typeConverter, patterns);
+    populateHLSLinalgBufferizePatterns(typeConverter, patterns);
     if (failed(applyPartialConversion(getOperation(), target,
                                       std::move(patterns))))
       signalPassFailure();
@@ -327,16 +327,16 @@ struct MyLinalgBufferizePass
 } // end anonymous namespace
 
 std::unique_ptr<OperationPass<FuncOp>>
-mlir::torch::Torch::createMyLinalgBufferizePass() {
-  return std::make_unique<MyLinalgBufferizePass>();
+mlir::torch::HLS::createHLSLinalgBufferizePass() {
+  return std::make_unique<HLSLinalgBufferizePass>();
 }
 
-void populateMyLinalgBufferizePatterns(BufferizeTypeConverter &typeConverter,
+void populateHLSLinalgBufferizePatterns(BufferizeTypeConverter &typeConverter,
                                        RewritePatternSet &patterns) {
   // TODO: Drop this once tensor constants work in standard.
   // clang-format off
   patterns.add<
-      MyBufferizeAnyLinalgOp,
+      HLSBufferizeAnyLinalgOp,
       BufferizeFillOp,
       BufferizeInitTensorOp,
       BufferizeTensorReshapeOp<TensorExpandShapeOp>,

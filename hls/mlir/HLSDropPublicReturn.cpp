@@ -8,21 +8,19 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetail.h"
+#include "Passes.h"
 
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
-#include "torch-mlir/Dialect/Torch/IR/TorchOps.h"
-#include "torch-mlir/Dialect/Torch/Transforms/Passes.h"
 
 using namespace mlir;
-using namespace mlir::torch;
-using namespace mlir::torch::Torch;
+using namespace mlir::torch::HLS;
 
 namespace {
 
 class DropPublicReturnPass
-    : public DropPublicReturnBase<DropPublicReturnPass> {
+    : public HLSDropPublicReturnBase<DropPublicReturnPass> {
   void runOnOperation() override {
     auto module = getOperation();
     module.walk([&](FuncOp func) {
@@ -67,6 +65,6 @@ class DropPublicReturnPass
 } // namespace
 
 std::unique_ptr<OperationPass<ModuleOp>>
-mlir::torch::Torch::createDropPublicReturnPass() {
+mlir::torch::HLS::createHLSDropPublicReturnPass() {
   return std::make_unique<DropPublicReturnPass>();
 }

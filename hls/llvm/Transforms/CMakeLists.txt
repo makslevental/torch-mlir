@@ -1,8 +1,8 @@
 add_llvm_library(VhlsLLVMRewriter MODULE
-  VhlsLLVMRewriter.cc
-  MemRefToArray.cc
-  Utils.cc
+        VhlsLLVMRewriter.cc
+        MemRefToArray.cc
+        Utils.cc
 
-  PLUGIN_TOOL
-  opt
-)
+        PLUGIN_TOOL
+        opt
+        )
