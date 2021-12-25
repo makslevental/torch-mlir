@@ -7,7 +7,7 @@ VITIS_DIR="/home/mlevental/dev_projects/Xilinx/Vitis_HLS/2021.2"
 source "${VITIS_DIR}/settings64.sh"
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-ROOT_DIR="${DIR}/../"
+ROOT_DIR="${DIR}/../../"
 ROOT_BINDIR="${ROOT_DIR}/build/bin"
 ROOT_LIBDIR="${ROOT_DIR}/build/lib"
 PROJ_DIR="${DIR}/vitis_stuff"
