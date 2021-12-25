@@ -215,22 +215,7 @@ def RefinePublicReturn : Pass<"torch-refine-public-return", "ModuleOp"> {
   }];
 }
 
-
-def DropPublicReturn : Pass<"torch-drop-public-return", "ModuleOp"> {
-  let summary = "Drop public return";
-  let constructor = "mlir::torch::Torch::createDropPublicReturnPass()";
-  let description = [{
-  }];
-}
-
-def MyLinalgBufferize : Pass<"my-linalg-bufferize", "FuncOp"> {
-  let summary = "my linalg bufferize";
-  let constructor = "mlir::torch::Torch::createMyLinalgBufferizePass()";
-  let description = [{
-}];
-}
-
-def DecomposeComplexOps : Pass<"torch-decompose-complex-ops", "func::FuncOp"> {
+def DecomposeComplexOps : Pass<"torch-decompose-complex-ops", "FuncOp"> {
   let summary = "Decompose complicated torch operations";
   let constructor = "mlir::torch::Torch::createDecomposeComplexOpsPass()";
   let description = [{

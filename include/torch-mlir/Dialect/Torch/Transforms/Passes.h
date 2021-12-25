@@ -66,10 +66,6 @@ std::unique_ptr<OperationPass<func::FuncOp>> createMaximizeValueSemanticsPass();
 
 std::unique_ptr<OperationPass<ModuleOp>> createRefinePublicReturnPass();
 
-std::unique_ptr<OperationPass<ModuleOp>> createDropPublicReturnPass();
-
-std::unique_ptr<OperationPass<FuncOp>> createMyLinalgBufferizePass();
-
 std::unique_ptr<OperationPass<func::FuncOp>> createDecomposeComplexOpsPass();
 
 std::unique_ptr<OperationPass<ModuleOp>> createPreprocessShapeLibraryPass();

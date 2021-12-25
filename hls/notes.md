@@ -16,6 +16,23 @@ cmake -GNinja -Bbuild \
     external/llvm-project/llvm
 ```
 
+```
+cmake
+-GNinja
+-DCMAKE_C_COMPILER=clang
+-DCMAKE_CXX_COMPILER=clang++
+-DPython3_EXECUTABLE=/home/mlevental/dev_projects/torch-mlir/mlir_venv/bin/python
+-DLLVM_ENABLE_PROJECTS=mlir
+-DLLVM_EXTERNAL_PROJECTS=torch-mlir
+-DLLVM_EXTERNAL_TORCH_MLIR_SOURCE_DIR=/home/mlevental/dev_projects/torch-mlir
+-DMLIR_ENABLE_BINDINGS_PYTHON=ON
+-DLLVM_TARGETS_TO_BUILD=host
+-DCMAKE_C_COMPILER_LAUNCHER=ccache
+-DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+-DMLIR_ENABLE_BINDINGS_PYTHON=true
+-DCMAKE_POLICY_DEFAULT_CMP0116=OLD
+```
+
 ```shell
 /home/mlevental/dev_projects/torch-mlir/build_tools/update_torch_ods.sh
 
@@ -32,3 +49,13 @@ cmake -GNinja -Bbuild \
 cmake --build build --target all
 
 ```
+
+
+```shell
+./build/bin/torch-mlir-opt -pass-pipeline='tensor-constant-bufferize,builtin.func(scf-bufferize),builtin.func(hls-linalg-bufferize),builtin.func(std-bufferize),builtin.func(tensor-bufferize),func-bufferize,builtin.func(finalizing-bufferize),torch-drop-public-return,builtin.func(convert-linalg-to-loops),builtin.func(lower-affine),builtin.func(convert-scf-to-std),builtin.func(refback-expand-ops-for-llvm),builtin.func(arith-expand),builtin.func(convert-math-to-llvm),convert-memref-to-llvm,convert-std-to-llvm,reconcile-unrealized-casts' /tmp/Matmul.mlir
+
+
+LD_POSTLOAD=./build/lib/HLSTransforms.so ./build/bin/torch-mlir-opt -pass-pipeline='tensor-constant-bufferize,builtin.func(scf-bufferize),builtin.func(hls-linalg-bufferize),builtin.func(std-bufferize),builtin.func(tensor-bufferize),func-bufferize,builtin.func(finalizing-bufferize),torch-drop-public-return,builtin.func(convert-linalg-to-loops),builtin.func(lower-affine),builtin.func(convert-scf-to-std),builtin.func(refback-expand-ops-for-llvm),builtin.func(arith-expand),builtin.func(convert-math-to-llvm),convert-memref-to-llvm,convert-std-to-llvm,reconcile-unrealized-casts' hls/example/matmul.llvm.mlir 
+
+```
+
