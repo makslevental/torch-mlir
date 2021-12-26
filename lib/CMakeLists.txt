@@ -21,7 +21,7 @@ add_mlir_library(TorchMLIRInitAll
 
   TorchMLIRConversionPasses
   TorchMLIRRefBackend
-  HLSTransforms
+  HLSTorch
 )
 
 torch_mlir_target_includes(TorchMLIRInitAll)

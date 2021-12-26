@@ -7,9 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetail.h"
-#include "Passes.h"
-
+#include "HLSPassDetail.h"
+#include "HLSPasses.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -57,8 +56,8 @@ class DropPublicReturnPass
 
     // Update the function type.
     auto funcType = func.getType();
-    func.setType(FunctionType::get(funcType.getContext(), funcType.getInputs(),
-                                   {}));
+    func.setType(
+        FunctionType::get(funcType.getContext(), funcType.getInputs(), {}));
   }
 };
 

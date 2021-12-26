@@ -1377,38 +1377,6 @@ def Torch_AtenMatmulOp : Torch_Op<"aten.matmul", [
   let assemblyFormat = "$self `,` $other attr-dict `:` type($self) `,` type($other) `->` type($result)";
 }
 
-def Torch_AtenMmOutOp : Torch_Op<"aten.mm.out", [
-    HasValueSemantics,
-    AllowsTypeRefinement
-  ]> {
-  let summary = "Generated op for `aten::mm.out : (Tensor, Tensor, Tensor) -> (Tensor)`";
-  let arguments = (ins
-    AnyTorchTensorType:$self,
-    AnyTorchTensorType:$mat2,
-    AnyTorchTensorType:$out
-  );
-  let results = (outs
-    AnyTorchTensorType:$result
-  );
-  let assemblyFormat = "$self `,` $mat2 `,` $out attr-dict `:` type($self) `,` type($mat2) `,` type($out) `->` type($result)";
-}
-
-def Torch_AtenMatmulOutOp : Torch_Op<"aten.matmul.out", [
-    HasValueSemantics,
-    AllowsTypeRefinement
-  ]> {
-  let summary = "Generated op for `aten::matmul.out : (Tensor, Tensor, Tensor) -> (Tensor)`";
-  let arguments = (ins
-    AnyTorchTensorType:$self,
-    AnyTorchTensorType:$other,
-    AnyTorchTensorType:$out
-  );
-  let results = (outs
-    AnyTorchTensorType:$result
-  );
-  let assemblyFormat = "$self `,` $other `,` $out attr-dict `:` type($self) `,` type($other) `,` type($out) `->` type($result)";
-}
-
 def Torch_AtenConv2dOp : Torch_Op<"aten.conv2d", [
     AllowsTypeRefinement,
     HasValueSemantics
