@@ -7,19 +7,16 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetail.h"
-#include "Passes.h"
-
+#include "HLSPassDetail.h"
+#include "HLSPasses.h"
 #include "mlir/Analysis/DataFlowAnalysis.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Matchers.h"
-#include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "torch-mlir/Dialect/Torch/IR/TorchDialect.h"
 #include "torch-mlir/Dialect/Torch/IR/TorchOps.h"
-#include "torch-mlir/Dialect/Torch/Transforms/Passes.h"
 #include "torch-mlir/Dialect/Torch/Utils/TorchUpstream.h"
 #include "torch-mlir/Dialect/Torch/Utils/Utils.h"
 
@@ -29,10 +26,6 @@ using namespace mlir::torch::Torch;
 using namespace mlir::torch::HLS;
 using namespace mlir::torch::torch_upstream; // For ScalarType and type
                                              // promotion related helpers.
-
-// -----------------------------------------------------------------------------
-// Analysis.
-// -----------------------------------------------------------------------------
 
 static ScalarType getScalarTypeForType(Type type) {
   if (type.isa<Float32Type>())
@@ -89,17 +82,9 @@ static Type joinElementTypes(Type lhs, Type rhs) {
   return Type();
 }
 
-// This is the type rule used for deciding dtype for:
-// 1. A new tensor created from given data.
-// 2. The scalar type for type promotion when a scalar is an operand of a tensor
-// and scalar binary operation.
-// If the data is floating-point, the `dtype` is inferred to be the
-// default dtype, see `torch.get_default_dtype`.
 static Type getDefaultDtypeForTorchScalar(Type type) {
   MLIRContext *context = type.getContext();
   if (type.isa<Torch::FloatType>()) {
-    // For now, use float32 which is the initial default dtype returned by
-    // `torch.get_default_dtype`.
     return Float32Type::get(context);
   }
   if (type.isa<Torch::IntType>())
@@ -110,15 +95,6 @@ static Type getDefaultDtypeForTorchScalar(Type type) {
 }
 
 namespace {
-// Statically known information for a particular Value.
-//
-// This struct currently tracks information relevant for tensor/array-like
-// shaped types as well as whether an object is None or not, namely
-// !torch.optional. It is fine to associate a `ValueKnowledge` with a non-shaped
-// type or non OptionalType as long as it is in the default "no knowledge"
-// state returned by `getPessimisticValueState`. The important invariant is that
-// we cannot claim to know something about a value which is false.
-// This class could also be called "dataflow facts", "lattice value", etc.
 struct ValueKnowledge {
   enum class OptionalKnowledge {
     unKnown,
@@ -311,6 +287,8 @@ public:
       return visitAtenLinearOp(linear, operands);
     } else if (auto conv2d = llvm::dyn_cast<AtenConv2dOp>(op)) {
       return visitAtenConv2dOp(conv2d, operands);
+    } else if (auto conv2dout = llvm::dyn_cast<AtenTHNNConv2dOutOp>(op)) {
+      return visitAtenTHNNConv2dOutOp(conv2dout, operands);
     } else if (auto maxPool2d = llvm::dyn_cast<AtenMaxPool2dOp>(op)) {
       return visitAtenMaxPool2dOp(maxPool2d, operands);
     } else if (auto avgPool2d = llvm::dyn_cast<AtenAdaptiveAvgPool2dOp>(op)) {
@@ -507,6 +485,9 @@ private:
   visitAtenConv2dOp(AtenConv2dOp op,
                     ArrayRef<LatticeElement<ValueKnowledge> *> operands);
   ChangeResult
+  visitAtenTHNNConv2dOutOp(AtenTHNNConv2dOutOp op,
+                    ArrayRef<LatticeElement<ValueKnowledge> *> operands);
+  ChangeResult
   visitAtenMaxPool2dOp(AtenMaxPool2dOp op,
                        ArrayRef<LatticeElement<ValueKnowledge> *> operands);
   ChangeResult visitAtenAdaptiveAvgPool2dOp(
@@ -626,9 +607,9 @@ private:
   visitAten_SoftmaxOp(Aten_SoftmaxOp op,
                       ArrayRef<LatticeElement<ValueKnowledge> *> operands);
 
-  ChangeResult
-  visitAtenNllLossForwardOp(AtenNllLossForwardOp op,
-                            ArrayRef<LatticeElement<ValueKnowledge> *> operands);
+  ChangeResult visitAtenNllLossForwardOp(
+      AtenNllLossForwardOp op,
+      ArrayRef<LatticeElement<ValueKnowledge> *> operands);
   ChangeResult visitAtenNativeLayerNormOp(
       AtenNativeLayerNormOp op,
       ArrayRef<LatticeElement<ValueKnowledge> *> operands);
@@ -854,6 +835,20 @@ ChangeResult TypeAnalyzer::visitAtenConv2dOp(
       op->getContext(), {&operands[0]->getValue(), &operands[1]->getValue()});
   return getLatticeElement(op->getResult(0)).join(knowledge);
 }
+
+ChangeResult TypeAnalyzer::visitAtenTHNNConv2dOutOp(
+    AtenTHNNConv2dOutOp op, ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
+  auto knowledge =
+      ValueKnowledge::getNotNonePessimisticValueState(op->getContext());
+  knowledge.hasSizes = true;
+  knowledge.sizes.resize(4, kUnknownSize);
+  // Running some experiments in PyTorch, the bias doesn't seem to
+  // contribute to the final element type.
+  knowledge.dtype = getPromotedResultTypeAssumingNonZeroRank(
+      op->getContext(), {&operands[0]->getValue(), &operands[1]->getValue()});
+  return getLatticeElement(op->getResult(0)).join(knowledge);
+}
+
 
 ChangeResult TypeAnalyzer::visitAtenMaxPool2dOp(
     AtenMaxPool2dOp op, ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
@@ -1760,25 +1755,11 @@ static Type getMostRefinedStaticType(Value v, TypeAnalyzer &analyzer) {
   return nullptr;
 }
 
-// Return true if we can safely change the operands or results of `op`.
-//
-// The most trivial case is when the op has the AllowsTypeRefinement trait,
-// which allows arbitrary refinements. But some other cases are safe too,
-// such as when an op has two types that are coupled, but we know that our
-// analysis and updating logic will correctly maintain the invariants of the op.
-// The `torch.copy.to_tensor` / `torch.copy.to_vtensor` are examples of the
-// latter case, since their operand and result types must have the same shape
-// and dtype -- we know that our transfer functions and updating logic will do
-// the right thing forthose ops.
-//
 static bool allowsTypeRefinementOrIsSafeToRefine(Operation *op) {
   return op->hasTrait<mlir::torch::Torch::OpTrait::AllowsTypeRefinement>() ||
          isa<CopyToNonValueTensorOp, CopyToValueTensorOp>(op);
 }
 
-// Some operations have extra verification logic regarding the relationship
-// between the input types and output types. Adding more refined type info to
-// the operand might change a valid instruction to be invalid.
 static bool operationIsValidWithRefinedType(OpOperand *use, Type newType) {
   Operation *op = use->getOwner();
   if (auto uncheckedCast = llvm::dyn_cast<PrimUncheckedCastOp>(op))

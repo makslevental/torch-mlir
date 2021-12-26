@@ -28,13 +28,13 @@ std::unique_ptr<OperationPass<FuncOp>> createHLSDecomposeComplexOpsPass();
 
 std::unique_ptr<OperationPass<FuncOp>> createHLSConvertTorchToLinalgPass();
 
+//std::unique_ptr<OperationPass<FuncOp>> createHLSConvertOperatorsPass();
+
 void createTorchBackendToLinalgOnTensorsBackendPipeline(OpPassManager &pm);
 
 void createTorchScriptModuleToTorchHLSBackendPipeline(OpPassManager &pm);
 
 void createTorchScriptFunctionToTorchHLSBackendPipeline(OpPassManager &pm);
-
-void createTorchBackendToLinalgOnTensorsBackendPipeline(OpPassManager &pm);
 
 void registerHLSTorchPasses();
 
@@ -43,7 +43,6 @@ void registerHLSConversionPasses();
 void registerHLSPasses();
 
 } // namespace HLS
-
 } // namespace torch
 } // namespace mlir
 

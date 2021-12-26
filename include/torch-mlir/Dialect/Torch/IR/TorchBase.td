@@ -55,8 +55,6 @@ def HasValueSemantics : TorchOpTrait<"HasValueSemantics">;
 def ReadOnly : TorchOpTrait<"ReadOnly">;
 def IsTrailingUnderscoreInplaceVariant
   : TorchOpTrait<"IsTrailingUnderscoreInplaceVariant">;
-def IsOutOfPlaceVariant
-  : TorchOpTrait<"IsOutOfPlaceVariant">;
 def AllowsTypeRefinement : TorchOpTrait<"AllowsTypeRefinement">;
 
 #endif // TORCH_BASE
