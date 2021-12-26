@@ -1,22 +1,22 @@
-#include "Passes.h"
+#include "HLSPasses.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/InitAllPasses.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/Passes.h"
+#include "torch-mlir/Conversion/TorchToLinalg/TorchToLinalg.h"
 #include "torch-mlir/Conversion/TorchToSCF/TorchToSCF.h"
 #include "torch-mlir/Conversion/TorchToStd/TorchToStd.h"
 #include "torch-mlir/Dialect/Torch/Transforms/Passes.h"
 #include "torch-mlir/Dialect/TorchConversion/Transforms/Passes.h"
-#include "llvm/Pass.h"
 #include "llvm/PassInfo.h"
-#include "llvm/PassRegistry.h"
-#include <iostream>
-#include <torch-mlir/Conversion/TorchToLinalg/TorchToLinalg.h>
 
+using namespace mlir;
 using namespace mlir::torch::Torch;
+using namespace mlir::torch::HLS;
 
 namespace {
 #define GEN_PASS_REGISTRATION
-#include "Passes.h.inc"
+#include "HLSPasses.h.inc"
 } // end namespace
 
 void mlir::torch::HLS::registerHLSPasses() {
@@ -50,8 +50,11 @@ void mlir::torch::HLS::createTorchScriptModuleToTorchHLSBackendPipeline(
   createTorchScriptFunctionToTorchHLSBackendPipeline(pm);
 }
 
-void mlir::torch::HLS::createTorchScriptFunctionToTorchHLSBackendPipeline(
-    OpPassManager &pm) {
+namespace mlir {
+namespace torch {
+namespace HLS {
+
+void createTorchScriptFunctionToTorchHLSBackendPipeline(OpPassManager &pm) {
   pm.addPass(createAdjustCallingConventionsPass());
 
   if (true) {
@@ -86,15 +89,15 @@ void mlir::torch::HLS::createTorchScriptFunctionToTorchHLSBackendPipeline(
   // TODO: VerifyHLSTorchBackendContractPass.
 }
 
-void mlir::torch::HLS::registerHLSConversionPasses() {
+void registerHLSConversionPasses() {
   ::registerPasses();
-  mlir::PassPipelineRegistration<>(
+  ::mlir::PassPipelineRegistration<>(
       "torch-hls-backend-to-linalg-on-tensors-backend-pipeline", "",
-      HLS::createTorchBackendToLinalgOnTensorsBackendPipeline);
+      createTorchBackendToLinalgOnTensorsBackendPipeline);
 }
 
-void HLS::createTorchBackendToLinalgOnTensorsBackendPipeline(
-    OpPassManager &pm) {
+void createTorchBackendToLinalgOnTensorsBackendPipeline(OpPassManager &pm) {
+  //  pm.addNestedPass<FuncOp>(createHLSConvertOperatorsPass());
   // Check some invariants to catch errors in a clear way.
   pm.addPass(
       TorchConversion::createVerifyInvariantsBeforeBackendLoweringPass());
@@ -130,3 +133,6 @@ void HLS::createTorchBackendToLinalgOnTensorsBackendPipeline(
   // correct form.
   pm.addPass(TorchConversion::createVerifyLinalgOnTensorsBackendContractPass());
 }
+} // namespace HLS
+} // namespace torch
+} // namespace mlir
