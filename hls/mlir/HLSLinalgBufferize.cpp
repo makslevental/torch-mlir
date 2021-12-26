@@ -6,22 +6,19 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetail.h"
+#include "HLSPassDetail.h"
+#include "HLSPasses.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/Linalg/IR/LinalgOps.h"
-#include "mlir/Dialect/Linalg/Passes.h"
 #include "mlir/Dialect/Linalg/Transforms/Transforms.h"
 #include "mlir/Dialect/Linalg/Utils/Utils.h"
 #include "mlir/Dialect/Math/IR/Math.h"
-#include "mlir/Dialect/StandardOps/Transforms/Passes.h"
 #include "mlir/Dialect/StandardOps/Utils/Utils.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/Vector/VectorOps.h"
-#include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/Bufferize.h"
-#include "Passes.h"
 
 using namespace ::mlir;
 using namespace ::mlir::linalg;
@@ -289,7 +286,7 @@ public:
 } // namespace
 
 void populateHLSLinalgBufferizePatterns(BufferizeTypeConverter &typeConverter,
-                                       RewritePatternSet &patterns);
+                                        RewritePatternSet &patterns);
 
 namespace {
 /// Converts Linalg operations that work on tensor-type operands or results to
@@ -332,7 +329,7 @@ mlir::torch::HLS::createHLSLinalgBufferizePass() {
 }
 
 void populateHLSLinalgBufferizePatterns(BufferizeTypeConverter &typeConverter,
-                                       RewritePatternSet &patterns) {
+                                        RewritePatternSet &patterns) {
   // TODO: Drop this once tensor constants work in standard.
   // clang-format off
   patterns.add<

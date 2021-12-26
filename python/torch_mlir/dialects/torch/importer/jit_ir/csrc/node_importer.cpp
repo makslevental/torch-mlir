@@ -16,6 +16,7 @@
 #include "ivalue_importer.h"
 #include "mlir_utils.h"
 
+#include "ivalue_importer.h"
 #include "mlir-c/BuiltinAttributes.h"
 #include "mlir-c/BuiltinTypes.h"
 #include "mlir-c/Diagnostics.h"
@@ -181,6 +182,19 @@ void NodeImporter::importNode(Node *node, MlirBlock appendToBlock) {
           getMlirTypeFromTorchType(loc, output->type()),
           toMlirNamedAttribute("value",
                                importAttribute(loc, node, c10::attr::value)));
+    } else if (output->type()->cast<c10::ListType>()) {
+      ClassAnnotator dummyAnnotator;
+      IValueImporter i_value_importer(appendToBlock, context, dummyAnnotator);
+      c10::List<c10::IValue> list = toIValue(output)->toList();
+      std::vector<MlirValue> elems;
+      for (const c10::IValue &elem : list) {
+        elems.push_back(i_value_importer.importIValue(elem));
+      }
+      op = createMlirOperation(
+          "torch.prim.ListConstruct", loc,
+          torchMlirTorchListTypeGet(
+              getMlirTypeFromTorchType(loc, list.elementType())),
+          elems);
     } else if (output->type()->cast<c10::FloatType>()) {
       op = createMlirOperation(
           "torch.constant.float", loc,

@@ -24,4 +24,9 @@ def HLSConvertTorchToLinalg : Pass<"torch-hls-convert-torch-to-linalg", "FuncOp"
   let constructor = "mlir::torch::HLS::createHLSConvertTorchToLinalgPass()";
 }
 
+//def HLSConvertOperators : Pass<"torch-hls-convert-operators", "FuncOp"> {
+//  let constructor = "mlir::torch::HLS::createHLSConvertOperatorsPass()";
+//}
+
+
 #endif

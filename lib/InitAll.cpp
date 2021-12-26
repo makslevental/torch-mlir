@@ -18,7 +18,7 @@
 #include "torch-mlir/Dialect/TorchConversion/IR/TorchConversionDialect.h"
 #include "torch-mlir/Dialect/TorchConversion/Transforms/Passes.h"
 #include "torch-mlir/RefBackend/Passes.h"
-#include "/home/mlevental/dev_projects/torch-mlir/hls/mlir/Passes.h"
+#include "/Users/mlevental/dev_projects/torch-mlir/hls/mlir/HLSPasses.h"
 
 void mlir::torch::registerAllDialects(mlir::DialectRegistry &registry) {
   registry.insert<mlir::torch::Torch::TorchDialect>();
