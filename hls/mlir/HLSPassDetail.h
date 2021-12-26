@@ -17,7 +17,7 @@ namespace torch {
 namespace HLS {
 
 #define GEN_PASS_CLASSES
-#include "Passes.h.inc"
+#include "HLSPasses.h.inc"
 
 } // namespace HLS
 } // namespace torch

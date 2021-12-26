@@ -7,12 +7,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "Passes.h"
-#include "PassDetail.h"
-#include "torch-mlir/Dialect/Torch/IR/TorchOps.h"
-
+#include "HLSPassDetail.h"
+#include "HLSPasses.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "torch-mlir/Dialect/Torch/IR/TorchDialect.h"
+#include "torch-mlir/Dialect/Torch/IR/TorchOps.h"
 #include "torch-mlir/Dialect/Torch/Utils/Utils.h"
 #include "llvm/ADT/StringExtras.h"
 

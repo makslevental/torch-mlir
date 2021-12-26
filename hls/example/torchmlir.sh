@@ -22,13 +22,12 @@ function get_top_func() {
   echo $TOP_FUNC
 }
 
-
 # Do some preprocessing before extracting top function.
 function preprocess_mlir() {
   local src_file="${1}"
   local dst_file="${PROJ_DIR}/${src_file%.mlir}.pre.mlir"
 
-  mlir-opt "${src_file}" -canonicalize > "${dst_file}"
+  mlir-opt "${src_file}" -canonicalize >"${dst_file}"
 
   echo "${dst_file}"
 }
@@ -43,8 +42,8 @@ function lower_mlir_to_llvm() {
     -convert-scf-to-std \
     -canonicalize \
     -convert-std-to-llvm='use-bare-ptr-memref-call-conv=1' \
-    -reconcile-unrealized-casts > "${opt_file}"
-  mlir-translate -debug -mlir-to-llvmir "${opt_file}" > "${dst_file}"
+    -reconcile-unrealized-casts >"${opt_file}"
+  mlir-translate -debug -mlir-to-llvmir "${opt_file}" >"${dst_file}"
 
   echo "${dst_file}"
 }
@@ -56,8 +55,8 @@ function opt_llvm_for_vitis() {
   local top_func
   top_func="$(get_top_func "${src_file}")"
 
-    #-mem2ptr \
-    # -mem2arr \
+  #-mem2ptr \
+  # -mem2arr \
   "${ROOT_BINDIR}/opt" "${src_file}" \
     -S \
     -enable-new-pm=0 \
@@ -70,13 +69,10 @@ function opt_llvm_for_vitis() {
     -strip-attr \
     -xlnunroll \
     -xlnarraypartition \
-    > "${dst_file}"
+    >"${dst_file}"
 
   echo "${dst_file}"
 }
-
-
-
 
 # Generate dummy C source.
 function gen_dummy_c() {
@@ -89,7 +85,7 @@ function gen_dummy_c() {
   dst_file="$(dirname "${src_file}")/${src_base}.dummy.c"
   top_func="$(get_top_func "${src_file}")"
 
-cat <<EOF > "${dst_file}"
+  cat <<EOF >"${dst_file}"
 void ${top_func}() {}
 EOF
 
@@ -113,7 +109,7 @@ function gen_vitis_phism_tcl() {
   dummy_c_src="$(gen_dummy_c "${src_file}")"
 
   # Synthesis script
-  cat <<EOF > "${dst_file}"
+  cat <<EOF >"${dst_file}"
 open_project -reset proj
 add_files ${dummy_c_src}
 set_top ${top_func}
@@ -132,7 +128,6 @@ EOF
 
   echo "${dst_file}"
 }
-
 
 # Run Vitis.
 function run_vitis() {
@@ -175,17 +170,17 @@ function eval_file() {
   llvm_src_file="$(lower_mlir_to_llvm "${prep_src_file}")"
   vitis_src_file="$(opt_llvm_for_vitis "${llvm_src_file}")"
 
-   local status
-   status="$(run_vitis "${vitis_src_file}")"
+  local status
+  status="$(run_vitis "${vitis_src_file}")"
 
-   if [[ "${status}" == "0" ]]; then
-     echo " SUCCESS"
-   else
-     echo " FAILED"
-   fi
+  if [[ "${status}" == "0" ]]; then
+    echo " SUCCESS"
+  else
+    echo " FAILED"
+  fi
 }
 
 # export TOP_FUNC=matmul
 export TOP_FUNC=forward
-eval_file matmul.llvm.mlir
-#eval_file conv.llvm.mlir
+#eval_file matmul.llvm.mlir
+eval_file conv2d.llvm.mlir
