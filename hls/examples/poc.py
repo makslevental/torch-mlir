@@ -177,11 +177,11 @@ if __name__ == "__main__":
             "builtin.func(convert-scf-to-std)",
             "builtin.func(refback-expand-ops-for-llvm)",
             "builtin.func(arith-expand)",
-            "builtin.func(convert-math-to-llvm)",
-            "convert-memref-to-llvm",
-            "convert-std-to-llvm",
-            "reconcile-unrealized-casts",
+            # "builtin.func(convert-math-to-llvm)",
+            # "convert-memref-to-llvm",
+            # "convert-std-to-llvm",
+            # "reconcile-unrealized-casts",
         ]))
         pm.run(mb.module)
 
-    open(f"conv2d.llvm.mlir", "w").write(str(mb.module))
+    open(f"conv2d.arith.mlir", "w").write(str(mb.module))
