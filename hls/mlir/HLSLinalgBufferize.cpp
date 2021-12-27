@@ -160,8 +160,14 @@ public:
         return op.emitOpError()
                << "Failed to allocate buffers for tensor results.";
       }
-    } else {
-      newOutputBuffers = adaptor.outputs();
+    } else if (op->hasAttr("variant")) {
+      if (op->getAttr("variant").cast<StringAttr>().str() == "out") {
+        newOutputBuffers = adaptor.outputs();
+      } else if (op->getAttr("variant").cast<StringAttr>().str() == "inplace") {
+        newOutputBuffers = adaptor.inputs();
+      } else {
+        return failure();
+      }
     }
     createLinalgOpOnBuffers(rewriter, op, adaptor.inputs(), newOutputBuffers);
     // Replace the results of the old op with the new output buffers.

@@ -48,6 +48,8 @@ public:
   void importModule(torch::jit::Module jitModule,
                     py::object maybeClassAnnotator);
 
+  void setMultithreading(bool enable);
+
 private:
   MlirBlock getBodyBlock();
 
