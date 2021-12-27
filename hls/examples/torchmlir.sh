@@ -183,4 +183,4 @@ function eval_file() {
 # export TOP_FUNC=matmul
 export TOP_FUNC=forward
 #eval_file matmul.llvm.mlir
-eval_file conv2d.llvm.mlir
+eval_file maxpool2d.llvm.mlir

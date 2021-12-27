@@ -19,13 +19,40 @@ using namespace mlir::torch::HLS;
 using namespace mlir::torch::Torch;
 using namespace mlir::torch::TorchConversion;
 
-static SmallVector<Value>
-getAsConstantIndexValues(OpBuilder &b, Location loc,
-                         SmallVectorImpl<int64_t> &ints) {
-  return llvm::to_vector<4>(llvm::map_range(ints, [&](int64_t val) -> Value {
-    return b.create<arith::ConstantOp>(loc, b.getIndexAttr(val));
-  }));
+template <typename T>
+Value createGetTensorLiteral(OpBuilder &b, Location loc,
+                             ArrayRef<int64_t> shape, ArrayRef<T> vals,
+                             Type elementType) {
+  auto type_ = RankedTensorType::get(shape, elementType);
+  //  auto initAttr = DenseElementsAttr::get(type_,
+  //  {1.0f,2.0f,3.0f,4.0f,5.0f,6.0f,7.0f,8.0f,9.0f});
+  auto valsAttr = DenseElementsAttr::get(type_, vals);
+  Value tensor = b.getContext()
+                     ->getLoadedDialect<tensor::TensorDialect>()
+                     ->materializeConstant(b, valsAttr, type_, loc)
+                     ->getResult(0);
+  return tensor;
 }
+
+template <typename T>
+Value createGetTensorLiteral(OpBuilder &b, Location loc,
+                             ArrayRef<int64_t> shape, T val, Type elementType) {
+  int64_t numElts = 1;
+  for (const auto &item : shape)
+    numElts *= item;
+  std::vector<T> vals_(numElts, val);
+  //  ArrayRef<T> vals(vals_);
+  ArrayRef<T> vals = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f, 9.0f};
+  return createGetTensorLiteral(b, loc, shape, vals, elementType);
+}
+
+// static SmallVector<Value>
+// getAsConstantIndexValues(OpBuilder &b, Location loc,
+//                          SmallVectorImpl<int64_t> &ints) {
+//   return llvm::to_vector<4>(llvm::map_range(ints, [&](int64_t val) -> Value {
+//     return b.create<arith::ConstantOp>(loc, b.getIndexAttr(val));
+//   }));
+// }
 
 static LogicalResult verifyLinalgCompatibleTypes(Operation *op,
                                                  PatternRewriter &rewriter) {
@@ -584,7 +611,7 @@ public:
       return rewriter.notifyMatchFailure(op,
                                          "only support constant int dilations");
     SmallVector<int64_t, 2> paddingInts;
-    if (!matchPattern(op.padding(), m_TorchConstantIntList(paddingInts)))
+    /**/ if (!matchPattern(op.padding(), m_TorchConstantIntList(paddingInts)))
       return rewriter.notifyMatchFailure(op,
                                          "only support constant int paddings");
     SmallVector<int64_t, 2> kernelSizeInts;
@@ -599,84 +626,56 @@ public:
         loc, ceilModeFalse,
         rewriter.getStringAttr("only ceil_mode false is supported"));
 
-    SmallVector<int64_t, 4> paddingIncludingNC = {0, 0};
-    paddingIncludingNC.insert(paddingIncludingNC.end(), paddingInts.begin(),
-                              paddingInts.end());
-    Value paddedInput = getPaddedTensor(op, rewriter, self, paddingIncludingNC);
+//    SmallVector<int64_t, 4> paddingIncludingNC = {0, 0};
+//    paddingIncludingNC.insert(paddingIncludingNC.end(), paddingInts.begin(),
+//                              paddingInts.end());
+//    Value paddedInput = getPaddedTensor(op, rewriter, self, paddingIncludingNC);
 
-    Value N = getDimOp(rewriter, loc, self, 0);
-    Value C = getDimOp(rewriter, loc, self, 1);
-    Value H = getDimOp(rewriter, loc, self, 2);
-    Value W = getDimOp(rewriter, loc, self, 3);
+    //    Value N = getDimOp(rewriter, loc, self, 0);
+    //    Value C = getDimOp(rewriter, loc, self, 1);
+    //    Value H = getDimOp(rewriter, loc, self, 2);
+    //    Value W = getDimOp(rewriter, loc, self, 3);
+    //
+    //    SmallVector<Value> paddingIntValues =
+    //        getAsConstantIntValues(rewriter, loc, paddingInts);
+    //    SmallVector<Value> dilationIntValues =
+    //        getAsConstantIntValues(rewriter, loc, dilationInts);
+    //    SmallVector<Value> kernelSizeIntValues =
+    //        getAsConstantIntValues(rewriter, loc, kernelSizeInts);
+    //    SmallVector<Value> strideIntValues =
+    //        getAsConstantIntValues(rewriter, loc, strideInts);
 
-    SmallVector<Value> paddingIntValues =
-        getAsConstantIntValues(rewriter, loc, paddingInts);
-    SmallVector<Value> dilationIntValues =
-        getAsConstantIntValues(rewriter, loc, dilationInts);
-    SmallVector<Value> kernelSizeIntValues =
-        getAsConstantIntValues(rewriter, loc, kernelSizeInts);
-    SmallVector<Value> strideIntValues =
-        getAsConstantIntValues(rewriter, loc, strideInts);
+    //    Value Hout = getOutputDimForConvOps(
+    //        rewriter, loc, H, paddingIntValues[0], dilationIntValues[0],
+    //        kernelSizeIntValues[0], strideIntValues[0]);
+    //    Value Wout = getOutputDimForConvOps(
+    //        rewriter, loc, W, paddingIntValues[1], dilationIntValues[1],
+    //        kernelSizeIntValues[1], strideIntValues[1]);
 
-    Value Hout = getOutputDimForConvOps(
-        rewriter, loc, H, paddingIntValues[0], dilationIntValues[0],
-        kernelSizeIntValues[0], strideIntValues[0]);
-    Value Wout = getOutputDimForConvOps(
-        rewriter, loc, W, paddingIntValues[1], dilationIntValues[1],
-        kernelSizeIntValues[1], strideIntValues[1]);
-
-    // Initialize output tensor with smallest floating point value
-    //    Value outTensor = rewriter.create<linalg::InitTensorOp>(
-    //        loc, ValueRange{N, C, Hout, Wout}, elementType);
-    auto initialAttr = rewriter.getFloatAttr(
-        elementType,
-        APFloat::getSmallest(
-            elementType.cast<mlir::FloatType>().getFloatSemantics(),
-            /*Negative*/ true));
-    Value initValue = rewriter.create<arith::ConstantOp>(loc, initialAttr);
-    //    Value outTensorInitialized =
-    //        rewriter.create<linalg::FillOp>(loc, initValue,
-    //        outTensor).getResult(0);
-
+    //    auto initialAttr = rewriter.getFloatAttr(
+    //        elementType,
+    //        APFloat::getSmallest(
+    //            elementType.cast<mlir::FloatType>().getFloatSemantics(),
+    //            /*Negative*/ true));
     auto stridesAttr = rewriter.getI64VectorAttr(strideInts);
     auto dilationAttr = rewriter.getI64VectorAttr(dilationInts);
-    Value windowTensor = rewriter.create<linalg::InitTensorOp>(
-        loc, getAsConstantIndexValues(rewriter, loc, kernelSizeInts),
-        elementType);
+    Value windowTensor_ = createGetTensorLiteral(rewriter, loc, kernelSizeInts,
+                                                 0.0f, elementType);
 
-    auto windowTensor_ =
-        getContext()
-            ->getLoadedDialect<tensor::TensorDialect>()
-            ->materializeConstant(
-                rewriter, initialAttr,
-                RankedTensorType::get(kernelSizeInts, elementType), loc)
-            ->getResult(0);
-    //    auto windowTensor_ = rewriter.create<ValueTensorLiteralOp>(loc,
-    //    initialAttr).result();
-    //    windowTensor_.setType(RankedTensorType::get(kernelSizeInts,
-    //    elementType)); Value valueTensor =
-    //        rewriter.create<ValueTensorLiteralOp>(op->getLoc(),
-    //        windowTensor.getType(), initialAttr);
-    //    Value tensor =
-    //        copyTensorToType(rewriter, op->getLoc(), windowTensor.getType(),
-    //        valueTensor);
-    //    rewriter.replaceOp(op, {tensor});
-
-    //    Value windowTensor = rewriter.create<Torch::ValueTensorLiteralOp>(
-    //        loc, getAsConstantIndexValues(rewriter, loc, kernelSizeInts),
-    //        elementType);
-
+    NamedAttribute variant(rewriter.getStringAttr("variant"),
+                           rewriter.getStringAttr("out"));
+    ArrayRef<NamedAttribute> attributes = {variant};
     Value out = adaptor.out();
     Value maxPool2d =
         rewriter
             .create<linalg::PoolingNchwMaxOp>(
-                loc, out.getType(), ValueRange{paddedInput, windowTensor}, out,
-                stridesAttr, dilationAttr)
+                loc, out.getType(), ValueRange{self, windowTensor_}, out,
+                stridesAttr, dilationAttr, attributes)
             .getResult(0);
-    //    Type newOutType = getTypeConverter()->convertType(op.getType(0));
-    //    rewriter.replaceOpWithNewOp<tensor::CastOp>(op, newOutType,
-    //    maxPool2d);
-    rewriter.replaceOp(op, {maxPool2d, op.indices()});
+    Type newResultType = getTypeConverter()->convertType(op.getType(0));
+    Value res = rewriter.create<tensor::CastOp>(loc, newResultType, maxPool2d)
+                    .getResult();
+    rewriter.replaceOp(op, {res, op.indices()});
     return success();
   }
 };
