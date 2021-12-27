@@ -291,6 +291,10 @@ public:
       return visitAtenTHNNConv2dOutOp(conv2dout, operands);
     } else if (auto maxPool2d = llvm::dyn_cast<AtenMaxPool2dOp>(op)) {
       return visitAtenMaxPool2dOp(maxPool2d, operands);
+    } else if (auto maxPool2dWithIndicesOut =
+                   llvm::dyn_cast<AtenMaxPool2dWithIndicesOutOp>(op)) {
+      return visitAtenMaxPool2dWithIndicesOutOp(maxPool2dWithIndicesOut,
+                                                operands);
     } else if (auto avgPool2d = llvm::dyn_cast<AtenAdaptiveAvgPool2dOp>(op)) {
       return visitAtenAdaptiveAvgPool2dOp(avgPool2d, operands);
     } else if (isa<AtenAddScalarOp, AtenSubScalarOp, AtenMulScalarOp,
@@ -486,10 +490,13 @@ private:
                     ArrayRef<LatticeElement<ValueKnowledge> *> operands);
   ChangeResult
   visitAtenTHNNConv2dOutOp(AtenTHNNConv2dOutOp op,
-                    ArrayRef<LatticeElement<ValueKnowledge> *> operands);
+                           ArrayRef<LatticeElement<ValueKnowledge> *> operands);
   ChangeResult
   visitAtenMaxPool2dOp(AtenMaxPool2dOp op,
                        ArrayRef<LatticeElement<ValueKnowledge> *> operands);
+  ChangeResult visitAtenMaxPool2dWithIndicesOutOp(
+      AtenMaxPool2dWithIndicesOutOp op,
+      ArrayRef<LatticeElement<ValueKnowledge> *> operands);
   ChangeResult visitAtenAdaptiveAvgPool2dOp(
       AtenAdaptiveAvgPool2dOp op,
       ArrayRef<LatticeElement<ValueKnowledge> *> operands);
@@ -837,7 +844,8 @@ ChangeResult TypeAnalyzer::visitAtenConv2dOp(
 }
 
 ChangeResult TypeAnalyzer::visitAtenTHNNConv2dOutOp(
-    AtenTHNNConv2dOutOp op, ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
+    AtenTHNNConv2dOutOp op,
+    ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
   auto knowledge =
       ValueKnowledge::getNotNonePessimisticValueState(op->getContext());
   knowledge.hasSizes = true;
@@ -849,7 +857,6 @@ ChangeResult TypeAnalyzer::visitAtenTHNNConv2dOutOp(
   return getLatticeElement(op->getResult(0)).join(knowledge);
 }
 
-
 ChangeResult TypeAnalyzer::visitAtenMaxPool2dOp(
     AtenMaxPool2dOp op, ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
   auto knowledge =
@@ -858,6 +865,35 @@ ChangeResult TypeAnalyzer::visitAtenMaxPool2dOp(
   knowledge.sizes.resize(4, kUnknownSize);
   knowledge.dtype = operands[0]->getValue().dtype;
   return getLatticeElement(op->getResult(0)).join(knowledge);
+}
+
+ChangeResult TypeAnalyzer::visitAtenMaxPool2dWithIndicesOutOp(
+    AtenMaxPool2dWithIndicesOutOp op,
+    ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
+    auto self = operands[0]->getValue();
+    auto outputKnowledge =
+        ValueKnowledge::getNotNonePessimisticValueState(op.getContext());
+    // Contains Knowledge of shape and dtype for the 1st result.
+    outputKnowledge.dtype = self.dtype;
+    // Contains Knowledge of shape and dtype for the 2nd result.
+    auto totalWeightKnowledge =
+        ValueKnowledge::getNotNonePessimisticValueState(op.getContext());
+    totalWeightKnowledge.dtype = self.dtype;
+    totalWeightKnowledge.sizes.resize(4, kUnknownSize);
+    totalWeightKnowledge.hasSizes = true;
+
+    outputKnowledge.sizes.resize(4, kUnknownSize);
+    outputKnowledge.hasSizes = true;
+    auto resultLattice =
+    getLatticeElement(op.getResult(0)).join(outputKnowledge); resultLattice |=
+        getLatticeElement(op.getResult(1)).join(totalWeightKnowledge);
+    return resultLattice;
+//  auto knowledge =
+//      ValueKnowledge::getNotNonePessimisticValueState(op->getContext());
+//  knowledge.hasSizes = true;
+//  knowledge.sizes.resize(4, kUnknownSize);
+//  knowledge.dtype = operands[0]->getValue().dtype;
+//  return getLatticeElement(op->getResult(0)).join(knowledge);
 }
 
 ChangeResult TypeAnalyzer::visitAtenAdaptiveAvgPool2dOp(
