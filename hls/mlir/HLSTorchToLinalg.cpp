@@ -14,9 +14,18 @@
 
 using namespace mlir;
 using namespace mlir::torch;
+using namespace mlir::linalg;
 using namespace mlir::torch::HLS;
 using namespace mlir::torch::Torch;
 using namespace mlir::torch::TorchConversion;
+
+static SmallVector<Value>
+getAsConstantIndexValues(OpBuilder &b, Location loc,
+                         SmallVectorImpl<int64_t> &ints) {
+  return llvm::to_vector<4>(llvm::map_range(ints, [&](int64_t val) -> Value {
+    return b.create<arith::ConstantOp>(loc, b.getIndexAttr(val));
+  }));
+}
 
 static LogicalResult verifyLinalgCompatibleTypes(Operation *op,
                                                  PatternRewriter &rewriter) {
@@ -460,23 +469,6 @@ Value createLinalgPayloadCalculationForElementwiseOp(OpBuilder &b, Location loc,
   return nullptr;
 }
 
-// Converts an elementwise op.
-// This specifically includes:
-// - converting elementwise ops of any tensor arity
-// - converting elementwise ops with any number of scalar captures (such as a
-//   scalar alpha to torch.aten.Add)
-// - broadcasting of static size-1 dimensions
-//
-// Currently, we adopt the behavior that "size 1" broadcasting is a runtime
-// error if it happens dynamically.
-//
-// Looking forward a bit, eventually, it probably makes sense to have
-// a "linalg.generic-like" op for modeling a fused subgraph of numpy-broadcasted
-// operands. Modeling elementwise ops that way is potentially useful to allow a
-// more centralized reasoning about multiversioning. However a cost model will
-// be needed for "pre-fusing" elementwise ops that way, as it can potentially be
-// a pessimization. A mild extension of this pattern should work for such a
-// general op.
 struct ConvertElementwiseOp : ConversionPattern {
   ConvertElementwiseOp(TypeConverter &typeConverter, MLIRContext *context)
       : ConversionPattern(typeConverter, MatchAnyOpTypeTag(), /*benefit=*/1,
@@ -506,45 +498,18 @@ struct ConvertElementwiseOp : ConversionPattern {
       SmallVector<AffineExpr> exprs;
       auto type = tensorOperand.getType().cast<RankedTensorType>();
       for (auto size : llvm::enumerate(type.getShape())) {
-        // If the size is statically known to be 1, we don't want any
-        // error guards to be spuriously emitted, since we are specifically
-        // allowing size-1 broadcasts in this case, as they correspond to a
-        // constant-0 indexing map.
         if (size.value() == 1) {
           exprs.push_back(rewriter.getAffineConstantExpr(0));
           continue;
         }
-
-        // The rank of this operand might be smaller than the overall rank of
-        // the broadcast. Add an offset to correlate it to the correct
-        // dimension of the result.
         auto resultDim = size.index() + (resultRank - type.getRank());
-
-        // The generated linalg op will now be iterating along the full size
-        // of this dimension. Record that fact.
         exprs.push_back(rewriter.getAffineDimExpr(resultDim));
-
-        // Now, we need to ensure that such iteration is not going to trigger
-        // undefined behavior, by doing appropriate checks against the current
-        // dimension size.
         auto currentDimSize =
             rewriter.create<tensor::DimOp>(loc, tensorOperand, size.index());
-
-        // If the result size of this dimension has so far only hit the
-        // statically-known-to-be-1 case above (i.e., we have not yet assigned a
-        // new Value to `resultShape[resultDim]`), then we have no other dynamic
-        // values to check against, and merely need to record the current
-        // dimension size.
         if (resultShape[resultDim] == c1) {
           resultShape[resultDim] = currentDimSize;
           continue;
         }
-
-        // We prohibit the size-1 dynamic broadcasting scenario, so just check
-        // for exact equality with the running result size.
-        // This is the check which protects against the undefined behavior of
-        // the generated linalg op in the case of iterating two operands with
-        // dimensions sizes that are expected to match.
         auto equalToRunning = rewriter.create<arith::CmpIOp>(
             loc, arith::CmpIPredicate::eq, resultShape[resultDim],
             currentDimSize);
@@ -556,9 +521,7 @@ struct ConvertElementwiseOp : ConversionPattern {
     }
 
     SmallVector<StringRef> iteratorTypes(resultRank, "parallel");
-    // Add the indexing map for the outs init tensor.
     indexingMaps.push_back(rewriter.getMultiDimIdentityMap(resultRank));
-
 
     NamedAttribute variant(rewriter.getStringAttr("variant"),
                            rewriter.getStringAttr("inplace"));
@@ -579,12 +542,141 @@ struct ConvertElementwiseOp : ConversionPattern {
             return;
           }
           b.create<linalg::YieldOp>(loc, result);
-        }, variant);
+        },
+        variant);
 
     if (hadErrorCreatingPayload)
       return failure();
     rewriter.replaceOpWithNewOp<tensor::CastOp>(op, resultType,
                                                 generic.getResult(0));
+    return success();
+  }
+};
+} // namespace
+
+namespace {
+class ConvertAtenMaxPool2dWithIndicesOutOp
+    : public OpConversionPattern<AtenMaxPool2dWithIndicesOutOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(AtenMaxPool2dWithIndicesOutOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (failed(verifyLinalgCompatibleTypes(op, rewriter)))
+      return failure();
+    Location loc = op->getLoc();
+    Value self = adaptor.self();
+    Value ceilMode = adaptor.ceil_mode();
+
+    Type elementType = self.getType().cast<RankedTensorType>().getElementType();
+    if (!elementType.isa<mlir::FloatType>())
+      return op.emitError("unimplemented: non-floating point type");
+
+    // Pattern match against the op's original operands, because otherwise we
+    // will get the lowered version of the operands which is harder to pattern
+    // match.
+    SmallVector<int64_t, 2> strideInts;
+    if (!matchPattern(op.stride(), m_TorchConstantIntList(strideInts)))
+      return rewriter.notifyMatchFailure(op,
+                                         "only support constant int strides");
+    SmallVector<int64_t, 2> dilationInts;
+    if (!matchPattern(op.dilation(), m_TorchConstantIntList(dilationInts)))
+      return rewriter.notifyMatchFailure(op,
+                                         "only support constant int dilations");
+    SmallVector<int64_t, 2> paddingInts;
+    if (!matchPattern(op.padding(), m_TorchConstantIntList(paddingInts)))
+      return rewriter.notifyMatchFailure(op,
+                                         "only support constant int paddings");
+    SmallVector<int64_t, 2> kernelSizeInts;
+    if (!matchPattern(op.kernel_size(), m_TorchConstantIntList(kernelSizeInts)))
+      return rewriter.notifyMatchFailure(op, "only support kernel size ints");
+
+    Value falseValue = rewriter.create<arith::ConstantOp>(
+        loc, IntegerAttr::get(rewriter.getIntegerType(1), 0));
+    Value ceilModeFalse = rewriter.create<arith::CmpIOp>(
+        loc, arith::CmpIPredicate::eq, ceilMode, falseValue);
+    rewriter.create<AssertOp>(
+        loc, ceilModeFalse,
+        rewriter.getStringAttr("only ceil_mode false is supported"));
+
+    SmallVector<int64_t, 4> paddingIncludingNC = {0, 0};
+    paddingIncludingNC.insert(paddingIncludingNC.end(), paddingInts.begin(),
+                              paddingInts.end());
+    Value paddedInput = getPaddedTensor(op, rewriter, self, paddingIncludingNC);
+
+    Value N = getDimOp(rewriter, loc, self, 0);
+    Value C = getDimOp(rewriter, loc, self, 1);
+    Value H = getDimOp(rewriter, loc, self, 2);
+    Value W = getDimOp(rewriter, loc, self, 3);
+
+    SmallVector<Value> paddingIntValues =
+        getAsConstantIntValues(rewriter, loc, paddingInts);
+    SmallVector<Value> dilationIntValues =
+        getAsConstantIntValues(rewriter, loc, dilationInts);
+    SmallVector<Value> kernelSizeIntValues =
+        getAsConstantIntValues(rewriter, loc, kernelSizeInts);
+    SmallVector<Value> strideIntValues =
+        getAsConstantIntValues(rewriter, loc, strideInts);
+
+    Value Hout = getOutputDimForConvOps(
+        rewriter, loc, H, paddingIntValues[0], dilationIntValues[0],
+        kernelSizeIntValues[0], strideIntValues[0]);
+    Value Wout = getOutputDimForConvOps(
+        rewriter, loc, W, paddingIntValues[1], dilationIntValues[1],
+        kernelSizeIntValues[1], strideIntValues[1]);
+
+    // Initialize output tensor with smallest floating point value
+    //    Value outTensor = rewriter.create<linalg::InitTensorOp>(
+    //        loc, ValueRange{N, C, Hout, Wout}, elementType);
+    auto initialAttr = rewriter.getFloatAttr(
+        elementType,
+        APFloat::getSmallest(
+            elementType.cast<mlir::FloatType>().getFloatSemantics(),
+            /*Negative*/ true));
+    Value initValue = rewriter.create<arith::ConstantOp>(loc, initialAttr);
+    //    Value outTensorInitialized =
+    //        rewriter.create<linalg::FillOp>(loc, initValue,
+    //        outTensor).getResult(0);
+
+    auto stridesAttr = rewriter.getI64VectorAttr(strideInts);
+    auto dilationAttr = rewriter.getI64VectorAttr(dilationInts);
+    Value windowTensor = rewriter.create<linalg::InitTensorOp>(
+        loc, getAsConstantIndexValues(rewriter, loc, kernelSizeInts),
+        elementType);
+
+    auto windowTensor_ =
+        getContext()
+            ->getLoadedDialect<tensor::TensorDialect>()
+            ->materializeConstant(
+                rewriter, initialAttr,
+                RankedTensorType::get(kernelSizeInts, elementType), loc)
+            ->getResult(0);
+    //    auto windowTensor_ = rewriter.create<ValueTensorLiteralOp>(loc,
+    //    initialAttr).result();
+    //    windowTensor_.setType(RankedTensorType::get(kernelSizeInts,
+    //    elementType)); Value valueTensor =
+    //        rewriter.create<ValueTensorLiteralOp>(op->getLoc(),
+    //        windowTensor.getType(), initialAttr);
+    //    Value tensor =
+    //        copyTensorToType(rewriter, op->getLoc(), windowTensor.getType(),
+    //        valueTensor);
+    //    rewriter.replaceOp(op, {tensor});
+
+    //    Value windowTensor = rewriter.create<Torch::ValueTensorLiteralOp>(
+    //        loc, getAsConstantIndexValues(rewriter, loc, kernelSizeInts),
+    //        elementType);
+
+    Value out = adaptor.out();
+    Value maxPool2d =
+        rewriter
+            .create<linalg::PoolingNchwMaxOp>(
+                loc, out.getType(), ValueRange{paddedInput, windowTensor}, out,
+                stridesAttr, dilationAttr)
+            .getResult(0);
+    //    Type newOutType = getTypeConverter()->convertType(op.getType(0));
+    //    rewriter.replaceOpWithNewOp<tensor::CastOp>(op, newOutType,
+    //    maxPool2d);
+    rewriter.replaceOp(op, {maxPool2d, op.indices()});
     return success();
   }
 };
@@ -616,6 +708,8 @@ public:
     patterns.add<ConvertAtenTHNNConv2dOutOp>(typeConverter, context);
     target.addIllegalOp<AtenReluOp>();
     patterns.add<ConvertElementwiseOp>(typeConverter, context);
+    target.addIllegalOp<AtenMaxPool2dWithIndicesOutOp>();
+    patterns.add<ConvertAtenMaxPool2dWithIndicesOutOp>(typeConverter, context);
 
     if (failed(applyPartialConversion(getOperation(), target,
                                       std::move(patterns))))
