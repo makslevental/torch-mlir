@@ -77,6 +77,28 @@ class Conv2dNoPaddingModule(torch.nn.Module):
         return self.conv(x)
 
 
+# self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False)
+# self.bn1 = norm_layer(self.inplanes)
+# self.relu = nn.ReLU(inplace=True)
+# self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+
+
+class ReLUModule(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.relu = torch.nn.ReLU(inplace=True)
+        self.train(False)
+
+    @export
+    @annotate_args([
+        None,
+        ([10, 10], torch.float32, True),
+    ])
+    def forward(self, x):
+        y = self.relu(x)
+        return y
+
+
 def make_mat_mul():
     test_module = Matmul()
     class_annotator = ClassAnnotator()
@@ -152,36 +174,79 @@ def make_conv2d_out():
     return recursivescriptmodule._c, class_annotator
 
 
+def make_relu():
+    test_module = ReLUModule()
+    class_annotator = ClassAnnotator()
+    recursivescriptmodule = torch.jit.script(test_module)
+    # print(recursivescriptmodule.graph)
+    class_annotator.exportNone(recursivescriptmodule._c._type())
+    class_annotator.exportPath(recursivescriptmodule._c._type(), ["forward"])
+    class_annotator.annotateArgs(
+        recursivescriptmodule._c._type(),
+        ["forward"],
+        [
+            None,
+            ([10, 10], torch.float32, True),
+        ],
+    )
+    return recursivescriptmodule._c, class_annotator
+
+
+PIPELINE = [
+    'symbol-dce',
+    'torch-prepare-for-globalize-object-graph',
+    'torch-globalize-object-graph',
+    'symbol-dce',
+    'inline',
+    'torch-adjust-calling-conventions',
+    'builtin.func(canonicalize{  max-iterations=10 region-simplify=true top-down=true})',
+    'torch-inline-global-slots',
+    'builtin.func(torch-reduce-op-variants)',
+    'builtin.func(canonicalize{  max-iterations=10 region-simplify=true top-down=true})',
+    'symbol-dce',
+    'builtin.func(torch-hls-refine-types)',
+    'torch-refine-public-return',
+    'builtin.func(canonicalize{  max-iterations=10 region-simplify=true top-down=true})',
+    'builtin.func(torch-maximize-value-semantics)',
+    'builtin.func(canonicalize{  max-iterations=10 region-simplify=true top-down=true})',
+    'builtin.func(torch-decompose-complex-ops)',
+    'builtin.func(torch-hls-decompose-complex-ops)',
+    'torch-verify-invariants-before-backend-lowering',
+    'builtin.func(torch-hls-convert-torch-to-linalg)',
+    'builtin.func(convert-torch-to-linalg)',
+    'builtin.func(convert-torch-to-std)',
+    'builtin.func(convert-torch-to-scf)',
+    'builtin.func(std-expand)',
+    'builtin.func(canonicalize{  max-iterations=10 region-simplify=true top-down=true})',
+    'builtin.func(resolve-shaped-type-result-dims)',
+    'builtin.func(cse)',
+    'torch-func-backend-type-conversion',
+    'builtin.func(torch-finalizing-backend-type-conversion)',
+    'torch-verify-linalg-on-tensors-backend-contract',
+    'tensor-constant-bufferize{alignment=0}',
+    'builtin.func(torch-hls-linalg-bufferize)',
+    'builtin.func(std-bufferize)',
+    'builtin.func(tensor-bufferize)',
+    'func-bufferize',
+    'builtin.func(finalizing-bufferize)',
+    'torch-hls-drop-public-return',
+    'builtin.func(convert-linalg-to-loops)',
+    'builtin.func(lower-affine)',
+    'builtin.func(convert-scf-to-std)',
+    'builtin.func(refback-expand-ops-for-llvm)',
+    'builtin.func(arith-expand)',
+    'builtin.func(convert-math-to-llvm)',
+    'convert-memref-to-llvm{index-bitwidth=0 use-aligned-alloc=false}',
+    'convert-std-to-llvm{data-layout= emit-c-wrappers=false index-bitwidth=0 use-bare-ptr-memref-call-conv=false}',
+    'reconcile-unrealized-casts'
+]
+
 if __name__ == "__main__":
-    mb.import_module(*make_conv2d_out())
+    mb.import_module(*make_relu())
     with mb.module.context:
-        pm = PassManager.parse(",".join([
-            'torchscript-module-to-torch-hls-backend-pipeline',
-            'torch-hls-backend-to-linalg-on-tensors-backend-pipeline',
-            # Bufferize.
-
-            "tensor-constant-bufferize",
-            "builtin.func(scf-bufferize)",
-            "builtin.func(torch-hls-linalg-bufferize)",
-            "builtin.func(std-bufferize)",
-            "builtin.func(tensor-bufferize)",
-            "func-bufferize",
-            # "buffer-results-to-out-params",
-            "builtin.func(finalizing-bufferize)",
-            "torch-hls-drop-public-return",
-
-            # Lower to LLVM
-
-            "builtin.func(convert-linalg-to-loops)",
-            "builtin.func(lower-affine)",
-            "builtin.func(convert-scf-to-std)",
-            "builtin.func(refback-expand-ops-for-llvm)",
-            "builtin.func(arith-expand)",
-            # "builtin.func(convert-math-to-llvm)",
-            # "convert-memref-to-llvm",
-            # "convert-std-to-llvm",
-            # "reconcile-unrealized-casts",
-        ]))
+        mb.set_multithreading(False)
+        pm = PassManager.parse(",".join(PIPELINE))
+        pm.enable_ir_printing()
         pm.run(mb.module)
 
-    open(f"conv2d.arith.mlir", "w").write(str(mb.module))
+    open(f"relu.llvm.mlir", "w").write(str(mb.module))

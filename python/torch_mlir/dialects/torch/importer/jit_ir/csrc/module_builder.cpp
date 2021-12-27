@@ -172,12 +172,17 @@ MlirBlock ModuleBuilder::getBodyBlock() {
   return mlirRegionGetFirstBlock(mlirOperationGetRegion(moduleOp, 0));
 }
 
+void ModuleBuilder::setMultithreading(bool enable) {
+  mlirContextEnableMultithreading(context, enable);
+}
+
 void ModuleBuilder::bind(py::module &m) {
   py::class_<ModuleBuilder>(m, "ModuleBuilder")
       .def(py::init<py::object>(), py::arg("context") = py::none())
       .def_property_readonly("context", &ModuleBuilder::getContextObj)
       .def_property_readonly("module", &ModuleBuilder::getModuleObj)
       .def("import_function", &ModuleBuilder::importFunction)
+      .def("set_multithreading", &ModuleBuilder::setMultithreading)
       .def("import_module", &ModuleBuilder::importModule, py::arg("module"),
            py::arg("classAnnotator") = py::none());
 }

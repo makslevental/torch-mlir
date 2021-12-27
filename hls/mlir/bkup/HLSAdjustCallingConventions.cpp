@@ -1,0 +1,326 @@
+//===- HLSAdjustCallingConventions.cpp ------------------------*- C++-*-===//
+//
+// This file is licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+// Also available under a BSD-style license. See LICENSE.
+//
+//===----------------------------------------------------------------------===//
+
+#include "HLSPassDetail.h"
+#include "HLSPasses.h"
+
+#include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/IR/BlockAndValueMapping.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/Transforms/DialectConversion.h"
+#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "torch-mlir/Dialect/Torch/IR/TorchDialect.h"
+#include "torch-mlir/Dialect/Torch/IR/TorchOps.h"
+#include "torch-mlir/Dialect/Torch/Transforms/Passes.h"
+
+using namespace mlir;
+using namespace mlir::torch;
+using namespace mlir::torch::Torch;
+using namespace mlir::torch::HLS;
+
+// Map from func name and arg index to the type bound for that arg.
+// This is needed because to rewrite calls, we need the non-local information
+// from the func definition.
+// We also benefit from populating this all at once, which avoids ordering
+// issues between rewriting of func ops vs call ops.
+using TypeBoundMap = DenseMap<std::pair<StringRef, int>, Type>;
+
+Value HLScopyTensorToType(OpBuilder &builder, Location loc,
+                                           BaseTensorType newType,
+                                           Value tensor) {
+  auto originalType = tensor.getType().cast<BaseTensorType>();
+  // Adjust the static information in the type to match between the original and
+  // new types.
+  if (!originalType.hasSameSizesAndDtype(newType)) {
+    tensor = builder.create<TensorStaticInfoCastOp>(
+        loc, originalType.getWithSizesAndDtypeFrom(newType), tensor);
+  }
+
+  // Unless both the original and new types are both value tensors, we end
+  // up creating one op that converts between the value and non-value tensor
+  // domains. If both the original and new types are both non-value tensors,
+  // then we do the copy by going to a value tensor and back.
+  if (tensor.getType().isa<NonValueTensorType>() && !newType.isa<NonValueTensorType>()) {
+    tensor = builder.create<CopyToValueTensorOp>(loc, tensor);
+  }
+  if (newType.isa<NonValueTensorType>() && !tensor.getType().isa<NonValueTensorType>()) {
+    tensor = builder.create<CopyToNonValueTensorOp>(loc, tensor);
+  }
+
+  return tensor;
+}
+
+Value HLScopyNonValueTensorToType(OpBuilder &builder, Location loc,
+                          BaseTensorType newType,
+                          Value tensor) {
+  auto originalType = tensor.getType().cast<BaseTensorType>();
+  tensor.setType(newType);
+  return tensor;
+}
+
+
+namespace {
+class HLSAdjustCallingConventionForFunc : public OpConversionPattern<FuncOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(FuncOp func, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    MLIRContext *context = func.getContext();
+    auto typeBoundIdent = Identifier::get("torch.type_bound", context);
+    TypeConverter::SignatureConversion conversion(func.getNumArguments());
+
+    // The TypeConverter hooks for type conversion are "context free", so we
+    // cannot use the usual helpers here for populating SignatureConversion and
+    // new result types.
+    //
+    // The incoporation of the torch.type_bound arg attr is context-dependent.
+
+    for (auto type : llvm::enumerate(func.getArgumentTypes())) {
+      if (type.value().isa<NonValueTensorType>()) {
+        auto typeBoundAttr =
+            func.getArgAttrOfType<TypeAttr>(type.index(), typeBoundIdent);
+        Type bound = typeBoundAttr ? typeBoundAttr.getValue() : Type();
+//        if (!bound.isa<ValueTensorType>())
+//          return rewriter.notifyMatchFailure(
+//              func, "unimplemented: preserving aliasing for non-value-semantic "
+//                    "type bounds");
+        conversion.addInputs(type.index(), typeBoundAttr
+                                               ? typeBoundAttr.getValue()
+                                               : type.value());
+        continue;
+      } else if (auto none = type.value().dyn_cast<Torch::NoneType>()) {
+        continue;
+      }
+      // TODO: add tuple type.
+      conversion.addInputs(type.index(), type.value());
+    }
+    rewriter.applySignatureConversion(&func.getBody(), conversion,
+                                      typeConverter);
+
+    SmallVector<Type> newResultTypes;
+    for (auto type : func.getType().getResults()) {
+      if (auto none = type.dyn_cast<Torch::NoneType>()) {
+        continue;
+      }
+      if (auto tuple = type.dyn_cast<Torch::TupleType>()) {
+        llvm::append_range(newResultTypes, tuple.getContainedTypes());
+        continue;
+      }
+      newResultTypes.push_back(type);
+    }
+    rewriter.updateRootInPlace(func, [&] {
+      func.setType(FunctionType::get(
+          getContext(), conversion.getConvertedTypes(), newResultTypes));
+      // Clear out the type bounds, now that the type incorporates them.
+      for (int i = 0, e = func.getNumArguments(); i != e; i++)
+        func.removeArgAttr(i, typeBoundIdent);
+    });
+    return success();
+  }
+};
+} // namespace
+
+namespace {
+class HLSAdjustCallingConventionForCall : public OpConversionPattern<CallOp> {
+public:
+  HLSAdjustCallingConventionForCall(TypeConverter &converter,
+                                    MLIRContext *context,
+                                    TypeBoundMap &typeBoundMap)
+      : OpConversionPattern<CallOp>(converter, context),
+        typeBoundMap(typeBoundMap) {}
+  LogicalResult
+  matchAndRewrite(CallOp call, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    SmallVector<Type> convertedResults;
+    if (failed(typeConverter->convertTypes(call.getResultTypes(),
+                                           convertedResults)))
+      return failure();
+
+    SmallVector<Value> newOperands;
+    for (auto operand : llvm::enumerate(adaptor.getOperands())) {
+      if (operand.value().getType().isa<Torch::NoneType>())
+        continue;
+      auto it = typeBoundMap.find({call.callee(), operand.index()});
+      if (it != typeBoundMap.end()) {
+        if (auto valueTensorType = it->second.dyn_cast<ValueTensorType>()) {
+          newOperands.push_back(HLScopyTensorToType(
+              rewriter, call->getLoc(), valueTensorType, operand.value()));
+          continue;
+        } else {
+          auto nonValueTensorType = it->second.dyn_cast<NonValueTensorType>();
+//          newOperands.push_back(HLScopyNonValueTensorToType(
+//              rewriter, call->getLoc(), valueTensorType, operand.value()));
+          return rewriter.notifyMatchFailure(
+              call, "unimplemented: preserving aliasing for non-value-semantic "
+                    "type bounds");
+        }
+      }
+      newOperands.push_back(operand.value());
+    }
+
+    CallOp newCall = rewriter.create<CallOp>(call.getLoc(), call.callee(),
+                                             convertedResults, newOperands);
+    int newOpResultIdx = 0;
+    SmallVector<Value> newResults;
+    for (auto type : call.getResultTypes()) {
+      if (type.isa<Torch::NoneType>()) {
+        newResults.push_back(
+            rewriter.create<ConstantNoneOp>(call.getLoc(), type));
+        continue;
+      }
+      if (type.isa<Torch::TupleType>()) {
+        newResults.push_back(rewriter.create<PrimTupleConstructOp>(
+            call.getLoc(), type, newCall.getResults()));
+        continue;
+      }
+      newResults.push_back(newCall.getResult(newOpResultIdx++));
+    }
+    rewriter.replaceOp(call, newResults);
+    return success();
+  }
+
+private:
+  TypeBoundMap &typeBoundMap;
+};
+} // namespace
+
+namespace {
+class HLSAdjustCallingConventionForReturn
+    : public OpConversionPattern<ReturnOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(ReturnOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    SmallVector<Value> newOperands;
+    for (auto operand : adaptor.getOperands()) {
+      if (!operand)
+        continue;
+      if (operand.getType().isa<Torch::NoneType>())
+        continue;
+      if (auto tuple = operand.getType().dyn_cast<Torch::TupleType>()) {
+        Location loc = op.getLoc();
+        for (auto en : llvm::enumerate(tuple.getContainedTypes())) {
+          auto i = rewriter.create<ConstantIntOp>(
+              loc, rewriter.getI64IntegerAttr(en.index()));
+          newOperands.push_back(
+              rewriter.create<PrimTupleIndexOp>(loc, en.value(), operand, i));
+        }
+        continue;
+      }
+      newOperands.push_back(operand);
+    }
+    rewriter.replaceOpWithNewOp<ReturnOp>(op, newOperands);
+    return success();
+  }
+};
+} // namespace
+
+static LogicalResult HLSAdjustCallingConventions(FuncOp func,
+                                                 TypeBoundMap &typeBoundMap) {
+  MLIRContext *context = func.getContext();
+  RewritePatternSet patterns(context);
+  TypeConverter typeConverter;
+  typeConverter.addConversion([](Type type) { return type; });
+  typeConverter.addConversion(
+      [](Torch::TupleType type,
+         SmallVectorImpl<Type> &types) -> Optional<LogicalResult> {
+        llvm::append_range(types, type.getContainedTypes());
+        return success();
+      });
+  typeConverter.addConversion(
+      [](Torch::NoneType type,
+         SmallVectorImpl<Type> &types) -> Optional<LogicalResult> {
+        return success();
+      });
+
+  typeConverter.addArgumentMaterialization(
+      [](OpBuilder &builder, Torch::BaseTensorType type, ValueRange inputs,
+         Location loc) -> Value {
+        assert(inputs.size() == 1);
+        assert(inputs[0].getType().isa<BaseTensorType>());
+        return HLScopyTensorToType(builder, loc, type, inputs[0]);
+      });
+  patterns.add<HLSAdjustCallingConventionForFunc>(typeConverter, context);
+  patterns.add<HLSAdjustCallingConventionForCall>(typeConverter, context,
+                                                  typeBoundMap);
+  patterns.add<HLSAdjustCallingConventionForReturn>(typeConverter, context);
+
+  ConversionTarget target(*context);
+  target.addDynamicallyLegalOp<FuncOp>([](FuncOp func) {
+    for (int i = 0, e = func.getNumArguments(); i != e; i++) {
+      if (func.getArgAttr(i, "torch.type_bound"))
+        return false;
+      if (func.getArgumentTypes()[i].isa<Torch::NoneType>())
+        return false;
+    }
+    for (int i = 0, e = func.getNumResults(); i != e; i++) {
+      if (func.getType().getResults()[i].isa<Torch::NoneType>())
+        return false;
+    }
+    return true;
+  });
+  // The dynamic legality conditions for call and return are a pain to write...
+  // Just run the patterns once and call it a day.
+  //
+  // Bug for doing this better https://bugs.llvm.org/show_bug.cgi?id=49812
+  DenseSet<Operation *> opsInOriginalProgram;
+  func.walk([&](CallOp op) { opsInOriginalProgram.insert(op.getOperation()); });
+  func.walk(
+      [&](ReturnOp op) { opsInOriginalProgram.insert(op.getOperation()); });
+  target.addDynamicallyLegalOp<CallOp>([&](CallOp op) {
+    return !opsInOriginalProgram.contains(op.getOperation());
+  });
+  target.addDynamicallyLegalOp<ReturnOp>([&](ReturnOp op) {
+    return !opsInOriginalProgram.contains(op.getOperation());
+  });
+  //  target.addLegalOp<CopyToNonValueTensorOp, CopyToValueTensorOp>();
+  //  target.addLegalOp<TensorStaticInfoCastOp>();
+  target.addLegalOp<ConstantNoneOp>();
+  target.addLegalOp<ConstantIntOp>();
+  target.addLegalOp<PrimTupleIndexOp>();
+  target.addLegalOp<PrimTupleConstructOp>();
+  // We don't know how to rewrite it, so mark it as illegal.
+  target.addIllegalOp<CallIndirectOp>();
+  if (failed(applyPartialConversion(func.getOperation(), target,
+                                    std::move(patterns))))
+    return failure();
+  return success();
+}
+
+namespace {
+class HLSAdjustCallingConventionsPass
+    : public HLSAdjustCallingConventionsBase<HLSAdjustCallingConventionsPass> {
+  void runOnOperation() override {
+    auto module = getOperation();
+    TypeBoundMap typeBoundMap;
+    for (auto func : module.getOps<FuncOp>()) {
+      for (int i = 0, e = func.getNumArguments(); i != e; i++) {
+        auto typeBoundAttr =
+            func.getArgAttrOfType<TypeAttr>(i, "torch.type_bound");
+        if (!typeBoundAttr)
+          continue;
+        typeBoundMap[{func.getName(), i}] = typeBoundAttr.getValue();
+      }
+    }
+    for (auto func : module.getOps<FuncOp>()) {
+      if (failed(HLSAdjustCallingConventions(func, typeBoundMap)))
+        return signalPassFailure();
+    }
+  }
+};
+} // namespace
+
+std::unique_ptr<OperationPass<ModuleOp>>
+mlir::torch::HLS::createHLSAdjustCallingConventionsPass() {
+  return std::make_unique<HLSAdjustCallingConventionsPass>();
+}

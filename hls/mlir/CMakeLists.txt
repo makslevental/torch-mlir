@@ -17,6 +17,8 @@ add_public_tablegen_target(HLSTorchIncGen)
 
 #        HLSConvertOperators.cpp
 #        HLSTorchOps.cpp
+#        HLSAdjustCallingConventions.cpp
+#        HLSReduceOpVariants.cpp
 add_mlir_library(HLSTorch
         HLSDecomposeComplexOps.cpp
         HLSDropPublicReturn.cpp
