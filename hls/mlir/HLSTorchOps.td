@@ -70,4 +70,30 @@ def HLSTorch_AtenTHNNConv2dOutOp : Torch_Op<"aten.thnn_conv2d.out", [
   let assemblyFormat = "$input `,` $weight `,` $kernel_size `,` $bias `,` $stride `,` $padding `,` $out attr-dict `:` type($input) `,` type($weight) `,` type($kernel_size) `,` type($bias) `,` type($stride) `,` type($padding) `,` type($out) `->` type($result)";
 }
 
+// JitOperator 'aten::max_pool2d_with_indices.out : (Tensor, int[], int[], int[], int[], bool, Tensor, Tensor) -> (Tensor, Tensor)':
+// MLIR op name = torch.aten.max_pool2d_with_indices.out
+// MLIR td def name = Torch_AtenMaxPool2dWithIndicesOutOp
+
+def HLSTorch_AtenMaxPool2dWithIndicesOutOp : Torch_Op<"aten.max_pool2d_with_indices.out", [
+    AllowsTypeRefinement,
+    HasValueSemantics
+  ]> {
+  let summary = "aten::max_pool2d_with_indices.out : (Tensor, int[], int[], int[], int[], bool, Tensor, Tensor) -> (Tensor, Tensor)`";
+  let arguments = (ins
+    AnyTorchTensorType:$self,
+    TorchIntListType:$kernel_size,
+    TorchIntListType:$stride,
+    TorchIntListType:$padding,
+    TorchIntListType:$dilation,
+    Torch_BoolType:$ceil_mode,
+    AnyTorchTensorType:$out,
+    AnyTorchTensorType:$indices
+  );
+  let results = (outs
+    AnyTorchTensorType:$out_result,
+    AnyTorchTensorType:$indices_result
+  );
+  let assemblyFormat = "$self `,` $kernel_size `,` $stride `,` $padding `,` $dilation `,` $ceil_mode attr-dict `,` $out `,` $indices `:` type($self) `,` type($kernel_size) `,` type($stride) `,` type($padding) `,` type($dilation) `,` type($ceil_mode) `,` type($out) `,` type($indices) `->` type($out_result) `,` type($indices_result)";
+}
+
 #endif // HLSTORCH_OPS
