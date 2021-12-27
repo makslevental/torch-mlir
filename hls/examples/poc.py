@@ -61,6 +61,47 @@ class Conv2dNoPaddingOutModule(torch.nn.Module):
         return torch._C._nn.thnn_conv2d(inp, self.weight, self.kernel_size, out=out)
 
 
+# def max_pool2d_with_indices(
+#         input: Tensor, kernel_size: BroadcastingList2[int],
+#         stride: Optional[BroadcastingList2[int]] = None,
+#         padding: BroadcastingList2[int] = 0,
+#         dilation: BroadcastingList2[int] = 1,
+#         ceil_mode: bool = False,
+#         return_indices: bool = False
+# self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False)
+# self.bn1 = norm_layer(self.inplanes)
+# self.relu = nn.ReLU(inplace=True)
+# self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+# self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+# aten::max_pool2d_with_indices.out(Tensor self, int[2] kernel_size, int[2] stride=[], int[2] padding=[0, 0], int[2] dilation=[1, 1], bool ceil_mode=False, *, Tensor(a!) out, Tensor(b!) indices) -> (Tensor(a!), Tensor(b!)):
+
+
+
+class MaxPool2dOutModule(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        torch.manual_seed(0)
+        self.kernel_size = (3, 3)
+        self.stride = (2, 2)
+        self.padding = (1, 1)
+        self.dilation = (1, 1)
+        self.ceil_mode = False
+        self.return_indices = False
+        self.train(False)
+
+    @export
+    @annotate_args([
+        None,
+        ([1, 1, 10, 10], torch.float32, True),
+        ([1, 1, 5, 5], torch.float32, True),
+        ([1, 1, 5, 5], torch.float32, True),
+    ])
+    def forward(self, inp, out, indices):
+        out, _ = torch._C._nn.max_pool2d_with_indices(inp, self.kernel_size, self.stride, self.padding, self.dilation, self.ceil_mode,
+                                                    out=out, indices=indices)
+        return out
+
+
 class Conv2dNoPaddingModule(torch.nn.Module):
     def __init__(self):
         super().__init__()
@@ -75,12 +116,6 @@ class Conv2dNoPaddingModule(torch.nn.Module):
     ])
     def forward(self, x):
         return self.conv(x)
-
-
-# self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False)
-# self.bn1 = norm_layer(self.inplanes)
-# self.relu = nn.ReLU(inplace=True)
-# self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
 
 class ReLUModule(torch.nn.Module):
@@ -152,6 +187,7 @@ def make_conv2d():
     )
     return recursivescriptmodule._c, class_annotator
 
+
 def make_conv2d_out():
     test_module = Conv2dNoPaddingOutModule()
     # conv = torch.nn.Conv2d(2, 10, (3, 3), bias=False)
@@ -192,6 +228,26 @@ def make_relu():
     return recursivescriptmodule._c, class_annotator
 
 
+def make_max_pool2d():
+    test_module = MaxPool2dOutModule()
+    class_annotator = ClassAnnotator()
+    recursivescriptmodule = torch.jit.script(test_module)
+    # print(recursivescriptmodule.graph)
+    class_annotator.exportNone(recursivescriptmodule._c._type())
+    class_annotator.exportPath(recursivescriptmodule._c._type(), ["forward"])
+    class_annotator.annotateArgs(
+        recursivescriptmodule._c._type(),
+        ["forward"],
+        [
+            None,
+            ([1, 1, 10, 10], torch.float32, True),
+            ([1, 1, 5, 5], torch.float32, True),
+            ([1, 1, 5, 5], torch.float32, True),
+        ],
+    )
+    return recursivescriptmodule._c, class_annotator
+
+
 PIPELINE = [
     'symbol-dce',
     'torch-prepare-for-globalize-object-graph',
@@ -213,40 +269,43 @@ PIPELINE = [
     'builtin.func(torch-hls-decompose-complex-ops)',
     'torch-verify-invariants-before-backend-lowering',
     'builtin.func(torch-hls-convert-torch-to-linalg)',
-    'builtin.func(convert-torch-to-linalg)',
-    'builtin.func(convert-torch-to-std)',
-    'builtin.func(convert-torch-to-scf)',
-    'builtin.func(std-expand)',
-    'builtin.func(canonicalize{  max-iterations=10 region-simplify=true top-down=true})',
-    'builtin.func(resolve-shaped-type-result-dims)',
-    'builtin.func(cse)',
-    'torch-func-backend-type-conversion',
-    'builtin.func(torch-finalizing-backend-type-conversion)',
-    'torch-verify-linalg-on-tensors-backend-contract',
-    'tensor-constant-bufferize{alignment=0}',
-    'builtin.func(torch-hls-linalg-bufferize)',
-    'builtin.func(std-bufferize)',
-    'builtin.func(tensor-bufferize)',
-    'func-bufferize',
-    'builtin.func(finalizing-bufferize)',
-    'torch-hls-drop-public-return',
-    'builtin.func(convert-linalg-to-loops)',
-    'builtin.func(lower-affine)',
-    'builtin.func(convert-scf-to-std)',
-    'builtin.func(refback-expand-ops-for-llvm)',
-    'builtin.func(arith-expand)',
-    'builtin.func(convert-math-to-llvm)',
-    'convert-memref-to-llvm{index-bitwidth=0 use-aligned-alloc=false}',
-    'convert-std-to-llvm{data-layout= emit-c-wrappers=false index-bitwidth=0 use-bare-ptr-memref-call-conv=false}',
-    'reconcile-unrealized-casts'
+    # 'builtin.func(convert-torch-to-linalg)',
+    # 'builtin.func(convert-torch-to-std)',
+    # 'builtin.func(convert-torch-to-scf)',
+    # 'builtin.func(std-expand)',
+    # 'builtin.func(canonicalize{  max-iterations=10 region-simplify=true top-down=true})',
+    # 'builtin.func(resolve-shaped-type-result-dims)',
+    # 'builtin.func(cse)',
+    # 'torch-func-backend-type-conversion',
+    # 'builtin.func(torch-finalizing-backend-type-conversion)',
+    # 'torch-verify-linalg-on-tensors-backend-contract',
+    # 'tensor-constant-bufferize{alignment=0}',
+    # 'builtin.func(torch-hls-linalg-bufferize)',
+    # 'builtin.func(std-bufferize)',
+    # 'builtin.func(tensor-bufferize)',
+    # 'func-bufferize',
+    # 'builtin.func(finalizing-bufferize)',
+    # 'torch-hls-drop-public-return',
+    # 'builtin.func(convert-linalg-to-loops)',
+    # 'builtin.func(lower-affine)',
+    # 'builtin.func(convert-scf-to-std)',
+    # 'builtin.func(refback-expand-ops-for-llvm)',
+    # 'builtin.func(arith-expand)',
+    # 'builtin.func(convert-math-to-llvm)',
+    # 'convert-memref-to-llvm{index-bitwidth=0 use-aligned-alloc=false}',
+    # 'convert-std-to-llvm{data-layout= emit-c-wrappers=false index-bitwidth=0 use-bare-ptr-memref-call-conv=false}',
+    # 'reconcile-unrealized-casts'
 ]
 
 if __name__ == "__main__":
-    mb.import_module(*make_relu())
+    # t = torch.randn((1,1,32, 32))
+    # p = torch.nn.MaxPool2d(kernel_size=3, stride=2, padding=1, return_indices=True)
+    # y, i = p(t)
+    mb.import_module(*make_max_pool2d())
     with mb.module.context:
         mb.set_multithreading(False)
         pm = PassManager.parse(",".join(PIPELINE))
         pm.enable_ir_printing()
         pm.run(mb.module)
 
-    open(f"relu.llvm.mlir", "w").write(str(mb.module))
+    open(f"maxpool2d.llvm.mlir", "w").write(str(mb.module))
