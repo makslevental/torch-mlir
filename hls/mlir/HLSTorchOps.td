@@ -96,4 +96,20 @@ def HLSTorch_AtenMaxPool2dWithIndicesOutOp : Torch_Op<"aten.max_pool2d_with_indi
   let assemblyFormat = "$self `,` $kernel_size `,` $stride `,` $padding `,` $dilation `,` $ceil_mode attr-dict `,` $out `,` $indices `:` type($self) `,` type($kernel_size) `,` type($stride) `,` type($padding) `,` type($dilation) `,` type($ceil_mode) `,` type($out) `,` type($indices) `->` type($out_result) `,` type($indices_result)";
 }
 
+def HLSTorch_AtenAdaptiveAvgPool2dOutOp : Torch_Op<"aten.adaptive_avg_pool2d.out", [
+    AllowsTypeRefinement,
+    HasValueSemantics
+  ]> {
+  let summary = "Generated op for `aten::adaptive_avg_pool2d.out : (Tensor, int[], Tensor) -> (Tensor)`";
+  let arguments = (ins
+    AnyTorchTensorType:$self,
+    TorchIntListType:$output_size,
+    AnyTorchTensorType:$out
+  );
+  let results = (outs
+    AnyTorchTensorType:$result
+  );
+  let assemblyFormat = "$self `,` $output_size attr-dict `,` $out `:` type($self) `,` type($output_size) `,` type($out) `->` type($result)";
+}
+
 #endif // HLSTORCH_OPS
