@@ -297,6 +297,8 @@ public:
                                                 operands);
     } else if (auto avgPool2d = llvm::dyn_cast<AtenAdaptiveAvgPool2dOp>(op)) {
       return visitAtenAdaptiveAvgPool2dOp(avgPool2d, operands);
+    } else if (auto avgPool2dout = llvm::dyn_cast<AtenAdaptiveAvgPool2dOutOp>(op)) {
+      return visitAtenAdaptiveAvgPool2dOutOp(avgPool2dout, operands);
     } else if (isa<AtenAddScalarOp, AtenSubScalarOp, AtenMulScalarOp,
                    AtenDivScalarOp, AtenFmodScalarOp, AtenFloorDivideScalarOp,
                    AtenPowTensorScalarOp, AtenRsubScalarOp, AtenLeakyReluOp>(
@@ -499,6 +501,9 @@ private:
       ArrayRef<LatticeElement<ValueKnowledge> *> operands);
   ChangeResult visitAtenAdaptiveAvgPool2dOp(
       AtenAdaptiveAvgPool2dOp op,
+      ArrayRef<LatticeElement<ValueKnowledge> *> operands);
+  ChangeResult visitAtenAdaptiveAvgPool2dOutOp(
+      AtenAdaptiveAvgPool2dOutOp op,
       ArrayRef<LatticeElement<ValueKnowledge> *> operands);
   ChangeResult visitBinaryTensorScalarOp(
       Operation *op, ArrayRef<LatticeElement<ValueKnowledge> *> operands);
@@ -898,6 +903,20 @@ ChangeResult TypeAnalyzer::visitAtenMaxPool2dWithIndicesOutOp(
 
 ChangeResult TypeAnalyzer::visitAtenAdaptiveAvgPool2dOp(
     AtenAdaptiveAvgPool2dOp op,
+    ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
+  auto input = operands[0]->getValue();
+  auto knowledge =
+      ValueKnowledge::getNotNonePessimisticValueState(op->getContext());
+  if (input.hasSizes) {
+    knowledge.hasSizes = true;
+    knowledge.sizes.resize(input.sizes.size(), kUnknownSize);
+  }
+  knowledge.dtype = input.dtype;
+  return getLatticeElement(op->getResult(0)).join(knowledge);
+}
+
+ChangeResult TypeAnalyzer::visitAtenAdaptiveAvgPool2dOutOp(
+    AtenAdaptiveAvgPool2dOutOp op,
     ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
   auto input = operands[0]->getValue();
   auto knowledge =

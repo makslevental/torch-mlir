@@ -51,29 +51,13 @@ class Conv2dNoPaddingOutModule(torch.nn.Module):
         self.weight = conv.weight
         self.train(False)
 
-    @export
-    @annotate_args([
-        None,
-        ([5, 2, 10, 20], torch.float32, True),
-        ([5, 10, 8, 18], torch.float32, True),
-    ])
     def forward(self, inp, out):
         return torch._C._nn.thnn_conv2d(inp, self.weight, self.kernel_size, out=out)
 
 
-# def max_pool2d_with_indices(
-#         input: Tensor, kernel_size: BroadcastingList2[int],
-#         stride: Optional[BroadcastingList2[int]] = None,
-#         padding: BroadcastingList2[int] = 0,
-#         dilation: BroadcastingList2[int] = 1,
-#         ceil_mode: bool = False,
-#         return_indices: bool = False
-# self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False)
 # self.bn1 = norm_layer(self.inplanes)
-# self.relu = nn.ReLU(inplace=True)
-# self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 # self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-# aten::max_pool2d_with_indices.out(Tensor self, int[2] kernel_size, int[2] stride=[], int[2] padding=[0, 0], int[2] dilation=[1, 1], bool ceil_mode=False, *, Tensor(a!) out, Tensor(b!) indices) -> (Tensor(a!), Tensor(b!)):
+# self.fc = nn.Linear(512 * block.expansion, num_classes)
 
 
 class MaxPool2dOutModule(torch.nn.Module):
@@ -88,13 +72,6 @@ class MaxPool2dOutModule(torch.nn.Module):
         self.return_indices = False
         self.train(False)
 
-    @export
-    @annotate_args([
-        None,
-        ([1, 1, 10, 10], torch.float32, True),
-        ([1, 1, 5, 5], torch.float32, True),
-        ([1, 1, 5, 5], torch.float32, True),
-    ])
     def forward(self, inp, out, indices):
         out, _ = torch._C._nn.max_pool2d_with_indices(inp, self.kernel_size, self.stride, self.padding, self.dilation,
                                                       self.ceil_mode,
@@ -106,25 +83,52 @@ class MaxPool2dModule(torch.nn.Module):
     def __init__(self):
         super().__init__()
         torch.manual_seed(0)
-        self.kernel_size = (3, 3)
-        self.stride = (2, 2)
-        self.padding = (1, 1)
-        self.dilation = (1, 1)
-        self.ceil_mode = False
         self.maxpool = torch.nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         self.train(False)
 
-    @export
-    @annotate_args([
-        None,
-        ([1, 1, 10, 10], torch.float32, True),
-        ([1, 1, 5, 5], torch.float32, True),
-        ([1, 1, 5, 5], torch.float32, True),
-    ])
     def forward(self, inp):
-        # out, _ = torch._C._nn.max_pool2d_with_indices(inp, self.kernel_size, self.stride, self.padding, self.dilation,
-        #                                               self.ceil_mode)
         return self.maxpool(inp)
+
+
+class MaxPool2dOutModule(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        torch.manual_seed(0)
+        self.kernel_size = (3, 3)
+        self.stride = (1, 1)
+        self.padding = (0, 0)
+        self.dilation = (1, 1)
+        self.ceil_mode = False
+        self.return_indices = False
+        self.train(False)
+
+    def forward(self, inp, out, indices):
+        out, _ = torch._C._nn.max_pool2d_with_indices(inp, self.kernel_size, self.stride, self.padding, self.dilation,
+                                                      self.ceil_mode,
+                                                      out=out, indices=indices)
+        return out
+
+
+class AdaptiveAvgPool2dModule(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        torch.manual_seed(0)
+        self.pool = torch.nn.AdaptiveAvgPool2d((1, 1))
+        self.train(False)
+
+    def forward(self, inp):
+        return self.pool(inp)
+
+
+class AdaptiveAvgPool2dOutModule(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        torch.manual_seed(0)
+        self.output_size = (1, 1)
+        self.train(False)
+
+    def forward(self, inp, out):
+        return torch._C._nn.adaptive_avg_pool2d(inp, self.output_size, out=out)
 
 
 class Conv2dNoPaddingModule(torch.nn.Module):
@@ -253,11 +257,10 @@ def make_relu():
     return recursivescriptmodule._c, class_annotator
 
 
-def make_max_pool2d_out():
-    test_module = MaxPool2dOutModule()
+def make_adaptive_avg_pool2d():
+    test_module = AdaptiveAvgPool2dModule()
     class_annotator = ClassAnnotator()
     recursivescriptmodule = torch.jit.script(test_module)
-    # print(recursivescriptmodule.graph)
     class_annotator.exportNone(recursivescriptmodule._c._type())
     class_annotator.exportPath(recursivescriptmodule._c._type(), ["forward"])
     class_annotator.annotateArgs(
@@ -265,9 +268,25 @@ def make_max_pool2d_out():
         ["forward"],
         [
             None,
-            ([1, 1, 12, 12], torch.float32, True),
-            ([1, 1, 10, 10], torch.float32, True),
-            ([1, 1, 10, 10], torch.float32, True),
+            ([1, 1, 20, 20], torch.float32, True),
+        ],
+    )
+    return recursivescriptmodule._c, class_annotator
+
+
+def make_adaptive_avg_pool2d_out():
+    test_module = AdaptiveAvgPool2dOutModule()
+    class_annotator = ClassAnnotator()
+    recursivescriptmodule = torch.jit.script(test_module)
+    class_annotator.exportNone(recursivescriptmodule._c._type())
+    class_annotator.exportPath(recursivescriptmodule._c._type(), ["forward"])
+    class_annotator.annotateArgs(
+        recursivescriptmodule._c._type(),
+        ["forward"],
+        [
+            None,
+            ([7, 2, 20, 20], torch.float32, True),
+            ([7, 2, 1, 1], torch.float32, True),
         ],
     )
     return recursivescriptmodule._c, class_annotator
@@ -285,6 +304,26 @@ def make_max_pool2d():
         ["forward"],
         [
             None,
+            ([1, 1, 10, 10], torch.float32, True),
+        ],
+    )
+    return recursivescriptmodule._c, class_annotator
+
+
+def make_max_pool2d_out():
+    test_module = MaxPool2dOutModule()
+    class_annotator = ClassAnnotator()
+    recursivescriptmodule = torch.jit.script(test_module)
+    # print(recursivescriptmodule.graph)
+    class_annotator.exportNone(recursivescriptmodule._c._type())
+    class_annotator.exportPath(recursivescriptmodule._c._type(), ["forward"])
+    class_annotator.annotateArgs(
+        recursivescriptmodule._c._type(),
+        ["forward"],
+        [
+            None,
+            ([1, 1, 12, 12], torch.float32, True),
+            ([1, 1, 10, 10], torch.float32, True),
             ([1, 1, 10, 10], torch.float32, True),
         ],
     )
@@ -341,15 +380,15 @@ PIPELINE = [
 ]
 
 if __name__ == "__main__":
-    t = torch.randn((1,1,32, 32))
-    p = torch.nn.MaxPool2d(kernel_size=3, stride=1, padding=0, return_indices=True)
-    y, i = p(t)
-    print(y.shape, i.shape)
-    mb.import_module(*make_max_pool2d_out())
+    # t = torch.randn((1, 1, 32, 32))
+    # p = torch.nn.AdaptiveAvgPool2d((5,5))
+    # y, i = p(t)
+    # print(y.shape, i.shape)
+    mb.import_module(*make_adaptive_avg_pool2d_out())
     with mb.module.context:
         mb.set_multithreading(False)
         pm = PassManager.parse(",".join(PIPELINE))
         pm.enable_ir_printing()
         pm.run(mb.module)
 
-    open(f"maxpool2d.llvm.mlir", "w").write(str(mb.module))
+    open(f"adaptiveavgpool2d.llvm.mlir", "w").write(str(mb.module))
