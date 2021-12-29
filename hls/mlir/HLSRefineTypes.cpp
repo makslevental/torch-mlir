@@ -297,7 +297,8 @@ public:
                                                 operands);
     } else if (auto avgPool2d = llvm::dyn_cast<AtenAdaptiveAvgPool2dOp>(op)) {
       return visitAtenAdaptiveAvgPool2dOp(avgPool2d, operands);
-    } else if (auto avgPool2dout = llvm::dyn_cast<AtenAdaptiveAvgPool2dOutOp>(op)) {
+    } else if (auto avgPool2dout =
+                   llvm::dyn_cast<AtenAdaptiveAvgPool2dOutOp>(op)) {
       return visitAtenAdaptiveAvgPool2dOutOp(avgPool2dout, operands);
     } else if (isa<AtenAddScalarOp, AtenSubScalarOp, AtenMulScalarOp,
                    AtenDivScalarOp, AtenFmodScalarOp, AtenFloorDivideScalarOp,
@@ -467,6 +468,8 @@ public:
       return visitAtenNllLossForwardOp(nllForwardOp, operands);
     } else if (auto nativeLayerNormOp = dyn_cast<AtenNativeLayerNormOp>(op)) {
       return visitAtenNativeLayerNormOp(nativeLayerNormOp, operands);
+    } else if (auto bnout = llvm::dyn_cast<AtenNativeBatchNormOutOp>(op)) {
+      return visitAtenNativeBatchNormOutOp(bnout, operands);
     }
 
     // Otherwise, this is an unknown operation. Just mark all results as
@@ -624,6 +627,9 @@ private:
       ArrayRef<LatticeElement<ValueKnowledge> *> operands);
   ChangeResult visitAtenNativeLayerNormOp(
       AtenNativeLayerNormOp op,
+      ArrayRef<LatticeElement<ValueKnowledge> *> operands);
+  ChangeResult visitAtenNativeBatchNormOutOp(
+      AtenNativeBatchNormOutOp op,
       ArrayRef<LatticeElement<ValueKnowledge> *> operands);
 };
 } // namespace
@@ -875,30 +881,61 @@ ChangeResult TypeAnalyzer::visitAtenMaxPool2dOp(
 ChangeResult TypeAnalyzer::visitAtenMaxPool2dWithIndicesOutOp(
     AtenMaxPool2dWithIndicesOutOp op,
     ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
-    auto self = operands[0]->getValue();
-    auto outputKnowledge =
-        ValueKnowledge::getNotNonePessimisticValueState(op.getContext());
-    // Contains Knowledge of shape and dtype for the 1st result.
-    outputKnowledge.dtype = self.dtype;
-    // Contains Knowledge of shape and dtype for the 2nd result.
-    auto totalWeightKnowledge =
-        ValueKnowledge::getNotNonePessimisticValueState(op.getContext());
-    totalWeightKnowledge.dtype = self.dtype;
-    totalWeightKnowledge.sizes.resize(4, kUnknownSize);
-    totalWeightKnowledge.hasSizes = true;
+  auto self = operands[0]->getValue();
+  auto outputKnowledge =
+      ValueKnowledge::getNotNonePessimisticValueState(op.getContext());
+  // Contains Knowledge of shape and dtype for the 1st result.
+  outputKnowledge.dtype = self.dtype;
+  // Contains Knowledge of shape and dtype for the 2nd result.
+  auto totalWeightKnowledge =
+      ValueKnowledge::getNotNonePessimisticValueState(op.getContext());
+  totalWeightKnowledge.dtype = self.dtype;
+  totalWeightKnowledge.sizes.resize(4, kUnknownSize);
+  totalWeightKnowledge.hasSizes = true;
 
-    outputKnowledge.sizes.resize(4, kUnknownSize);
-    outputKnowledge.hasSizes = true;
-    auto resultLattice =
-    getLatticeElement(op.getResult(0)).join(outputKnowledge); resultLattice |=
-        getLatticeElement(op.getResult(1)).join(totalWeightKnowledge);
-    return resultLattice;
-//  auto knowledge =
-//      ValueKnowledge::getNotNonePessimisticValueState(op->getContext());
-//  knowledge.hasSizes = true;
-//  knowledge.sizes.resize(4, kUnknownSize);
-//  knowledge.dtype = operands[0]->getValue().dtype;
-//  return getLatticeElement(op->getResult(0)).join(knowledge);
+  outputKnowledge.sizes.resize(4, kUnknownSize);
+  outputKnowledge.hasSizes = true;
+  auto resultLattice = getLatticeElement(op.getResult(0)).join(outputKnowledge);
+  resultLattice |=
+      getLatticeElement(op.getResult(1)).join(totalWeightKnowledge);
+  return resultLattice;
+}
+
+ChangeResult TypeAnalyzer::visitAtenNativeBatchNormOutOp(
+    AtenNativeBatchNormOutOp op,
+    ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
+
+  auto input = operands[0]->getValue();
+  auto runningMean = operands[3]->getValue();
+  auto runningVar = operands[4]->getValue();
+  auto outputKnowledge =
+      ValueKnowledge::getNotNonePessimisticValueState(op.getContext());
+  auto saveMeanKnowledge =
+      ValueKnowledge::getNotNonePessimisticValueState(op.getContext());
+  auto saveInvstdKnowledge =
+      ValueKnowledge::getNotNonePessimisticValueState(op.getContext());
+
+  outputKnowledge.dtype = input.dtype;
+  runningMean.dtype = input.dtype;
+  runningVar.dtype = input.dtype;
+  saveInvstdKnowledge.dtype = input.dtype;
+  saveMeanKnowledge.dtype = input.dtype;
+
+  outputKnowledge.sizes = input.sizes;
+  runningMean.sizes.resize(4, kUnknownSize);
+  runningVar.sizes.resize(4, kUnknownSize);
+  saveMeanKnowledge.sizes.resize(4, kUnknownSize);
+  saveInvstdKnowledge.sizes.resize(4, kUnknownSize);
+
+  outputKnowledge.hasSizes = true;
+  runningMean.hasSizes = true;
+  runningVar.hasSizes = true;
+  saveMeanKnowledge.hasSizes = true;
+  saveInvstdKnowledge.hasSizes = true;
+
+  return getLatticeElement(op->getResult(0)).join(outputKnowledge) |
+         getLatticeElement(op->getResult(1)).join(saveMeanKnowledge) |
+         getLatticeElement(op->getResult(2)).join(saveInvstdKnowledge);
 }
 
 ChangeResult TypeAnalyzer::visitAtenAdaptiveAvgPool2dOp(
