@@ -46,13 +46,14 @@ Value createGetTensorLiteral(OpBuilder &b, Location loc,
   return createGetTensorLiteral(b, loc, shape, vals, elementType);
 }
 
-// static SmallVector<Value>
-// getAsConstantIndexValues(OpBuilder &b, Location loc,
-//                          SmallVectorImpl<int64_t> &ints) {
-//   return llvm::to_vector<4>(llvm::map_range(ints, [&](int64_t val) -> Value {
-//     return b.create<arith::ConstantOp>(loc, b.getIndexAttr(val));
-//   }));
-// }
+static LogicalResult checkNotNone(PatternRewriter &rewriter, Operation *op,
+                                  Value v) {
+  Type type = v.getType();
+  if (type.isa<OptionalType>() || type.isa<Torch::NoneType>() ||
+      type.isa<mlir::NoneType>())
+    return rewriter.notifyMatchFailure(op, "unimplemented None type arg");
+  return success();
+}
 
 static LogicalResult verifyLinalgCompatibleTypes(Operation *op,
                                                  PatternRewriter &rewriter) {
@@ -155,6 +156,75 @@ static bool isConstantIntListMatching(Value value,
       return false;
   }
   return true;
+}
+
+// Normalization formula:
+//   ((input - mean) / sqrt(var + eps)) * weight + bias
+static Value createLinalgPayloadCalculationForNormOps(
+    OpBuilder &b, Location loc, Type elemTy, Value input, Value mean, Value var,
+    Value eps, Value weight, Value bias) {
+  Value inputSubMean = b.create<arith::SubFOp>(loc, input, mean);
+  // The eps is always f64.
+  Value truncatedEps = b.create<arith::TruncFOp>(loc, elemTy, eps);
+  Value varPlusEps = b.create<arith::AddFOp>(loc, var, truncatedEps);
+  Value rSTD = b.create<math::RsqrtOp>(loc, varPlusEps);
+  Value temp = b.create<arith::MulFOp>(loc, inputSubMean, rSTD);
+  Value timesWeight = b.create<arith::MulFOp>(loc, temp, weight);
+  Value plusBias = b.create<arith::AddFOp>(loc, timesWeight, bias);
+  return plusBias;
+}
+
+// Helper function to caculate the output tensor dims for convolution-like ops.
+// Along each dim:
+// dim_out =
+//  floor((dim_in + 2 * padding - dilation * (kernelSize - 1) - 1) / stride) + 1
+static Value getOutputDimForConvOps(OpBuilder &b, Location loc, Value in,
+                                    Value paddingInt, Value dilationInt,
+                                    Value kernelSizeInt, Value strideInt) {
+  Value c1 = b.create<arith::ConstantOp>(loc, b.getI64IntegerAttr(1));
+  Value c2 = b.create<arith::ConstantOp>(loc, b.getI64IntegerAttr(2));
+
+  Value doublePadding = b.create<arith::MulIOp>(loc, paddingInt, c2);
+  // in + 2 * padding
+  Value inAddDoublePadding =
+      b.create<arith::AddIOp>(loc, castIndexToInt(b, loc, in), doublePadding);
+
+  // dilation * (kernelSize - 1)
+  Value kernelSizeSub1 = b.create<arith::SubIOp>(loc, kernelSizeInt, c1);
+  Value dilationTimesKernelSize =
+      b.create<arith::MulIOp>(loc, dilationInt, kernelSizeSub1);
+
+  Value temp =
+      b.create<arith::SubIOp>(loc, inAddDoublePadding, dilationTimesKernelSize);
+  Value dividend = b.create<arith::SubIOp>(loc, temp, c1);
+  Value division = b.create<arith::FloorDivSIOp>(loc, dividend, strideInt);
+  Value out = b.create<arith::AddIOp>(loc, division, c1);
+  return castIntToIndex(b, loc, out);
+}
+
+Value createLinalgPayloadCalculationForElementwiseOp(OpBuilder &b, Location loc,
+                                                     TypeConverter *converter,
+                                                     ValueRange payloadArgs,
+                                                     Operation *op,
+                                                     ArrayRef<Value> operands) {
+  if (auto relu = dyn_cast<AtenReluOp>(op)) {
+    if (!relu.getType()
+             .cast<ValueTensorType>()
+             .getDtype()
+             .isa<mlir::FloatType>()) {
+      relu.emitError("unimplemented: non-floating point dtype");
+      return nullptr;
+    }
+    Type elementType = payloadArgs[0].getType();
+    Value constZero =
+        b.create<arith::ConstantOp>(loc, b.getZeroAttr(elementType));
+    Value pred = b.create<arith::CmpFOp>(loc, arith::CmpFPredicate::UGT,
+                                         payloadArgs[0], constZero);
+    return b.create<SelectOp>(loc, pred, payloadArgs[0], constZero);
+  }
+  op->emitError("unimplemented lowering in "
+                "createLinalgPayloadCalculationForElementwiseOp");
+  return nullptr;
 }
 
 namespace {
@@ -340,34 +410,6 @@ public:
 };
 } // namespace
 
-// Helper function to caculate the output tensor dims for convolution-like ops.
-// Along each dim:
-// dim_out =
-//  floor((dim_in + 2 * padding - dilation * (kernelSize - 1) - 1) / stride) + 1
-static Value getOutputDimForConvOps(OpBuilder &b, Location loc, Value in,
-                                    Value paddingInt, Value dilationInt,
-                                    Value kernelSizeInt, Value strideInt) {
-  Value c1 = b.create<arith::ConstantOp>(loc, b.getI64IntegerAttr(1));
-  Value c2 = b.create<arith::ConstantOp>(loc, b.getI64IntegerAttr(2));
-
-  Value doublePadding = b.create<arith::MulIOp>(loc, paddingInt, c2);
-  // in + 2 * padding
-  Value inAddDoublePadding =
-      b.create<arith::AddIOp>(loc, castIndexToInt(b, loc, in), doublePadding);
-
-  // dilation * (kernelSize - 1)
-  Value kernelSizeSub1 = b.create<arith::SubIOp>(loc, kernelSizeInt, c1);
-  Value dilationTimesKernelSize =
-      b.create<arith::MulIOp>(loc, dilationInt, kernelSizeSub1);
-
-  Value temp =
-      b.create<arith::SubIOp>(loc, inAddDoublePadding, dilationTimesKernelSize);
-  Value dividend = b.create<arith::SubIOp>(loc, temp, c1);
-  Value division = b.create<arith::FloorDivSIOp>(loc, dividend, strideInt);
-  Value out = b.create<arith::AddIOp>(loc, division, c1);
-  return castIntToIndex(b, loc, out);
-}
-
 namespace {
 class ConvertAtenTHNNConv2dOutOp
     : public OpConversionPattern<AtenTHNNConv2dOutOp> {
@@ -487,30 +529,6 @@ public:
 } // namespace
 
 namespace {
-Value createLinalgPayloadCalculationForElementwiseOp(OpBuilder &b, Location loc,
-                                                     TypeConverter *converter,
-                                                     ValueRange payloadArgs,
-                                                     Operation *op,
-                                                     ArrayRef<Value> operands) {
-  if (auto relu = dyn_cast<AtenReluOp>(op)) {
-    if (!relu.getType()
-             .cast<ValueTensorType>()
-             .getDtype()
-             .isa<mlir::FloatType>()) {
-      relu.emitError("unimplemented: non-floating point dtype");
-      return nullptr;
-    }
-    Type elementType = payloadArgs[0].getType();
-    Value constZero =
-        b.create<arith::ConstantOp>(loc, b.getZeroAttr(elementType));
-    Value pred = b.create<arith::CmpFOp>(loc, arith::CmpFPredicate::UGT,
-                                         payloadArgs[0], constZero);
-    return b.create<SelectOp>(loc, pred, payloadArgs[0], constZero);
-  }
-  op->emitError("unimplemented lowering in "
-                "createLinalgPayloadCalculationForElementwiseOp");
-  return nullptr;
-}
 
 struct ConvertElementwiseOp : ConversionPattern {
   ConvertElementwiseOp(TypeConverter &typeConverter, MLIRContext *context)
@@ -808,6 +826,117 @@ public:
 } // namespace
 
 namespace {
+class ConvertAtenNativeBatchNormOutOp
+    : public OpConversionPattern<AtenNativeBatchNormOutOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(AtenNativeBatchNormOutOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    MLIRContext *context = op->getContext();
+    Location loc = op->getLoc();
+    Value input = adaptor.input();
+    Value weight = adaptor.weight();
+    Value bias = adaptor.bias();
+    Value runningMean = adaptor.running_mean();
+    Value runningVar = adaptor.running_var();
+    Value training = adaptor.training();
+    Value eps = adaptor.eps();
+
+    if (failed(verifyLinalgCompatibleTypes(op, rewriter)))
+      return failure();
+
+    // TODO: Handle the None cases for the optional parameters:
+    // weight, bias.
+    if (failed(checkNotNone(rewriter, op, weight)) ||
+        failed(checkNotNone(rewriter, op, bias)) ||
+        failed(checkNotNone(rewriter, op, runningMean)) ||
+        failed(checkNotNone(rewriter, op, runningVar)))
+      return failure();
+
+    auto inputType = input.getType().cast<RankedTensorType>();
+    auto weightType = weight.getType().cast<RankedTensorType>();
+    auto biasType = bias.getType().cast<RankedTensorType>();
+    auto runningMeanType = runningMean.getType().cast<RankedTensorType>();
+    auto runningVarType = runningVar.getType().cast<RankedTensorType>();
+
+    auto inputRank = inputType.getRank();
+    if (inputRank <= 2)
+      return rewriter.notifyMatchFailure(
+          op, "input should have rank larger than 2");
+
+    if (weightType.getRank() != 1 || biasType.getRank() != 1 ||
+        runningMeanType.getRank() != 1 || runningVarType.getRank() != 1) {
+      return rewriter.notifyMatchFailure(
+          op, "expect weight, bias, running_mean and running_var to be rank 1");
+    }
+
+    // TODO: Add support for training.
+    auto constFalse = rewriter.create<arith::ConstantOp>(
+        loc, IntegerAttr::get(IntegerType::get(context, 1), 0));
+    auto trainingFalse = rewriter.create<arith::CmpIOp>(
+        loc, arith::CmpIPredicate::eq, training, constFalse);
+    rewriter.create<AssertOp>(
+        loc, trainingFalse,
+        rewriter.getStringAttr("training is not supported for now"));
+
+    // num_features – C from an expected input of size (N,C,D,H,W ...)
+    Value numFeatures = rewriter.create<tensor::DimOp>(loc, input, 1);
+    auto contractingDim0EqualsNumFeatures = [&](Value v) {
+      auto dim0 = rewriter.create<tensor::DimOp>(loc, v, 0);
+      auto dim0Equal = rewriter.create<arith::CmpIOp>(
+          loc, arith::CmpIPredicate::eq, numFeatures, dim0);
+      rewriter.create<AssertOp>(
+          loc, dim0Equal,
+          rewriter.getStringAttr(
+              "expect the size of dim 0 equal to the number of features"));
+    };
+    contractingDim0EqualsNumFeatures(weight);
+    contractingDim0EqualsNumFeatures(bias);
+    contractingDim0EqualsNumFeatures(runningMean);
+    contractingDim0EqualsNumFeatures(runningVar);
+
+    auto indexingMap = AffineMap::get(
+        /*dimCount=*/inputRank,
+        /*symbolCount=*/0, rewriter.getAffineDimExpr(1), context);
+    SmallVector<AffineMap> indexingMaps = {
+        rewriter.getMultiDimIdentityMap(inputRank), // input
+        indexingMap,                                // weight
+        indexingMap,                                // bias
+        indexingMap,                                // runningMean
+        indexingMap,                                // runningVar
+        rewriter.getMultiDimIdentityMap(inputRank), // output
+    };
+    SmallVector<StringRef> iteratorTypes(inputRank, "parallel");
+    NamedAttribute variant(rewriter.getStringAttr("variant"),
+                           rewriter.getStringAttr("out"));
+    Value batchNorm =
+        rewriter
+            .create<linalg::GenericOp>(
+                loc, input.getType(),
+                ValueRange{input, weight, bias, runningMean, runningVar}, input,
+                /*indexingMaps=*/indexingMaps,
+                /*iteratorTypes=*/iteratorTypes,
+                [&](OpBuilder &b, Location loc, ValueRange args) {
+                  Value input = args[0], weight = args[1], bias = args[2],
+                        mean = args[3], var = args[4];
+                  Value result = createLinalgPayloadCalculationForNormOps(
+                      b, loc, var.getType(), input, mean, var, eps, weight,
+                      bias);
+                  b.create<linalg::YieldOp>(loc, result);
+                }, variant)
+            .getResult(0);
+    Type newResultType = getTypeConverter()->convertType(op.getType(0));
+    Value res = rewriter.create<tensor::CastOp>(loc, newResultType, batchNorm)
+                    .getResult();
+//    rewriter.replaceOpWithNewOp<tensor::CastOp>(op, newResultType, batchNorm);
+    rewriter.replaceOp(op, {res, op.running_mean(), op.running_var()});
+    return success();
+  }
+};
+} // namespace
+
+namespace {
 class HLSConvertTorchToLinalg
     : public HLSConvertTorchToLinalgBase<HLSConvertTorchToLinalg> {
 public:
@@ -837,6 +966,8 @@ public:
     patterns.add<ConvertAtenMaxPool2dWithIndicesOutOp>(typeConverter, context);
     target.addIllegalOp<AtenAdaptiveAvgPool2dOutOp>();
     patterns.add<ConvertAtenAdaptiveAvgPool2dOutOp>(typeConverter, context);
+    target.addIllegalOp<AtenNativeBatchNormOutOp>();
+    patterns.add<ConvertAtenNativeBatchNormOutOp>(typeConverter, context);
 
     if (failed(applyPartialConversion(getOperation(), target,
                                       std::move(patterns))))
