@@ -937,6 +937,84 @@ public:
 } // namespace
 
 namespace {
+class ConvertAtenLinearOutOp : public OpConversionPattern<AtenLinearOutOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(AtenLinearOutOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    MLIRContext *context = op->getContext();
+    Location loc = op->getLoc();
+    Value input = adaptor.input();
+    Value weight = adaptor.weight();
+    Value bias = adaptor.bias();
+    Value out = adaptor.out();
+    if (failed(verifyLinalgCompatibleTypes(op, rewriter)))
+      return failure();
+    auto inputType = input.getType().cast<RankedTensorType>();
+    auto weightType = weight.getType().cast<RankedTensorType>();
+    auto biasType = bias.getType().cast<RankedTensorType>();
+    auto outType = out.getType().cast<RankedTensorType>();
+
+    if (inputType.getRank() != 2 && inputType.getRank() != 3) {
+      return rewriter.notifyMatchFailure(
+          op, "expected  input to be rank 2 or rank 3");
+    }
+
+    if (inputType.getElementType() != weightType.getElementType() ||
+        inputType.getElementType() != biasType.getElementType()) {
+      return rewriter.notifyMatchFailure(op, "unimplemented: type promotion");
+    }
+
+    auto biasSize = bias.getType().cast<RankedTensorType>().getShape()[0];
+    if (biasSize == 1 || biasSize == ShapedType::kDynamicSize)
+      return rewriter.notifyMatchFailure(
+          op, "unimplemented: size-1 broadcasting for aten::LinearOp");
+
+    Value batchDim = nullptr;
+    int restDim = 0;
+    if (inputType.getRank() == 3) {
+      batchDim = getDimOp(rewriter, loc, input, 0);
+      restDim = 1;
+    }
+
+    Value inputDim0 = getDimOp(rewriter, loc, input, restDim + 0);
+    Value inputDim1 = getDimOp(rewriter, loc, input, restDim + 1);
+
+    Value weightDim0 = getDimOp(rewriter, loc, weight, 0);
+    Value weightDim1 = getDimOp(rewriter, loc, weight, 1);
+
+    Value biasDim0 = getDimOp(rewriter, loc, bias, 0);
+    Value contractingDimEqual = rewriter.create<arith::CmpIOp>(
+        loc, arith::CmpIPredicate::eq, inputDim1, weightDim0);
+    rewriter.create<AssertOp>(
+        loc, contractingDimEqual,
+        rewriter.getStringAttr(
+            "mismatching contracting dimension for aten.linear"));
+    Value biasSizeCorrect = rewriter.create<arith::CmpIOp>(
+        loc, arith::CmpIPredicate::eq, weightDim1, biasDim0);
+    rewriter.create<AssertOp>(
+        loc, biasSizeCorrect,
+        rewriter.getStringAttr("mismatching bias size for aten.linear"));
+
+    Value matmul;
+    NamedAttribute variant(rewriter.getStringAttr("variant"),
+                           rewriter.getStringAttr("out"));
+    matmul = rewriter
+                 .create<linalg::MatmulOp>(
+                     loc, out.getType(),
+                     ValueRange{input, weight}, out, variant)
+                 .getResult(0);
+
+    Type newResultType = getTypeConverter()->convertType(op.getType());
+    rewriter.replaceOpWithNewOp<tensor::CastOp>(op, newResultType, matmul);
+    return success();
+  }
+};
+} // namespace
+
+
+namespace {
 class HLSConvertTorchToLinalg
     : public HLSConvertTorchToLinalgBase<HLSConvertTorchToLinalg> {
 public:
@@ -968,6 +1046,8 @@ public:
     patterns.add<ConvertAtenAdaptiveAvgPool2dOutOp>(typeConverter, context);
     target.addIllegalOp<AtenNativeBatchNormOutOp>();
     patterns.add<ConvertAtenNativeBatchNormOutOp>(typeConverter, context);
+    target.addIllegalOp<AtenLinearOutOp>();
+    patterns.add<ConvertAtenLinearOutOp>(typeConverter, context);
 
     if (failed(applyPartialConversion(getOperation(), target,
                                       std::move(patterns))))

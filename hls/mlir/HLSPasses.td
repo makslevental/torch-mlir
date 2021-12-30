@@ -33,34 +33,11 @@ def HLSRefineTypes : Pass<"torch-hls-refine-types", "FuncOp"> {
   }];
 }
 
-def HLSConvertTorchToLinalg : Pass<"torch-hls-convert-torch-to-linalg", "FuncOp"> {
+def HLSConvertTorchToLinalg : Pass<"convert-torch-hls-to-linalg", "FuncOp"> {
   let constructor = "mlir::torch::HLS::createHLSConvertTorchToLinalgPass()";
   let description = [{
     handle new ops
   }];
 }
-
-//def HLSConvertOperators : Pass<"torch-hls-convert-operators", "FuncOp"> {
-//  let constructor = "mlir::torch::HLS::createHLSConvertOperatorsPass()";
-//}
-
-// def HLSAdjustCallingConventions
-//   : Pass<"torch-hls-adjust-calling-conventions", "ModuleOp"> {
-//   let summary = "Adjust the calling conventions of functions";
-//   let constructor = "mlir::torch::HLS::createHLSAdjustCallingConventionsPass()";
-//   let description = [{
-//     use type bounds even if they're nonvalue
-//   }];
-// }
-
-// def HLSReduceOpVariants : Pass<"torch-hls-reduce-op-variants", "FuncOp"> {
-//   let summary = "Reduces variants of ops to a smaller set of ops.";
-//   let constructor = "mlir::torch::HLS::createHLSReduceOpVariantsPass()";
-//   let description = [{
-//       all the same stuff except removing inplace and out
-//   }];
-// }
-
-
 
 #endif
