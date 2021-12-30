@@ -69,7 +69,7 @@ function opt_llvm_for_vitis() {
     -strip-attr \
     -xlnunroll \
     -xlnarraypartition \
-    >"${dst_file}"
+    > "${dst_file}"
 
   echo "${dst_file}"
 }
@@ -183,4 +183,4 @@ function eval_file() {
 # export TOP_FUNC=matmul
 export TOP_FUNC=forward
 #eval_file matmul.llvm.mlir
-eval_file batchnorm2d.llvm.mlir
+eval_file linear.llvm.mlir

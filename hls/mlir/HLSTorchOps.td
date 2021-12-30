@@ -119,24 +119,44 @@ def HLSTorch_AtenNativeBatchNormOutOp : Torch_Op<"aten.native_batch_norm.out", [
 ]> {
 let summary = "Generated op for `aten::native_batch_norm.out : (Tensor, Tensor?, Tensor?, Tensor?, Tensor?, bool, float, float, Tensor, Tensor, Tensor) -> (Tensor, Tensor, Tensor)`";
 let arguments = (ins
-AnyTorchTensorType:$input,
-AnyTorchOptionalTensorType:$weight,
-AnyTorchOptionalTensorType:$bias,
-AnyTorchOptionalTensorType:$running_mean,
-AnyTorchOptionalTensorType:$running_var,
-Torch_BoolType:$training,
-Torch_FloatType:$momentum,
-Torch_FloatType:$eps,
-AnyTorchOptionalTensorType:$out,
-AnyTorchOptionalTensorType:$save_mean,
-AnyTorchOptionalTensorType:$save_invstd
-);
-let results = (outs
-AnyTorchTensorType:$result_out,
-AnyTorchTensorType:$result_save_mean,
-AnyTorchTensorType:$result_save_invstd
-);
-let assemblyFormat = "$input `,` $weight `,` $bias `,` $running_mean `,` $running_var `,` $training `,` $momentum `,` $eps `,` $out `,` $save_mean `,` $save_invstd attr-dict `:` type($input) `,` type($weight) `,` type($bias) `,` type($running_mean) `,` type($running_var) `,` type($training) `,` type($momentum) `,` type($eps) `,` type($out) `,` type($save_mean) `,` type($save_invstd) `->` type($result_out) `,` type($result_save_mean) `,` type($result_save_invstd)";
+    AnyTorchTensorType:$input,
+    AnyTorchOptionalTensorType:$weight,
+    AnyTorchOptionalTensorType:$bias,
+    AnyTorchOptionalTensorType:$running_mean,
+    AnyTorchOptionalTensorType:$running_var,
+    Torch_BoolType:$training,
+    Torch_FloatType:$momentum,
+    Torch_FloatType:$eps,
+    AnyTorchOptionalTensorType:$out,
+    AnyTorchOptionalTensorType:$save_mean,
+    AnyTorchOptionalTensorType:$save_invstd
+  );
+  let results = (outs
+    AnyTorchTensorType:$result_out,
+    AnyTorchTensorType:$result_save_mean,
+    AnyTorchTensorType:$result_save_invstd
+  );
+  let assemblyFormat = "$input `,` $weight `,` $bias `,` $running_mean `,` $running_var `,` $training `,` $momentum `,` $eps `,` $out `,` $save_mean `,` $save_invstd attr-dict `:` type($input) `,` type($weight) `,` type($bias) `,` type($running_mean) `,` type($running_var) `,` type($training) `,` type($momentum) `,` type($eps) `,` type($out) `,` type($save_mean) `,` type($save_invstd) `->` type($result_out) `,` type($result_save_mean) `,` type($result_save_invstd)";
 }
+
+def HLSTorch_AtenLinearOutOp : Torch_Op<"aten.linear.out", [
+  AllowsTypeRefinement,
+  HasValueSemantics
+]> {
+  let summary = "Generated op for `aten::linear.out : (Tensor, Tensor, Tensor?, Tensor) -> (Tensor)`";
+  let arguments = (ins
+    AnyTorchTensorType:$input,
+    AnyTorchTensorType:$weight,
+    AnyTorchOptionalTensorType:$bias,
+    AnyTorchTensorType:$out
+  );
+  let results = (outs
+    AnyTorchTensorType:$result
+  );
+  let assemblyFormat = "$input `,` $weight `,` $bias `,` $out attr-dict `:` type($input) `,` type($weight) `,` type($bias) `,` type($out) `->` type($result)";
+}
+
+
+
 
 #endif // HLSTORCH_OPS
