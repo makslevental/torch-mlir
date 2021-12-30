@@ -4,6 +4,7 @@
 import torch
 from torch_mlir.dialects.torch.importer.jit_ir import ClassAnnotator, ModuleBuilder
 from torch_mlir.passmanager import PassManager
+import torchvision.models as models
 
 # i have no idea why but if you don't import this then linalg passes aren't registered
 # noinspection PyUnresolvedReferences
@@ -18,7 +19,7 @@ from layers import (
     AdaptiveAvgPool2dModule,
     AdaptiveAvgPool2dOutModule,
     Conv2dNoPaddingModule,
-    ReLUModule, BatchNorm2d, BatchNorm2dOut,
+    ReLUModule, BatchNorm2d, BatchNorm2dOut, Linear, LinearOut,
 )
 
 mb = ModuleBuilder()
@@ -162,6 +163,26 @@ def make_bn_out():
         ],
     )
 
+def make_linear():
+    test_module = Linear()
+    return make_layer(
+        test_module,
+        [
+            None,
+            ([8, 512], torch.float32, True),  # input
+        ],
+    )
+
+def make_linear_out():
+    test_module = LinearOut()
+    return make_layer(
+        test_module,
+        [
+            None,
+            ([8, 512], torch.float32, True),  # input
+            ([8, 1000], torch.float32, True),  # output
+        ],
+    )
 
 PIPELINE = [
     "symbol-dce",
@@ -183,7 +204,7 @@ PIPELINE = [
     "builtin.func(torch-decompose-complex-ops)",
     "builtin.func(torch-hls-decompose-complex-ops)",
     "torch-verify-invariants-before-backend-lowering",
-    "builtin.func(torch-hls-convert-torch-to-linalg)",
+    "builtin.func(convert-torch-hls-to-linalg)",
     "builtin.func(convert-torch-to-linalg)",
     "builtin.func(convert-torch-to-std)",
     "builtin.func(convert-torch-to-scf)",
@@ -213,11 +234,11 @@ PIPELINE = [
 ]
 
 if __name__ == "__main__":
-    mb.import_module(*make_bn_out())
+    mb.import_module(*make_linear_out())
     with mb.module.context:
         mb.set_multithreading(False)
         pm = PassManager.parse(",".join(PIPELINE))
         pm.enable_ir_printing()
         pm.run(mb.module)
 
-    open(f"batchnorm2d.llvm.mlir", "w").write(str(mb.module))
+    open(f"linear.llvm.mlir", "w").write(str(mb.module))
