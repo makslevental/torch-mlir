@@ -122,34 +122,6 @@ class BatchNorm2d(torch.nn.Module):
         return y
 
 
-# JitOperator 'aten::native_batch_norm.out : (Tensor, Tensor?, Tensor?, Tensor?, Tensor?, bool, float, float, Tensor, Tensor, Tensor) -> (Tensor, Tensor, Tensor)':
-# MLIR op name = torch.aten.native_batch_norm.out
-# MLIR td def name = Torch_AtenNativeBatchNormOutOp
-# namespace = aten
-# unqualified_name = native_batch_norm
-# overload_name = out
-# is_c10_op = True
-# is_vararg = False
-# is_varret = False
-# is_mutable = True
-# arguments:
-# arg: {'name': 'input', 'type': 'Tensor', 'pytype': 'Tensor'}
-# arg: {'name': 'weight', 'type': 'Tensor?', 'pytype': 'Optional[Tensor]'}
-# arg: {'name': 'bias', 'type': 'Tensor?', 'pytype': 'Optional[Tensor]'}
-# arg: {'name': 'running_mean', 'type': 'Tensor?', 'pytype': 'Optional[Tensor]'}
-# arg: {'name': 'running_var', 'type': 'Tensor?', 'pytype': 'Optional[Tensor]'}
-# arg: {'name': 'training', 'type': 'bool', 'pytype': 'bool'}
-# arg: {'name': 'momentum', 'type': 'float', 'pytype': 'float'}
-# arg: {'name': 'eps', 'type': 'float', 'pytype': 'float'}
-# arg: {'name': 'out', 'type': 'Tensor', 'pytype': 'Tensor', 'alias_info': {'is_write': True, 'before': ['alias::a'], 'after': ['alias::a']}}
-# arg: {'name': 'save_mean', 'type': 'Tensor', 'pytype': 'Tensor', 'alias_info': {'is_write': True, 'before': ['alias::b'], 'after': ['alias::b']}}
-# arg: {'name': 'save_invstd', 'type': 'Tensor', 'pytype': 'Tensor', 'alias_info': {'is_write': True, 'before': ['alias::c'], 'after': ['alias::c']}}
-# returns:
-# ret: {'name': '', 'type': 'Tensor', 'pytype': 'Tensor', 'alias_info': {'is_write': True, 'before': ['alias::a'], 'after': ['alias::a']}}
-# ret: {'name': '', 'type': 'Tensor', 'pytype': 'Tensor', 'alias_info': {'is_write': True, 'before': ['alias::b'], 'after': ['alias::b']}}
-# ret: {'name': '', 'type': 'Tensor', 'pytype': 'Tensor', 'alias_info': {'is_write': True, 'before': ['alias::c'], 'after': ['alias::c']}}
-
-
 class BatchNorm2dOut(torch.nn.Module):
     def __init__(self):
         super().__init__()
@@ -169,3 +141,27 @@ class BatchNorm2dOut(torch.nn.Module):
             out=out, save_mean=save_mean, save_invstd=save_invstd
         )
         return out
+
+
+class Linear(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.fc = torch.nn.Linear(512, 1000)
+        self.train(False)
+
+    def forward(self, x):
+        y = self.fc(x)
+        return y
+
+
+class LinearOut(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        fc = torch.nn.Linear(512, 1000)
+        self.weight_T = torch.empty(fc.weight.T.shape)
+        self.bias = fc.bias
+        self.train(False)
+
+    def forward(self, inp, out):
+        y = torch._C._nn.linear(inp, self.weight_T, self.bias, out=out)
+        return y

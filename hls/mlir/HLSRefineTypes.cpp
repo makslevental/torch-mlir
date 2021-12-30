@@ -283,6 +283,8 @@ public:
       return visitAtenMmOutOp(mmout, operands);
     } else if (auto addmm = llvm::dyn_cast<AtenAddmmOp>(op)) {
       return visitAtenAddmmOp(addmm, operands);
+    } else if (auto linearout = llvm::dyn_cast<AtenLinearOutOp>(op)) {
+      return visitAtenLinearOutOp(linearout, operands);
     } else if (auto linear = llvm::dyn_cast<AtenLinearOp>(op)) {
       return visitAtenLinearOp(linear, operands);
     } else if (auto conv2d = llvm::dyn_cast<AtenConv2dOp>(op)) {
@@ -489,6 +491,9 @@ private:
                    ArrayRef<LatticeElement<ValueKnowledge> *> operands);
   ChangeResult
   visitAtenLinearOp(AtenLinearOp op,
+                    ArrayRef<LatticeElement<ValueKnowledge> *> operands);
+  ChangeResult
+  visitAtenLinearOutOp(AtenLinearOutOp op,
                     ArrayRef<LatticeElement<ValueKnowledge> *> operands);
   ChangeResult
   visitAtenConv2dOp(AtenConv2dOp op,
@@ -823,6 +828,32 @@ ChangeResult TypeAnalyzer::visitAtenLinearOp(
   auto knowledge = operands[0]->getValue();
   auto weight = operands[1]->getValue();
   auto bias = operands[2]->getValue();
+  if (knowledge.hasSizes && knowledge.sizes.size() > 0)
+    knowledge.sizes[knowledge.sizes.size() - 1] = kUnknownSize;
+  switch (bias.optional) {
+  case ValueKnowledge::OptionalKnowledge::isNone:
+    knowledge.dtype = getPromotedResultTypeAssumingNonZeroRank(
+        op->getContext(), {&knowledge, &weight});
+    break;
+  case ValueKnowledge::OptionalKnowledge::notNone:
+    knowledge.dtype = getPromotedResultTypeAssumingNonZeroRank(
+        op->getContext(), {&knowledge, &weight, &bias});
+    break;
+  case ValueKnowledge::OptionalKnowledge::unKnown:
+    // When it's unknown, type promotion can't be decided at compile time.
+    break;
+  }
+  return getLatticeElement(op->getResult(0)).join(knowledge);
+}
+
+ChangeResult TypeAnalyzer::visitAtenLinearOutOp(
+    AtenLinearOutOp op, ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
+  // The output shape is the input shape with the last dimension changed
+  // to the weight's output dimension.
+  auto knowledge = operands[0]->getValue();
+  auto weight = operands[1]->getValue();
+  auto bias = operands[2]->getValue();
+  auto out = operands[3]->getValue();
   if (knowledge.hasSizes && knowledge.sizes.size() > 0)
     knowledge.sizes[knowledge.sizes.size() - 1] = kUnknownSize;
   switch (bias.optional) {
