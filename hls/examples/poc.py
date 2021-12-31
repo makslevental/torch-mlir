@@ -1,188 +1,31 @@
 # import ctypes
 # sh_obj = ctypes.cdll.LoadLibrary('/home/mlevental/dev_projects/torch-mlir/build/lib/libruntimePatchLinalg.so')
-
 import torch
 from torch_mlir.dialects.torch.importer.jit_ir import ClassAnnotator, ModuleBuilder
 from torch_mlir.passmanager import PassManager
-import torchvision.models as models
 
 # i have no idea why but if you don't import this then linalg passes aren't registered
 # noinspection PyUnresolvedReferences
 from torch_mlir_e2e_test.linalg_on_tensors_backends.refbackend import RefBackendInvoker
-
-from layers import (
-    Matmul,
-    MatmulDotOut,
-    Conv2dNoPaddingOutModule,
-    MaxPool2dModule,
-    MaxPool2dOutModule,
-    AdaptiveAvgPool2dModule,
-    AdaptiveAvgPool2dOutModule,
-    Conv2dNoPaddingModule,
-    ReLUModule, BatchNorm2d, BatchNorm2dOut, Linear, LinearOut,
+from torch_mlir.dialects.torch.importer.jit_ir.torchscript_annotations import (
+    extract_annotations,
 )
 
-mb = ModuleBuilder()
+from resnet import make_test_basic_block
+from layers import make_layer, TestMod
 
 
-# self.bn1 = norm_layer(self.inplanes)
-# self.fc = nn.Linear(512 * block.expansion, num_classes)
-
-
-def make_layer(test_module, annotations):
-    class_annotator = ClassAnnotator()
-    recursivescriptmodule = torch.jit.script(test_module)
-    class_annotator.exportNone(recursivescriptmodule._c._type())
-    class_annotator.exportPath(recursivescriptmodule._c._type(), ["forward"])
-    class_annotator.annotateArgs(
-        recursivescriptmodule._c._type(), ["forward"], annotations
-    )
-    return recursivescriptmodule._c, class_annotator
-
-
-def make_mat_mul():
+def make_mod():
+    mod = TestMod()
     return make_layer(
-        Matmul(),
+        mod,
         [
             None,
-            ([4, 5], torch.float32, True),
-            ([5, 10], torch.float32, True),
+            ([5, 2, 20, 20], torch.float32, True),
+            ([5, 10, 18, 18], torch.float32, True),
         ],
     )
 
-
-def make_mat_mul_out():
-    return make_layer(
-        MatmulDotOut(),
-        [
-            None,
-            ([4, 5], torch.float32, True),
-            ([5, 10], torch.float32, True),
-            ([4, 10], torch.float32, True),
-        ],
-    )
-
-
-def make_conv2d():
-    return make_layer(
-        Conv2dNoPaddingModule(),
-        [
-            None,
-            ([5, 2, 10, 20], torch.float32, True),
-        ],
-    )
-
-
-def make_conv2d_out():
-    return make_layer(
-        Conv2dNoPaddingOutModule(),
-        [
-            None,
-            ([5, 2, 10, 20], torch.float32, True),
-            ([5, 10, 8, 18], torch.float32, True),
-        ],
-    )
-
-
-def make_relu():
-    return make_layer(
-        ReLUModule()[
-            None,
-            ([10, 10], torch.float32, True),
-        ],
-    )
-
-
-def make_adaptive_avg_pool2d():
-    test_module = AdaptiveAvgPool2dModule()
-    return make_layer(
-        test_module,
-        [
-            None,
-            ([1, 1, 20, 20], torch.float32, True),
-        ],
-    )
-
-
-def make_adaptive_avg_pool2d_out():
-    test_module = AdaptiveAvgPool2dOutModule()
-    return make_layer(
-        test_module,
-        [
-            None,
-            ([7, 2, 20, 20], torch.float32, True),
-            ([7, 2, 1, 1], torch.float32, True),
-        ],
-    )
-
-
-def make_max_pool2d():
-    test_module = MaxPool2dModule()
-    return make_layer(
-        test_module,
-        [
-            None,
-            ([1, 1, 10, 10], torch.float32, True),
-        ],
-    )
-
-
-def make_max_pool2d_out():
-    test_module = MaxPool2dOutModule()
-    return make_layer(
-        test_module,
-        [
-            None,
-            ([1, 1, 12, 12], torch.float32, True),
-            ([1, 1, 10, 10], torch.float32, True),
-            ([1, 1, 10, 10], torch.float32, True),
-        ],
-    )
-
-
-def make_bn():
-    test_module = BatchNorm2d()
-    return make_layer(
-        test_module,
-        [
-            None,
-            ([1, 4, 10, 10], torch.float32, True),  # input
-        ],
-    )
-
-def make_bn_out():
-    test_module = BatchNorm2dOut()
-    return make_layer(
-        test_module,
-        [
-            None,
-            ([1, 4, 10, 10], torch.float32, True),  # input
-            ([1, 4, 10, 10], torch.float32, True),  # output
-            ([1, 4], torch.float32, True),  # save_mean
-            ([1, 4], torch.float32, True),  # save_invstd
-        ],
-    )
-
-def make_linear():
-    test_module = Linear()
-    return make_layer(
-        test_module,
-        [
-            None,
-            ([8, 512], torch.float32, True),  # input
-        ],
-    )
-
-def make_linear_out():
-    test_module = LinearOut()
-    return make_layer(
-        test_module,
-        [
-            None,
-            ([8, 512], torch.float32, True),  # input
-            ([8, 1000], torch.float32, True),  # output
-        ],
-    )
 
 PIPELINE = [
     "symbol-dce",
@@ -205,6 +48,7 @@ PIPELINE = [
     "builtin.func(torch-hls-decompose-complex-ops)",
     "torch-verify-invariants-before-backend-lowering",
     "builtin.func(convert-torch-hls-to-linalg)",
+    "builtin.module(symbol-dce)",
     "builtin.func(convert-torch-to-linalg)",
     "builtin.func(convert-torch-to-std)",
     "builtin.func(convert-torch-to-scf)",
@@ -234,11 +78,156 @@ PIPELINE = [
 ]
 
 if __name__ == "__main__":
-    mb.import_module(*make_linear_out())
+    mb = ModuleBuilder()
+    mb.import_module(*make_test_basic_block())
     with mb.module.context:
         mb.set_multithreading(False)
         pm = PassManager.parse(",".join(PIPELINE))
         pm.enable_ir_printing()
         pm.run(mb.module)
 
-    open(f"linear.llvm.mlir", "w").write(str(mb.module))
+    open(f"basic_block.llvm.mlir", "w").write(str(mb.module))
+
+# def make_mat_mul():
+#     return make_layer(
+#         Matmul(),
+#         [
+#             None,
+#             ([4, 5], torch.float32, True),
+#             ([5, 10], torch.float32, True),
+#         ],
+#     )
+#
+#
+# def make_mat_mul_out():
+#     return make_layer(
+#         MatmulDotOut(),
+#         [
+#             None,
+#             ([4, 5], torch.float32, True),
+#             ([5, 10], torch.float32, True),
+#             ([4, 10], torch.float32, True),
+#         ],
+#     )
+#
+#
+# def make_conv2d():
+#     return make_layer(
+#         Conv2dNoPaddingModule(),
+#         [
+#             None,
+#             ([5, 2, 10, 20], torch.float32, True),
+#         ],
+#     )
+#
+#
+# def make_conv2d_out():
+#     return make_layer(
+#         Conv2dNoPaddingOutModule(),
+#         [
+#             None,
+#             ([5, 2, 10, 20], torch.float32, True),
+#             ([5, 10, 8, 18], torch.float32, True),
+#         ],
+#     )
+#
+#
+# def make_relu():
+#     return make_layer(
+#         ReLUModule()[
+#             None,
+#             ([10, 10], torch.float32, True),
+#         ],
+#     )
+#
+#
+# def make_adaptive_avg_pool2d():
+#     test_module = AdaptiveAvgPool2dModule()
+#     return make_layer(
+#         test_module,
+#         [
+#             None,
+#             ([1, 1, 20, 20], torch.float32, True),
+#         ],
+#     )
+#
+#
+# def make_adaptive_avg_pool2d_out():
+#     test_module = AdaptiveAvgPool2dOutModule()
+#     return make_layer(
+#         test_module,
+#         [
+#             None,
+#             ([7, 2, 20, 20], torch.float32, True),
+#             ([7, 2, 1, 1], torch.float32, True),
+#         ],
+#     )
+#
+#
+# def make_max_pool2d():
+#     test_module = MaxPool2dModule()
+#     return make_layer(
+#         test_module,
+#         [
+#             None,
+#             ([1, 1, 10, 10], torch.float32, True),
+#         ],
+#     )
+#
+#
+# def make_max_pool2d_out():
+#     test_module = MaxPool2dOutModule()
+#     return make_layer(
+#         test_module,
+#         [
+#             None,
+#             ([1, 1, 12, 12], torch.float32, True),
+#             ([1, 1, 10, 10], torch.float32, True),
+#             ([1, 1, 10, 10], torch.float32, True),
+#         ],
+#     )
+#
+#
+# def make_bn():
+#     test_module = BatchNorm2d()
+#     return make_layer(
+#         test_module,
+#         [
+#             None,
+#             ([1, 4, 10, 10], torch.float32, True),  # input
+#         ],
+#     )
+#
+# def make_bn_out():
+#     test_module = BatchNorm2dOut()
+#     return make_layer(
+#         test_module,
+#         [
+#             None,
+#             ([1, 4, 10, 10], torch.float32, True),  # input
+#             ([1, 4, 10, 10], torch.float32, True),  # output
+#             ([1, 4], torch.float32, True),  # save_mean
+#             ([1, 4], torch.float32, True),  # save_invstd
+#         ],
+#     )
+#
+# def make_linear():
+#     test_module = Linear()
+#     return make_layer(
+#         test_module,
+#         [
+#             None,
+#             ([8, 512], torch.float32, True),  # input
+#         ],
+#     )
+#
+# def make_linear_out_():
+#     test_module = make_linear_out(8, 512, 1000)
+#     return make_layer(
+#         test_module,
+#         [
+#             None,
+#             ([8, 512], torch.float32, True),  # input
+#             ([8, 1000], torch.float32, True),  # output
+#         ],
+#     )
