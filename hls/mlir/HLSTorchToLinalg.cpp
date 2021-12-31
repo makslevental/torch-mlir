@@ -158,6 +158,60 @@ static bool isConstantIntListMatching(Value value,
   return true;
 }
 
+static Value convertScalarToDtype(OpBuilder &b, Location loc, Value scalar,
+                                  Type dtype) {
+  Type scalarType = scalar.getType();
+  if (scalarType == dtype)
+    return scalar;
+
+  // TODO: For the byte(ui8) or char(i8) case, we need the unconverted dtype to
+  // be able to know if we need signed or unsigned conversion.
+  auto isByteOrChar = [](Type type) {
+    if (auto integerTy = type.dyn_cast<mlir::IntegerType>()) {
+      return integerTy.getWidth() == 8;
+    }
+    return false;
+  };
+
+  if (isByteOrChar(scalarType) || isByteOrChar(dtype) ||
+      scalarType.isSignlessInteger(1) || dtype.isSignlessInteger(1)) {
+    // TODO: Handle bool type.
+    mlir::emitError(loc)
+        << "unsupported byte, char or bool type for convertScalarToDtype "
+        << scalarType << "(scalar type) -> " << dtype << "(dtype)";
+    return nullptr;
+  }
+
+  if (auto dtypeFloat = dtype.dyn_cast<mlir::FloatType>()) {
+    if (auto scalarFloat = scalarType.dyn_cast<mlir::FloatType>()) {
+      if (scalarFloat.getWidth() > dtypeFloat.getWidth())
+        return b.create<arith::TruncFOp>(loc, scalar, dtype);
+      // Only scalarFloat width < dtypeFloat width can reach here.
+      return b.create<arith::ExtFOp>(loc, scalar, dtype);
+    }
+    assert(scalarType.isa<mlir::IntegerType>());
+    // It's safe to use SIToFPOp because ui8/si8 are the only ones where
+    // unsigned handling is needed, and we checked for that case above.
+    return b.create<arith::SIToFPOp>(loc, scalar, dtype);
+  }
+
+  if (auto dtypeInteger = dtype.dyn_cast<mlir::IntegerType>()) {
+    if (auto scalarFloat = scalarType.dyn_cast<mlir::FloatType>())
+      return b.create<arith::FPToSIOp>(loc, scalar, dtype);
+    assert(scalarType.isa<mlir::IntegerType>());
+    auto scalarInteger = scalarType.cast<mlir::IntegerType>();
+    if (scalarInteger.getWidth() > dtypeInteger.getWidth())
+      return b.create<arith::TruncIOp>(loc, scalar, dtype);
+    // Only scalarInteger width < dtypeInteger width can reach here.
+    // It's safe to use ExtSIOp here because ui8/si8 are the only ones where
+    // unsigned handling is needed, and we checked for that case above.
+    return b.create<arith::ExtSIOp>(loc, scalar, dtype);
+  }
+
+  llvm_unreachable("convertScalarToDtype should handle all the types");
+}
+
+
 // Normalization formula:
 //   ((input - mean) / sqrt(var + eps)) * weight + bias
 static Value createLinalgPayloadCalculationForNormOps(
@@ -222,6 +276,23 @@ Value createLinalgPayloadCalculationForElementwiseOp(OpBuilder &b, Location loc,
                                          payloadArgs[0], constZero);
     return b.create<SelectOp>(loc, pred, payloadArgs[0], constZero);
   }
+  if (auto add = dyn_cast<AtenAddOutTensorOp>(op)) {
+    AtenAddOutTensorOp::Adaptor adaptor(operands);
+    Type dtype = converter->convertType(add.getType())
+                     .cast<RankedTensorType>()
+                     .getElementType();
+    Value lhs = convertScalarToDtype(b, loc, payloadArgs[0], dtype);
+    Value rhs = convertScalarToDtype(b, loc, payloadArgs[1], dtype);
+    Value alpha = convertScalarToDtype(b, loc, adaptor.alpha(), dtype);
+    if (dtype.isa<mlir::FloatType>()) {
+      Value scaled = b.create<arith::MulFOp>(loc, rhs, alpha);
+      return b.create<arith::AddFOp>(loc, lhs, scaled);
+    } else {
+      Value scaled = b.create<arith::MulIOp>(loc, rhs, alpha);
+      return b.create<arith::AddIOp>(loc, lhs, scaled);
+    }
+  }
+
   op->emitError("unimplemented lowering in "
                 "createLinalgPayloadCalculationForElementwiseOp");
   return nullptr;
@@ -476,39 +547,45 @@ public:
         rewriter, loc, Win, paddingIntValues[1], dilationIntValues[1],
         castIndexToInt(weightW), strideIntValues[1]);
 
-    Value initTensor = rewriter.create<linalg::InitTensorOp>(
-        loc, ValueRange{N, F, Hout, Wout}, elementType);
-
-    Value bias = adaptor.bias();
-    Value biasInitTensor;
-    if (bias.getType().isa<Torch::NoneType>()) {
-      Value c0float = rewriter.create<arith::ConstantOp>(
-          loc, FloatAttr::get(elementType, 0.0));
-      biasInitTensor = rewriter.create<linalg::FillOp>(loc, c0float, initTensor)
-                           .getResult(0);
-    } else {
-      auto biasType = bias.getType().cast<RankedTensorType>();
-      if (biasType.getRank() != 1)
-        return rewriter.notifyMatchFailure(op, "expect bias to be rank 1");
-      if (elementType != biasType.getElementType())
-        return rewriter.notifyMatchFailure(op, "unimplemented: type promotion");
-
-      auto resultRank = initTensor.getType().cast<RankedTensorType>().getRank();
-      SmallVector<AffineMap> indexingMaps = {
-          // bias is used to initialize the channels - dimension 1 of output
-          AffineMap::get(/*dimCount=*/resultRank, /*symbolCount=*/0,
-                         rewriter.getAffineDimExpr(1), context),
-          rewriter.getMultiDimIdentityMap(resultRank)};
-      SmallVector<StringRef> iteratorTypes(resultRank, "parallel");
-      biasInitTensor = rewriter
-                           .create<linalg::GenericOp>(
-                               loc, initTensor.getType(), bias, initTensor,
-                               indexingMaps, iteratorTypes,
-                               [](OpBuilder &b, Location loc, ValueRange args) {
-                                 b.create<linalg::YieldOp>(loc, args[0]);
-                               })
-                           .getResult(0);
-    }
+    //    Value initTensor = rewriter.create<linalg::InitTensorOp>(
+    //        loc, ValueRange{N, F, Hout, Wout}, elementType);
+    //
+    //    Value bias = adaptor.bias();
+    //    Value biasInitTensor;
+    //    if (bias.getType().isa<Torch::NoneType>()) {
+    //      Value c0float = rewriter.create<arith::ConstantOp>(
+    //          loc, FloatAttr::get(elementType, 0.0));
+    //      biasInitTensor = rewriter.create<linalg::FillOp>(loc, c0float,
+    //      initTensor)
+    //                           .getResult(0);
+    //    } else {
+    //      auto biasType = bias.getType().cast<RankedTensorType>();
+    //      if (biasType.getRank() != 1)
+    //        return rewriter.notifyMatchFailure(op, "expect bias to be rank
+    //        1");
+    //      if (elementType != biasType.getElementType())
+    //        return rewriter.notifyMatchFailure(op, "unimplemented: type
+    //        promotion");
+    //
+    //      auto resultRank =
+    //      initTensor.getType().cast<RankedTensorType>().getRank();
+    //      SmallVector<AffineMap> indexingMaps = {
+    //          // bias is used to initialize the channels - dimension 1 of
+    //          output AffineMap::get(/*dimCount=*/resultRank,
+    //          /*symbolCount=*/0,
+    //                         rewriter.getAffineDimExpr(1), context),
+    //          rewriter.getMultiDimIdentityMap(resultRank)};
+    //      SmallVector<StringRef> iteratorTypes(resultRank, "parallel");
+    //      biasInitTensor = rewriter
+    //                           .create<linalg::GenericOp>(
+    //                               loc, initTensor.getType(), bias,
+    //                               initTensor, indexingMaps, iteratorTypes,
+    //                               [](OpBuilder &b, Location loc, ValueRange
+    //                               args) {
+    //                                 b.create<linalg::YieldOp>(loc, args[0]);
+    //                               })
+    //                           .getResult(0);
+    //    }
 
     auto stridesAttr = rewriter.getI64VectorAttr(strideInts);
     auto dilationAttr = rewriter.getI64VectorAttr(dilationInts);
@@ -538,7 +615,7 @@ struct ConvertElementwiseOp : ConversionPattern {
   LogicalResult
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
-    if (!isa<AtenReluOp>(op))
+    if (!isa<AtenReluOp, AtenAddOutTensorOp>(op))
       return rewriter.notifyMatchFailure(op, "not a supported elementwise op");
 
     if (failed(verifyLinalgCompatibleTypes(op, rewriter)))
@@ -584,15 +661,26 @@ struct ConvertElementwiseOp : ConversionPattern {
     SmallVector<StringRef> iteratorTypes(resultRank, "parallel");
     indexingMaps.push_back(rewriter.getMultiDimIdentityMap(resultRank));
 
+    std::string variant_;
+    Value resultTensor;
+    if (isa<AtenReluOp>(op)) {
+      variant_ = "inplace";
+      resultTensor = rewriter.create<linalg::InitTensorOp>(
+                  loc, resultShape, resultType.getElementType());
+    } else if (isa<AtenAddOutTensorOp>(op)) {
+      variant_ = "out";
+      AtenAddOutTensorOpAdaptor adaptor(operands, op->getAttrDictionary());
+      resultTensor = adaptor.out();
+    } else {
+      return rewriter.notifyMatchFailure(op, "not a supported elementwise op");
+    }
     NamedAttribute variant(rewriter.getStringAttr("variant"),
-                           rewriter.getStringAttr("inplace"));
-    Value initTensor = rewriter.create<linalg::InitTensorOp>(
-        loc, resultShape, resultType.getElementType());
+                           rewriter.getStringAttr(variant_));
     bool hadErrorCreatingPayload = false;
     auto generic = rewriter.create<linalg::GenericOp>(
-        loc, /*resultTensorTypes=*/initTensor.getType(),
+        loc, /*resultTensorTypes=*/resultTensor.getType(),
         /*inputs=*/tensorOperands,
-        /*outputs=*/initTensor,
+        /*outputs=*/resultTensor,
         /*indexingMaps=*/indexingMaps,
         /*iteratorTypes=*/iteratorTypes,
         [&](OpBuilder &b, Location loc, ValueRange payloadArgs) {
@@ -1038,7 +1126,7 @@ public:
     patterns.add<ConvertAtenMatmulOutOp>(typeConverter, context);
     target.addIllegalOp<AtenTHNNConv2dOutOp>();
     patterns.add<ConvertAtenTHNNConv2dOutOp>(typeConverter, context);
-    target.addIllegalOp<AtenReluOp>();
+    target.addIllegalOp<AtenReluOp, AtenAddOutTensorOp>();
     patterns.add<ConvertElementwiseOp>(typeConverter, context);
     target.addIllegalOp<AtenMaxPool2dWithIndicesOutOp>();
     patterns.add<ConvertAtenMaxPool2dWithIndicesOutOp>(typeConverter, context);
