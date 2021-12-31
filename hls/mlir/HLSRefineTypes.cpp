@@ -307,7 +307,7 @@ public:
                    AtenPowTensorScalarOp, AtenRsubScalarOp, AtenLeakyReluOp>(
                    op)) {
       return visitBinaryTensorScalarOp(op, operands);
-    } else if (isa<AtenAddTensorOp, AtenSubTensorOp, AtenMulTensorOp,
+    } else if (isa<AtenAddTensorOp, AtenAddOutTensorOp, AtenSubTensorOp, AtenMulTensorOp,
                    AtenDivTensorOp, Aten__And__TensorOp, AtenMinimumOp,
                    AtenMaximumOp, AtenBitwiseAndTensorOp>(op)) {
       return visitBinaryBroadcastingOp(op, operands);

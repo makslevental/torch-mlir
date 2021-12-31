@@ -156,6 +156,22 @@ def HLSTorch_AtenLinearOutOp : Torch_Op<"aten.linear.out", [
   let assemblyFormat = "$input `,` $weight `,` $bias `,` $out attr-dict `:` type($input) `,` type($weight) `,` type($bias) `,` type($out) `->` type($result)";
 }
 
+def HLSTorch_AtenAddOutTensorOp : Torch_Op<"aten.add.out", [
+    AllowsTypeRefinement,
+    HasValueSemantics
+  ]> {
+  let summary = "Generated op for `aten::add.out : (Tensor, Tensor, Scalar, Tensor) -> (Tensor)`";
+  let arguments = (ins
+    AnyTorchTensorType:$self,
+    AnyTorchTensorType:$other,
+    AnyTorchScalarType:$alpha,
+    AnyTorchTensorType:$out
+  );
+  let results = (outs
+    AnyTorchTensorType:$result
+  );
+  let assemblyFormat = "$self `,` $other `,` $alpha `,` $out attr-dict `:` type($self) `,` type($other) `,` type($alpha) `,` type($out) `->` type($result)";
+}
 
 
 

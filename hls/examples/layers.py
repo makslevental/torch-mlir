@@ -1,69 +1,94 @@
 import torch
+from torch_mlir.dialects.torch.importer.jit_ir import ClassAnnotator, ModuleBuilder
+
+# noinspection PyUnresolvedReferences
+from torch_mlir_e2e_test.linalg_on_tensors_backends.refbackend import RefBackendInvoker
+from torch_mlir.dialects.torch.importer.jit_ir.torchscript_annotations import (
+    extract_annotations,
+)
+
+TORCH_MLIR_EXPORT_ATTR_NAME = "_torch_mlir_export"
+TORCH_MLIR_ARG_ANNOTATIONS_ATTR_NAME = "_torch_mlir_arg_annotations"
 
 
-class Matmul(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, lhs, rhs):
-        return torch.mm(lhs, rhs)
+def export(fn):
+    setattr(fn, TORCH_MLIR_EXPORT_ATTR_NAME, True)
+    return fn
 
 
-class MatmulDotOut(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
+def annotate_args(annotations):
+    def decorator(fn):
+        setattr(fn, TORCH_MLIR_ARG_ANNOTATIONS_ATTR_NAME, annotations)
+        return fn
 
-    def forward(self, lhs, rhs, out):
-        return torch.mm(lhs, rhs, out=out)
+    return decorator
 
 
-class Conv2dNoPaddingModule(torch.nn.Module):
-    def __init__(self):
+def annotate_forward(mod, annotations):
+    a = annotate_args(annotations)
+    mod.forward = a(mod.forward)
+    return mod
+
+
+class Conv2dNoPaddingOut(torch.nn.Module):
+    def __init__(self, in_planes, out_planes, kernel_size):  # TODO
         super().__init__()
         torch.manual_seed(0)
-        self.conv = torch.nn.Conv2d(2, 10, 3, bias=False)
-        self.train(False)
-
-    def forward(self, x):
-        return self.conv(x)
-
-
-class Conv2dNoPaddingOutModule(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-        torch.manual_seed(0)
-        self.kernel_size = (3, 3)
-        conv = torch.nn.Conv2d(2, 10, self.kernel_size, bias=False)
+        self.kernel_size = (kernel_size, kernel_size)
+        conv = torch.nn.Conv2d(in_planes, out_planes, self.kernel_size, bias=False)
         self.weight = conv.weight
         self.train(False)
 
+    @export
     def forward(self, inp, out):
         return torch._C._nn.thnn_conv2d(inp, self.weight, self.kernel_size, out=out)
 
+# class AddInplace(torch.nn.Module):
+#     def __init__(self, constant):  # TODO
+#         super().__init__()
+#         self.constant = constant
+#         self.train(False)
+#
+#     @export
+#     def forward(self, inp, out):
+#         return torch._C._nn.thnn_conv2d(inp, self.weight, self.kernel_size, out=out)
 
-class MaxPool2dModule(torch.nn.Module):
-    def __init__(self):
+
+def make_conv2d_no_bias_no_padding_no_stride_no_dilation_out(
+        batch_size, in_planes, out_planes, kernel_size, height, width
+) -> torch.nn.Module:
+    c = annotate_forward(
+        Conv2dNoPaddingOut,
+        [
+            None,
+            ([batch_size, in_planes, height, width], torch.float32, True),
+            (
+                [
+                    batch_size,
+                    out_planes,
+                    height - (kernel_size // 2 + 1) if height > 0 else -1,
+                    width - (kernel_size // 2 + 1) if width > 0 else -1,
+                ],
+                torch.float32,
+                True,
+            ),
+        ],
+    )
+    return c(in_planes, out_planes, kernel_size)
+
+
+class MaxPool2dOut(torch.nn.Module):
+    def __init__(self, kernel_size):
         super().__init__()
         torch.manual_seed(0)
-        self.maxpool = torch.nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        self.train(False)
-
-    def forward(self, inp):
-        return self.maxpool(inp)
-
-
-class MaxPool2dOutModule(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-        torch.manual_seed(0)
-        self.kernel_size = (3, 3)
+        self.kernel_size = (kernel_size, kernel_size)
         self.stride = (1, 1)
         self.padding = (0, 0)
         self.dilation = (1, 1)
         self.ceil_mode = False
-        self.return_indices = False
         self.train(False)
 
+    @export
     def forward(self, inp, out, indices):
         out, _ = torch._C._nn.max_pool2d_with_indices(
             inp,
@@ -78,54 +103,79 @@ class MaxPool2dOutModule(torch.nn.Module):
         return out
 
 
-class AdaptiveAvgPool2dModule(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-        torch.manual_seed(0)
-        self.pool = torch.nn.AdaptiveAvgPool2d((1, 1))
-        self.train(False)
+def make_maxpool2d_no_padding_no_stride_no_dilation_out(
+        batch_size, channels, kernel_size, height, width
+):
+    out_dims = [
+        batch_size,
+        channels,
+        height - (kernel_size // 2 + 1) if height > 0 else -1,
+        width - (kernel_size // 2 + 1) if width > 0 else -1,
+    ]
+    m = annotate_forward(
+        MaxPool2dOut,
+        [
+            None,
+            ([batch_size, channels, height, width], torch.float32, True),
+            (out_dims, torch.float32, True),  # out
+            (out_dims, torch.float32, True),  # indices
+        ],
+    )
+    return m(kernel_size)
 
-    def forward(self, inp):
-        return self.pool(inp)
 
-
-class AdaptiveAvgPool2dOutModule(torch.nn.Module):
+class AdaptiveAvgPool2dOut(torch.nn.Module):
     def __init__(self):
         super().__init__()
         torch.manual_seed(0)
         self.output_size = (1, 1)
         self.train(False)
 
+    @export
     def forward(self, inp, out):
         return torch._C._nn.adaptive_avg_pool2d(inp, self.output_size, out=out)
 
 
-class ReLUModule(torch.nn.Module):
+def make_adaptiveavg2d_1x1(batch_size, channels, height, width):
+    out_dims = [batch_size, channels, 1, 1]
+    m = annotate_forward(
+        AdaptiveAvgPool2dOut,
+        [
+            None,
+            ([batch_size, channels, height, width], torch.float32, True),
+            (out_dims, torch.float32, True),  # out
+        ],
+    )
+    return m()
+
+
+class ReLUInplace(torch.nn.Module):
     def __init__(self):
         super().__init__()
         self.relu = torch.nn.ReLU(inplace=True)
         self.train(False)
 
+    @export
     def forward(self, x):
         y = self.relu(x)
         return y
 
 
-class BatchNorm2d(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.bn = torch.nn.BatchNorm2d(4)
-        self.train(False)
-
-    def forward(self, x):
-        y = self.bn(x)
-        return y
+def make_relu(batch_size, channels, height, width):
+    r = annotate_forward(
+        ReLUInplace,
+        [
+            None,
+            ([batch_size, channels, height, width], torch.float32, True),
+        ],
+    )
+    return r()
 
 
 class BatchNorm2dOut(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, channels):
         super().__init__()
-        bn = torch.nn.BatchNorm2d(4)
+        bn = torch.nn.BatchNorm2d(channels)
         self.weight = bn.weight
         self.bias = bn.bias
         self.running_mean = bn.running_mean
@@ -135,33 +185,154 @@ class BatchNorm2dOut(torch.nn.Module):
         self.training = False
         self.train(self.training)
 
+    @export
     def forward(self, inp, out, save_mean, save_invstd):
         out, *_ = torch.native_batch_norm(
-            inp, self.weight, self.bias, self.running_mean, self.running_var, self.training, self.momentum, self.eps,
-            out=out, save_mean=save_mean, save_invstd=save_invstd
+            inp,
+            self.weight,
+            self.bias,
+            self.running_mean,
+            self.running_var,
+            self.training,
+            self.momentum,
+            self.eps,
+            out=out,
+            save_mean=save_mean,
+            save_invstd=save_invstd,
         )
         return out
 
 
-class Linear(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.fc = torch.nn.Linear(512, 1000)
-        self.train(False)
-
-    def forward(self, x):
-        y = self.fc(x)
-        return y
+def make_bn(batch_size, channels, height, width):
+    b = annotate_forward(
+        BatchNorm2dOut,
+        [
+            None,
+            ([batch_size, channels, height, width], torch.float32, True),  # input
+            ([batch_size, channels, height, width], torch.float32, True),  # output
+            ([batch_size, channels], torch.float32, True),  # save_mean
+            ([batch_size, channels], torch.float32, True),  # save_invstd
+        ],
+    )
+    return b(channels)
 
 
 class LinearOut(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, in_features, out_features):
         super().__init__()
-        fc = torch.nn.Linear(512, 1000)
+        fc = torch.nn.Linear(in_features, out_features)
         self.weight_T = torch.empty(fc.weight.T.shape)
         self.bias = fc.bias
         self.train(False)
 
+    @export
     def forward(self, inp, out):
         y = torch._C._nn.linear(inp, self.weight_T, self.bias, out=out)
         return y
+
+
+def make_linear_out(batch_size, in_features, out_features):
+    l = annotate_forward(
+        LinearOut,
+        [
+            None,
+            ([batch_size, in_features], torch.float32, True),  # input
+            ([batch_size, out_features], torch.float32, True),  # output
+        ],
+    )
+    return l(in_features=in_features, out_features=out_features)
+
+
+class TestMod(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        torch.manual_seed(0)
+        self.conv = make_conv2d_no_bias_no_padding_no_stride_no_dilation_out(
+            batch_size=5, in_planes=2, out_planes=10, kernel_size=3, height=20, width=20
+        )
+        self.relu = make_relu(batch_size=5, channels=10, height=18, width=18)
+        self.train(False)
+
+    def forward(self, inp, outp):
+        x = self.conv(inp, outp)
+        x = self.relu(x)
+        # x = torch.flatten(x, 1)
+        return x
+
+
+def make_layer(test_module, annotations):
+    class_annotator = ClassAnnotator()
+    recursivescriptmodule = torch.jit.script(test_module)
+    class_annotator.exportNone(recursivescriptmodule._c._type())
+    class_annotator.exportPath(recursivescriptmodule._c._type(), ["forward"])
+    class_annotator.annotateArgs(
+        recursivescriptmodule._c._type(), ["forward"], annotations
+    )
+    # extract_annotations(test_module, recursivescriptmodule, class_annotator)
+    return recursivescriptmodule._c, class_annotator
+
+# class Matmul(torch.nn.Module):
+#     def __init__(self):
+#         super().__init__()
+#
+#     def forward(self, lhs, rhs):
+#         return torch.mm(lhs, rhs)
+#
+#
+# class MatmulDotOut(torch.nn.Module):
+#     def __init__(self):
+#         super().__init__()
+#
+#     def forward(self, lhs, rhs, out):
+#         return torch.mm(lhs, rhs, out=out)
+
+
+# class Conv2dNoPadding(torch.nn.Module):
+#     def __init__(self):
+#         super().__init__()
+#         torch.manual_seed(0)
+#         self.conv = torch.nn.Conv2d(2, 10, 3, bias=False)
+#         self.train(False)
+#
+#     def forward(self, x):
+#         return self.conv(x)
+
+# class MaxPool2d(torch.nn.Module):
+#     def __init__(self):
+#         super().__init__()
+#         torch.manual_seed(0)
+#         self.maxpool = torch.nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+#         self.train(False)
+#
+#     def forward(self, inp):
+#         return self.maxpool(inp)
+
+# class AdaptiveAvgPool2d(torch.nn.Module):
+#     def __init__(self):
+#         super().__init__()
+#         torch.manual_seed(0)
+#         self.pool = torch.nn.AdaptiveAvgPool2d((1, 1))
+#         self.train(False)
+#
+#     def forward(self, inp):
+#         return self.pool(inp)
+
+# class BatchNorm2d(torch.nn.Module):
+#     def __init__(self):
+#         super().__init__()
+#         self.bn = torch.nn.BatchNorm2d(4)
+#         self.train(False)
+#
+#     def forward(self, x):
+#         y = self.bn(x)
+#         return y
+
+# class Linear(torch.nn.Module):
+#     def __init__(self):
+#         super().__init__()
+#         self.fc = torch.nn.Linear(512, 1000)
+#         self.train(False)
+#
+#     def forward(self, x):
+#         y = self.fc(x)
+#         return y
