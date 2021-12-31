@@ -16,12 +16,12 @@ from torch_mlir_e2e_test.torchscript.annotations import export
 from torchvision.models import resnet18
 from torchvision.models.resnet import BasicBlock
 
-from resnet import make_test_basic_block
+from resnet import myresnet18
 from layers import make_layer, TestMod, MyBasicBlock
 
 
 def make_resnet():
-    mod = resnet18()
+    mod = myresnet18()
     mod.train(False)
     return make_layer(
         mod,
