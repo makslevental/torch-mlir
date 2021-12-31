@@ -22,6 +22,7 @@ add_public_tablegen_target(HLSTorchIncGen)
 add_mlir_library(HLSTorch
         HLSDecomposeComplexOps.cpp
         HLSDropPublicReturn.cpp
+        HLSPromoteAllocs.cpp
         HLSLinalgBufferize.cpp
         HLSRefineTypes.cpp
         HLSTorchToLinalg.cpp

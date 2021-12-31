@@ -22,6 +22,8 @@ std::unique_ptr<OperationPass<FuncOp>> createHLSRefineTypesPass();
 
 std::unique_ptr<OperationPass<ModuleOp>> createHLSDropPublicReturnPass();
 
+std::unique_ptr<OperationPass<ModuleOp>> createHLSPromoteAllocsPass();
+
 std::unique_ptr<OperationPass<FuncOp>> createHLSLinalgBufferizePass();
 
 std::unique_ptr<OperationPass<FuncOp>> createHLSDecomposeComplexOpsPass();
