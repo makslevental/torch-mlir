@@ -40,4 +40,10 @@ def HLSConvertTorchToLinalg : Pass<"convert-torch-hls-to-linalg", "FuncOp"> {
   }];
 }
 
+def HLSPromoteAllocs : Pass<"torch-hls-promote-allocs", "ModuleOp"> {
+  let constructor = "mlir::torch::HLS::createHLSPromoteAllocsPass()";
+    let description = [{
+    }];
+}
+
 #endif

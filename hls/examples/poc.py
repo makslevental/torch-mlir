@@ -1,6 +1,7 @@
 # import ctypes
 # sh_obj = ctypes.cdll.LoadLibrary('/home/mlevental/dev_projects/torch-mlir/build/lib/libruntimePatchLinalg.so')
 import torch
+from torch import nn
 from torch_mlir.dialects.torch.importer.jit_ir import ClassAnnotator, ModuleBuilder
 from torch_mlir.passmanager import PassManager
 
@@ -11,18 +12,34 @@ from torch_mlir.dialects.torch.importer.jit_ir.torchscript_annotations import (
     extract_annotations,
 )
 
+from torch_mlir_e2e_test.torchscript.annotations import export
+from torchvision.models import resnet18
+from torchvision.models.resnet import BasicBlock
+
 from resnet import make_test_basic_block
-from layers import make_layer, TestMod
+from layers import make_layer, TestMod, MyBasicBlock
 
 
-def make_mod():
-    mod = TestMod()
+def make_resnet():
+    mod = resnet18()
+    mod.train(False)
     return make_layer(
         mod,
         [
             None,
-            ([5, 2, 20, 20], torch.float32, True),
-            ([5, 10, 18, 18], torch.float32, True),
+            ([1, 3, 32, 32], torch.float32, True),
+        ],
+    )
+
+
+def make_mod():
+    mod = BasicBlock(2, 2)
+    mod.train(False)
+    return make_layer(
+        mod,
+        [
+            None,
+            ([1, 2, 8, 8], torch.float32, True),
         ],
     )
 
@@ -39,15 +56,16 @@ PIPELINE = [
     "builtin.func(torch-reduce-op-variants)",
     "builtin.func(canonicalize{  max-iterations=10 region-simplify=true top-down=true})",
     "symbol-dce",
-    "builtin.func(torch-hls-refine-types)",
+    # "builtin.func(torch-hls-refine-types)",
+    "builtin.func(torch-refine-types)",
     "torch-refine-public-return",
     "builtin.func(canonicalize{  max-iterations=10 region-simplify=true top-down=true})",
     "builtin.func(torch-maximize-value-semantics)",
     "builtin.func(canonicalize{  max-iterations=10 region-simplify=true top-down=true})",
     "builtin.func(torch-decompose-complex-ops)",
-    "builtin.func(torch-hls-decompose-complex-ops)",
+    # "builtin.func(torch-hls-decompose-complex-ops)",
     "torch-verify-invariants-before-backend-lowering",
-    "builtin.func(convert-torch-hls-to-linalg)",
+    # "builtin.func(convert-torch-hls-to-linalg)",
     "builtin.module(symbol-dce)",
     "builtin.func(convert-torch-to-linalg)",
     "builtin.func(convert-torch-to-std)",
@@ -60,11 +78,20 @@ PIPELINE = [
     "builtin.func(torch-finalizing-backend-type-conversion)",
     "torch-verify-linalg-on-tensors-backend-contract",
     "tensor-constant-bufferize{alignment=0}",
-    "builtin.func(torch-hls-linalg-bufferize)",
+    # "builtin.func(torch-hls-linalg-bufferize)",
+    "builtin.func(linalg-detensorize)",
+    "builtin.module(linalg-comprehensive-module-bufferize)",
+    "builtin.func(linalg-bufferize)",
     "builtin.func(std-bufferize)",
     "builtin.func(tensor-bufferize)",
     "func-bufferize",
+    "builtin.func(buffer-hoisting)",
+    "builtin.func(buffer-loop-hoisting)",
+    "builtin.module(buffer-results-to-out-params)",
     "builtin.func(finalizing-bufferize)",
+    "builtin.func(cse)",
+    "torch-hls-promote-allocs",
+    "builtin.func(cse)",
     "torch-hls-drop-public-return",
     "builtin.func(convert-linalg-to-loops)",
     "builtin.func(lower-affine)",
@@ -79,14 +106,14 @@ PIPELINE = [
 
 if __name__ == "__main__":
     mb = ModuleBuilder()
-    mb.import_module(*make_test_basic_block())
+    mb.import_module(*make_resnet())
     with mb.module.context:
-        mb.set_multithreading(False)
+        # mb.set_multithreading(False)
         pm = PassManager.parse(",".join(PIPELINE))
-        pm.enable_ir_printing()
+        # pm.enable_ir_printing()
         pm.run(mb.module)
 
-    open(f"basic_block.llvm.mlir", "w").write(str(mb.module))
+    open(f"resnet.llvm.mlir", "w").write(str(mb.module))
 
 # def make_mat_mul():
 #     return make_layer(
