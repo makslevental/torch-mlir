@@ -154,19 +154,19 @@ public:
     linalg::GenericOpAdaptor adaptor(operands, op->getAttrDictionary());
     Location loc = op.getLoc();
     SmallVector<Value, 2> newOutputBuffers;
-    if (!op->hasAttr("variant")) {
-      if (failed(allocateBuffersForResults(loc, op, adaptor.outputs(),
-                                           newOutputBuffers, rewriter))) {
-        return op.emitOpError()
-               << "Failed to allocate buffers for tensor results.";
-      }
-    } else if (op->hasAttr("variant")) {
+    if (op->hasAttr("variant")) {
       if (op->getAttr("variant").cast<StringAttr>().str() == "out") {
         newOutputBuffers = adaptor.outputs();
       } else if (op->getAttr("variant").cast<StringAttr>().str() == "inplace") {
         newOutputBuffers = adaptor.inputs();
       } else {
         return failure();
+      }
+    } else {
+      if (failed(allocateBuffersForResults(loc, op, adaptor.outputs(),
+                                           newOutputBuffers, rewriter))) {
+        return op.emitOpError()
+               << "Failed to allocate buffers for tensor results.";
       }
     }
     createLinalgOpOnBuffers(rewriter, op, adaptor.inputs(), newOutputBuffers);
