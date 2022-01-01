@@ -1116,26 +1116,35 @@ public:
 
     TypeConverter typeConverter;
     typeConverter.addConversion([](Type type) { return type; });
+//    typeConverter.addArgumentMaterialization(
+//        [](OpBuilder &builder, Torch::BaseTensorType type, ValueRange inputs,
+//           Location loc) -> Value {
+//          assert(inputs.size() == 1);
+//          assert(inputs[0].getType().isa<BaseTensorType>());
+//          return copyTensorToType(builder, loc, type, inputs[0]);
+//        });
     TorchConversion::setupBackendTypeConversion(target, typeConverter);
 
     RewritePatternSet patterns(context);
 
-    target.addIllegalOp<AtenMmOutOp>();
-    patterns.add<ConvertAtenMmOutOp>(typeConverter, context);
-    target.addIllegalOp<AtenMatmulOutOp>();
-    patterns.add<ConvertAtenMatmulOutOp>(typeConverter, context);
-    target.addIllegalOp<AtenTHNNConv2dOutOp>();
-    patterns.add<ConvertAtenTHNNConv2dOutOp>(typeConverter, context);
-    target.addIllegalOp<AtenReluOp, AtenAddOutTensorOp>();
-    patterns.add<ConvertElementwiseOp>(typeConverter, context);
-    target.addIllegalOp<AtenMaxPool2dWithIndicesOutOp>();
-    patterns.add<ConvertAtenMaxPool2dWithIndicesOutOp>(typeConverter, context);
-    target.addIllegalOp<AtenAdaptiveAvgPool2dOutOp>();
-    patterns.add<ConvertAtenAdaptiveAvgPool2dOutOp>(typeConverter, context);
-    target.addIllegalOp<AtenNativeBatchNormOutOp>();
-    patterns.add<ConvertAtenNativeBatchNormOutOp>(typeConverter, context);
-    target.addIllegalOp<AtenLinearOutOp>();
-    patterns.add<ConvertAtenLinearOutOp>(typeConverter, context);
+    //    target.addIllegalOp<AtenMmOutOp>();
+    //    patterns.add<ConvertAtenMmOutOp>(typeConverter, context);
+    //    target.addIllegalOp<AtenMatmulOutOp>();
+    //    patterns.add<ConvertAtenMatmulOutOp>(typeConverter, context);
+    //    target.addIllegalOp<AtenTHNNConv2dOutOp>();
+    //    patterns.add<ConvertAtenTHNNConv2dOutOp>(typeConverter, context);
+    //    target.addIllegalOp<AtenReluOp, AtenAddOutTensorOp>();
+    //    patterns.add<ConvertElementwiseOp>(typeConverter, context);
+    //    target.addIllegalOp<AtenMaxPool2dWithIndicesOutOp>();
+    //    patterns.add<ConvertAtenMaxPool2dWithIndicesOutOp>(typeConverter,
+    //    context); target.addIllegalOp<AtenAdaptiveAvgPool2dOutOp>();
+    //    patterns.add<ConvertAtenAdaptiveAvgPool2dOutOp>(typeConverter,
+    //    context); target.addIllegalOp<AtenNativeBatchNormOutOp>();
+    //    patterns.add<ConvertAtenNativeBatchNormOutOp>(typeConverter, context);
+    //    target.addIllegalOp<AtenLinearOutOp>();
+    //    patterns.add<ConvertAtenLinearOutOp>(typeConverter, context);
+    //    target.addIllegalOp<AtenPermuteOp>();
+    //    patterns.add<ConvertAtenPermuteOp>(typeConverter, context);
 
     if (failed(applyPartialConversion(getOperation(), target,
                                       std::move(patterns))))
