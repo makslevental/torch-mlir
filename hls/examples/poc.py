@@ -16,6 +16,7 @@ from torch_mlir_e2e_test.torchscript.annotations import export
 from torchvision.models import resnet18
 from torchvision.models.resnet import BasicBlock
 
+from braggnn import BraggNN
 from resnet import myresnet18
 from layers import make_layer, TestMod, MyBasicBlock
 
@@ -43,6 +44,19 @@ def make_mod():
         ],
     )
 
+def make_braggnn():
+    mod = BraggNN()
+    t = torch.randn((1, 1, 11, 11))
+    y = mod(t)
+    mod.train(False)
+    return make_layer(
+        mod,
+        [
+            None,
+            ([1, 1, 11, 11], torch.float32, True),
+        ],
+    )
+
 
 PIPELINE = [
     "symbol-dce",
@@ -63,13 +77,13 @@ PIPELINE = [
     "builtin.func(torch-maximize-value-semantics)",
     "builtin.func(canonicalize{  max-iterations=10 region-simplify=true top-down=true})",
     "builtin.func(torch-decompose-complex-ops)",
-    # "builtin.func(torch-hls-decompose-complex-ops)",
     "torch-verify-invariants-before-backend-lowering",
-    # "builtin.func(convert-torch-hls-to-linalg)",
     "builtin.module(symbol-dce)",
+    # "builtin.func(convert-torch-hls-to-linalg)",
     "builtin.func(convert-torch-to-linalg)",
     "builtin.func(convert-torch-to-std)",
     "builtin.func(convert-torch-to-scf)",
+    "builtin.func(linalg-strategy-tile-and-fuse-pass)",
     "builtin.func(std-expand)",
     "builtin.func(canonicalize{  max-iterations=10 region-simplify=true top-down=true})",
     "builtin.func(resolve-shaped-type-result-dims)",
@@ -78,7 +92,6 @@ PIPELINE = [
     "builtin.func(torch-finalizing-backend-type-conversion)",
     "torch-verify-linalg-on-tensors-backend-contract",
     "tensor-constant-bufferize{alignment=0}",
-    # "builtin.func(torch-hls-linalg-bufferize)",
     "builtin.func(linalg-detensorize)",
     "builtin.module(linalg-comprehensive-module-bufferize)",
     "builtin.func(linalg-bufferize)",
@@ -93,7 +106,9 @@ PIPELINE = [
     "torch-hls-promote-allocs",
     "builtin.func(cse)",
     "torch-hls-drop-public-return",
+    "builtin.func(cse)",
     "builtin.func(convert-linalg-to-loops)",
+    # "parallel-loop-fusion"
     "builtin.func(lower-affine)",
     "builtin.func(convert-scf-to-std)",
     "builtin.func(refback-expand-ops-for-llvm)",
@@ -105,15 +120,16 @@ PIPELINE = [
 ]
 
 if __name__ == "__main__":
+    # mod = BraggNN()
     mb = ModuleBuilder()
-    mb.import_module(*make_resnet())
+    mb.import_module(*make_braggnn())
     with mb.module.context:
-        # mb.set_multithreading(False)
+        mb.set_multithreading(False)
         pm = PassManager.parse(",".join(PIPELINE))
-        # pm.enable_ir_printing()
+        pm.enable_ir_printing()
         pm.run(mb.module)
 
-    open(f"resnet.llvm.mlir", "w").write(str(mb.module))
+    open(f"braggnn.llvm.mlir", "w").write(str(mb.module))
 
 # def make_mat_mul():
 #     return make_layer(
