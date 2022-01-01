@@ -1,7 +1,5 @@
 import torch
 from torch import nn
-from torch.nn import Sequential, Module
-from torchvision import models
 
 
 def conv3x3(in_planes: int, out_planes: int, stride: int = 1, groups: int = 1, dilation: int = 1) -> nn.Conv2d:
