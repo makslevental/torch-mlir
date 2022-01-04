@@ -183,4 +183,4 @@ function eval_file() {
 # export TOP_FUNC=matmul
 export TOP_FUNC=forward
 #eval_file matmul.llvm.mlir
-eval_file linear.llvm.mlir
+eval_file braggnn.llvm.mlir
