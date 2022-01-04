@@ -1,0 +1,317 @@
+
+
+================================================================
+== Synthesis Summary Report of 'forward'
+================================================================
++ General Information: 
+    * Date:           Tue Jan  4 08:07:37 2022
+    * Version:        2021.2 (Build 3367213 on Tue Oct 19 02:47:39 MDT 2021)
+    * Project:        proj
+    * Solution:       solution1 (Vivado IP Flow Target)
+    * Product family: artix7
+    * Target device:  xc7a12ti-csg325-1L
+    
+
++ Performance & Resource Estimates: 
+    
+    PS: '+' for module; 'o' for loop; '*' for dataflow
+    +------------------------+--------+-------+----------+-----------+----------+----------+--------+----------+------+----------+------------+--------------+-----+
+    |         Modules        |  Issue |       | Latency  |  Latency  | Iteration|          |  Trip  |          |      |          |            |              |     |
+    |         & Loops        |  Type  | Slack | (cycles) |    (ns)   |  Latency | Interval |  Count | Pipelined| BRAM |    DSP   |     FF     |      LUT     | URAM|
+    +------------------------+--------+-------+----------+-----------+----------+----------+--------+----------+------+----------+------------+--------------+-----+
+    |+ forward               |  Timing|  -1.57|  37336635|  1.495e+08|         -|  37336636|       -|        no|     -|  10 (25%)|  5330 (33%)|  12611 (157%)|    -|
+    | + forward_Pipeline_1   |       -|   0.30|      5186|  2.077e+04|         -|      5186|       -|        no|     -|         -|    29 (~0%)|      74 (~0%)|    -|
+    |  o Loop 1              |       -|   2.43|      5184|  2.076e+04|         2|         1|    5184|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_2   |       -|   0.30|      5186|  2.077e+04|         -|      5186|       -|        no|     -|         -|    29 (~0%)|      74 (~0%)|    -|
+    |  o Loop 1              |       -|   2.43|      5184|  2.076e+04|         2|         1|    5184|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_3   |  Timing|  -0.72|    653186|  2.616e+06|         -|    653186|       -|        no|     -|         -|    204 (1%)|     801 (10%)|    -|
+    |  o Loop 1              |      II|   2.43|    653184|  2.616e+06|       127|       126|    5184|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_4   |       -|   0.30|      2594|  1.039e+04|         -|      2594|       -|        no|     -|         -|    27 (~0%)|      73 (~0%)|    -|
+    |  o Loop 1              |       -|   2.43|      2592|  1.038e+04|         2|         1|    2592|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_5   |       -|   0.30|      2594|  1.039e+04|         -|      2594|       -|        no|     -|         -|    27 (~0%)|      73 (~0%)|    -|
+    |  o Loop 1              |       -|   2.43|      2592|  1.038e+04|         2|         1|    2592|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_6   |  Timing|  -0.72|   3649538|  1.461e+07|         -|   3649538|       -|        no|     -|         -|   118 (~0%)|      232 (2%)|    -|
+    |  o Loop 1              |      II|   2.43|   3649536|  1.461e+07|        23|        22|  165888|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_7   |       -|   0.30|      2594|  1.039e+04|         -|      2594|       -|        no|     -|         -|    27 (~0%)|      73 (~0%)|    -|
+    |  o Loop 1              |       -|   2.43|      2592|  1.038e+04|         2|         1|    2592|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_8   |       -|   0.30|      2594|  1.039e+04|         -|      2594|       -|        no|     -|         -|    27 (~0%)|      73 (~0%)|    -|
+    |  o Loop 1              |       -|   2.43|      2592|  1.038e+04|         2|         1|    2592|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_9   |  Timing|  -0.72|   3649538|  1.461e+07|         -|   3649538|       -|        no|     -|         -|   118 (~0%)|      232 (2%)|    -|
+    |  o Loop 1              |      II|   2.43|   3649536|  1.461e+07|        23|        22|  165888|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_10  |       -|   0.30|      2594|  1.039e+04|         -|      2594|       -|        no|     -|         -|    27 (~0%)|      73 (~0%)|    -|
+    |  o Loop 1              |       -|   2.43|      2592|  1.038e+04|         2|         1|    2592|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_11  |       -|   0.30|      2594|  1.039e+04|         -|      2594|       -|        no|     -|         -|    27 (~0%)|      73 (~0%)|    -|
+    |  o Loop 1              |       -|   2.43|      2592|  1.038e+04|         2|         1|    2592|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_12  |  Timing|  -0.72|   3649538|  1.461e+07|         -|   3649538|       -|        no|     -|         -|   118 (~0%)|      232 (2%)|    -|
+    |  o Loop 1              |      II|   2.43|   3649536|  1.461e+07|        23|        22|  165888|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_13  |  Timing|  -0.21|     20738|  8.305e+04|         -|     20738|       -|        no|     -|         -|    52 (~0%)|      146 (1%)|    -|
+    |  o Loop 1              |      II|   2.43|     20736|  8.304e+04|         9|         8|    2592|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_14  |  Timing|  -1.11|     80354|  3.218e+05|         -|     80354|       -|        no|     -|         -|    75 (~0%)|      257 (3%)|    -|
+    |  o Loop 1              |      II|   2.43|     80352|  3.218e+05|        32|        31|    2592|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_15  |  Timing|  -1.11|     80354|  3.218e+05|         -|     80354|       -|        no|     -|         -|    75 (~0%)|      257 (3%)|    -|
+    |  o Loop 1              |      II|   2.43|     80352|  3.218e+05|        32|        31|    2592|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_16  |       -|   0.49|        34|    136.153|         -|        34|       -|        no|     -|         -|    15 (~0%)|      66 (~0%)|    -|
+    |  o Loop 1              |       -|   2.43|        32|    128.144|         2|         1|      32|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_17  |       -|   0.49|        34|    136.153|         -|        34|       -|        no|     -|         -|    15 (~0%)|      66 (~0%)|    -|
+    |  o Loop 1              |       -|   2.43|        32|    128.144|         2|         1|      32|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_18  |  Timing|  -0.72|     36290|  1.453e+05|         -|     36290|       -|        no|     -|         -|    58 (~0%)|      170 (2%)|    -|
+    |  o Loop 1              |      II|   2.43|     36288|  1.453e+05|        15|        14|    2592|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_19  |  Timing|  -0.71|     77762|  3.114e+05|         -|     77762|       -|        no|     -|         -|    74 (~0%)|      254 (3%)|    -|
+    |  o Loop 1              |      II|   2.43|     77760|  3.114e+05|        31|        30|    2592|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_20  |  Timing|  -0.21|     20738|  8.305e+04|         -|     20738|       -|        no|     -|         -|    52 (~0%)|      146 (1%)|    -|
+    |  o Loop 1              |      II|   2.43|     20736|  8.304e+04|         9|         8|    2592|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_21  |       -|   0.30|      5186|  2.077e+04|         -|      5186|       -|        no|     -|         -|    29 (~0%)|      74 (~0%)|    -|
+    |  o Loop 1              |       -|   2.43|      5184|  2.076e+04|         2|         1|    5184|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_22  |       -|   0.30|      5186|  2.077e+04|         -|      5186|       -|        no|     -|         -|    29 (~0%)|      74 (~0%)|    -|
+    |  o Loop 1              |       -|   2.43|      5184|  2.076e+04|         2|         1|    5184|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_23  |  Timing|  -0.72|   3649538|  1.461e+07|         -|   3649538|       -|        no|     -|         -|   118 (~0%)|      232 (2%)|    -|
+    |  o Loop 1              |      II|   2.43|   3649536|  1.461e+07|        23|        22|  165888|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_24  |  Timing|  -0.72|     72578|  2.906e+05|         -|     72578|       -|        no|     -|         -|    60 (~0%)|      171 (2%)|    -|
+    |  o Loop 1              |      II|   2.43|     72576|  2.906e+05|        15|        14|    5184|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_25  |  Timing|  -0.72|    119234|  4.775e+05|         -|    119234|       -|        no|     -|         -|   150 (~0%)|      294 (3%)|    -|
+    |  o Loop 1              |      II|   2.43|    119232|  4.775e+05|        24|        23|    5184|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_26  |       -|   0.31|      1570|  6.287e+03|         -|      1570|       -|        no|     -|         -|    25 (~0%)|      71 (~0%)|    -|
+    |  o Loop 1              |       -|   2.43|      1568|  6.279e+03|         2|         1|    1568|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_27  |       -|   0.31|      1570|  6.287e+03|         -|      1570|       -|        no|     -|         -|    25 (~0%)|      71 (~0%)|    -|
+    |  o Loop 1              |       -|   2.43|      1568|  6.279e+03|         2|         1|    1568|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_28  |  Timing|  -0.72|  19869698|  7.957e+07|         -|  19869698|       -|        no|     -|         -|   122 (~0%)|      235 (2%)|    -|
+    |  o Loop 1              |      II|   2.43|  19869696|  7.957e+07|        23|        22|  903168|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_29  |  Timing|  -0.72|     36066|  1.444e+05|         -|     36066|       -|        no|     -|         -|   146 (~0%)|      291 (3%)|    -|
+    |  o Loop 1              |      II|   2.43|     36064|  1.444e+05|        24|        23|    1568|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_30  |       -|   0.32|       202|    808.909|         -|       202|       -|        no|     -|         -|    19 (~0%)|      68 (~0%)|    -|
+    |  o Loop 1              |       -|   2.43|       200|    800.900|         2|         1|     200|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_31  |       -|   0.32|       202|    808.909|         -|       202|       -|        no|     -|         -|    19 (~0%)|      68 (~0%)|    -|
+    |  o Loop 1              |       -|   2.43|       200|    800.900|         2|         1|     200|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_32  |  Timing|  -0.72|   1267202|  5.075e+06|         -|   1267202|       -|        no|     -|         -|   114 (~0%)|      230 (2%)|    -|
+    |  o Loop 1              |      II|   2.43|   1267200|  5.075e+06|        23|        22|   57600|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_33  |  Timing|  -0.72|      4602|  1.843e+04|         -|      4602|       -|        no|     -|         -|   140 (~0%)|      288 (3%)|    -|
+    |  o Loop 1              |      II|   2.43|      4600|  1.842e+04|        24|        23|     200|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_34  |       -|   0.40|        66|    264.297|         -|        66|       -|        no|     -|         -|    17 (~0%)|      67 (~0%)|    -|
+    |  o Loop 1              |       -|   2.43|        64|    256.288|         2|         1|      64|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_35  |       -|   0.28|     12802|  5.127e+04|         -|     12802|       -|        no|     -|         -|    31 (~0%)|      75 (~0%)|    -|
+    |  o Loop 1              |       -|   2.43|     12800|  5.126e+04|         2|         1|   12800|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_36  |       -|   0.40|        66|    264.297|         -|        66|       -|        no|     -|         -|    17 (~0%)|      67 (~0%)|    -|
+    |  o Loop 1              |       -|   2.43|        64|    256.288|         2|         1|      64|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_37  |  Timing|  -0.72|    281602|  1.128e+06|         -|    281602|       -|        no|     -|         -|   110 (~0%)|      227 (2%)|    -|
+    |  o Loop 1              |      II|   2.43|    281600|  1.128e+06|        23|        22|   12800|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_38  |  Timing|  -0.72|      1474|  5.903e+03|         -|      1474|       -|        no|     -|         -|   138 (~0%)|      287 (3%)|    -|
+    |  o Loop 1              |      II|   2.43|      1472|  5.895e+03|        24|        23|      64|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_39  |       -|   0.49|        34|    136.153|         -|        34|       -|        no|     -|         -|    15 (~0%)|      66 (~0%)|    -|
+    |  o Loop 1              |       -|   2.43|        32|    128.144|         2|         1|      32|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_40  |       -|   0.30|      2050|  8.209e+03|         -|      2050|       -|        no|     -|         -|    27 (~0%)|      73 (~0%)|    -|
+    |  o Loop 1              |       -|   2.43|      2048|  8.201e+03|         2|         1|    2048|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_41  |       -|   0.49|        34|    136.153|         -|        34|       -|        no|     -|         -|    15 (~0%)|      66 (~0%)|    -|
+    |  o Loop 1              |       -|   2.43|        32|    128.144|         2|         1|      32|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_42  |  Timing|  -0.72|     45058|  1.804e+05|         -|     45058|       -|        no|     -|         -|   106 (~0%)|      225 (2%)|    -|
+    |  o Loop 1              |      II|   2.43|     45056|  1.804e+05|        23|        22|    2048|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_43  |  Timing|  -0.72|       738|  2.955e+03|         -|       738|       -|        no|     -|         -|   136 (~0%)|      286 (3%)|    -|
+    |  o Loop 1              |      II|   2.43|       736|  2.947e+03|        24|        23|      32|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_44  |       -|   0.57|        18|     72.081|         -|        18|       -|        no|     -|         -|    13 (~0%)|      65 (~0%)|    -|
+    |  o Loop 1              |       -|   2.43|        16|     64.072|         2|         1|      16|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_45  |       -|   0.31|       514|  2.058e+03|         -|       514|       -|        no|     -|         -|    23 (~0%)|      70 (~0%)|    -|
+    |  o Loop 1              |       -|   2.43|       512|  2.050e+03|         2|         1|     512|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_46  |       -|   0.57|        18|     72.081|         -|        18|       -|        no|     -|         -|    13 (~0%)|      65 (~0%)|    -|
+    |  o Loop 1              |       -|   2.43|        16|     64.072|         2|         1|      16|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_47  |  Timing|  -0.72|     11266|  4.511e+04|         -|     11266|       -|        no|     -|         -|   102 (~0%)|      222 (2%)|    -|
+    |  o Loop 1              |      II|   2.43|     11264|  4.511e+04|        23|        22|     512|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_48  |  Timing|  -0.72|       370|  1.482e+03|         -|       370|       -|        no|     -|         -|   134 (~0%)|      285 (3%)|    -|
+    |  o Loop 1              |      II|   2.43|       368|  1.474e+03|        24|        23|      16|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_49  |       -|   0.66|        10|     40.045|         -|        10|       -|        no|     -|         -|    11 (~0%)|      64 (~0%)|    -|
+    |  o Loop 1              |       -|   2.43|         8|     32.036|         2|         1|       8|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_50  |       -|   0.32|       130|    520.585|         -|       130|       -|        no|     -|         -|    19 (~0%)|      68 (~0%)|    -|
+    |  o Loop 1              |       -|   2.43|       128|    512.576|         2|         1|     128|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_51  |       -|   0.66|        10|     40.045|         -|        10|       -|        no|     -|         -|    11 (~0%)|      64 (~0%)|    -|
+    |  o Loop 1              |       -|   2.43|         8|     32.036|         2|         1|       8|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_52  |  Timing|  -0.72|      2818|  1.128e+04|         -|      2818|       -|        no|     -|         -|    98 (~0%)|      220 (2%)|    -|
+    |  o Loop 1              |      II|   2.43|      2816|  1.128e+04|        23|        22|     128|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_53  |  Timing|  -0.72|       186|    744.837|         -|       186|       -|        no|     -|         -|   132 (~0%)|      284 (3%)|    -|
+    |  o Loop 1              |      II|   2.43|       184|    736.828|        24|        23|       8|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_54  |       -|   0.82|         4|     16.018|         -|         4|       -|        no|     -|         -|     7 (~0%)|      60 (~0%)|    -|
+    |  o Loop 1              |       -|   2.43|         2|      8.009|         2|         1|       2|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_55  |       -|   0.57|        18|     72.081|         -|        18|       -|        no|     -|         -|    13 (~0%)|      65 (~0%)|    -|
+    |  o Loop 1              |       -|   2.43|        16|     64.072|         2|         1|      16|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_56  |       -|   0.82|         4|     16.018|         -|         4|       -|        no|     -|         -|     7 (~0%)|      60 (~0%)|    -|
+    |  o Loop 1              |       -|   2.43|         2|      8.009|         2|         1|       2|       yes|     -|         -|           -|             -|    -|
+    | + forward_Pipeline_57  |  Timing|  -0.72|       354|  1.418e+03|         -|       354|       -|        no|     -|         -|    92 (~0%)|      217 (2%)|    -|
+    |  o Loop 1              |      II|   2.43|       352|  1.410e+03|        23|        22|      16|       yes|     -|         -|           -|             -|    -|
+    +------------------------+--------+-------+----------+-----------+----------+----------+--------+----------+------+----------+------------+--------------+-----+
+
+
+================================================================
+== HW Interfaces
+================================================================
+* REGISTER
++-----------+---------+----------+
+| Interface | Mode    | Bitwidth |
++-----------+---------+----------+
+| arg_2     | ap_none | 32       |
+| arg_3     | ap_none | 8        |
++-----------+---------+----------+
+
+* TOP LEVEL CONTROL
++-----------+------------+-----------------------------------+
+| Interface | Type       | Ports                             |
++-----------+------------+-----------------------------------+
+| ap_clk    | clock      | ap_clk                            |
+| ap_rst    | reset      | ap_rst                            |
+| ap_ctrl   | ap_ctrl_hs | ap_done ap_idle ap_ready ap_start |
++-----------+------------+-----------------------------------+
+
+
+================================================================
+== SW I/O Information
+================================================================
+* Top Function Arguments
++----------+-----------+
+| Argument | Direction |
++----------+-----------+
+| arg_2    | in        |
+| arg_3    | inout     |
++----------+-----------+
+
+* SW-to-HW Mapping
++----------+--------------+---------+
+| Argument | HW Interface | HW Type |
++----------+--------------+---------+
+| arg_2    | arg_2        | port    |
+| arg_3    | arg_3        | port    |
+| arg_3    | arg_3_ap_vld | port    |
++----------+--------------+---------+
+
+
+================================================================
+== Bind Op Report
+================================================================
++--------------------------------------+-----+--------+-------------------------+------+--------+---------+
+| Name                                 | DSP | Pragma | Variable                | Op   | Impl   | Latency |
++--------------------------------------+-----+--------+-------------------------+------+--------+---------+
+| + forward                            | 10  |        |                         |      |        |         |
+|   fadd_32ns_32ns_32_14_no_dsp_1_U138 | 3   |        | val_s                   | fmul | maxdsp | 7       |
+|  + forward_Pipeline_1                | 0   |        |                         |      |        |         |
+|    indvar_flatten_next27_fu_52_p2    | -   |        | indvar_flatten_next27   | add  | fabric | 0       |
+|  + forward_Pipeline_2                | 0   |        |                         |      |        |         |
+|    indvar_flatten_next46_fu_52_p2    | -   |        | indvar_flatten_next46   | add  | fabric | 0       |
+|  + forward_Pipeline_3                | 0   |        |                         |      |        |         |
+|    indvar_flatten_next69_fu_80_p2    | -   |        | indvar_flatten_next69   | add  | fabric | 0       |
+|  + forward_Pipeline_4                | 0   |        |                         |      |        |         |
+|    indvar_flatten_next90_fu_52_p2    | -   |        | indvar_flatten_next90   | add  | fabric | 0       |
+|  + forward_Pipeline_5                | 0   |        |                         |      |        |         |
+|    indvar_flatten_next109_fu_52_p2   | -   |        | indvar_flatten_next109  | add  | fabric | 0       |
+|  + forward_Pipeline_6                | 0   |        |                         |      |        |         |
+|    indvar_flatten_next157_fu_71_p2   | -   |        | indvar_flatten_next157  | add  | fabric | 0       |
+|  + forward_Pipeline_7                | 0   |        |                         |      |        |         |
+|    indvar_flatten_next178_fu_52_p2   | -   |        | indvar_flatten_next178  | add  | fabric | 0       |
+|  + forward_Pipeline_8                | 0   |        |                         |      |        |         |
+|    indvar_flatten_next197_fu_52_p2   | -   |        | indvar_flatten_next197  | add  | fabric | 0       |
+|  + forward_Pipeline_9                | 0   |        |                         |      |        |         |
+|    indvar_flatten_next245_fu_71_p2   | -   |        | indvar_flatten_next245  | add  | fabric | 0       |
+|  + forward_Pipeline_10               | 0   |        |                         |      |        |         |
+|    indvar_flatten_next266_fu_52_p2   | -   |        | indvar_flatten_next266  | add  | fabric | 0       |
+|  + forward_Pipeline_11               | 0   |        |                         |      |        |         |
+|    indvar_flatten_next285_fu_52_p2   | -   |        | indvar_flatten_next285  | add  | fabric | 0       |
+|  + forward_Pipeline_12               | 0   |        |                         |      |        |         |
+|    indvar_flatten_next333_fu_80_p2   | -   |        | indvar_flatten_next333  | add  | fabric | 0       |
+|  + forward_Pipeline_13               | 0   |        |                         |      |        |         |
+|    indvar_flatten_next357_fu_81_p2   | -   |        | indvar_flatten_next357  | add  | fabric | 0       |
+|  + forward_Pipeline_14               | 0   |        |                         |      |        |         |
+|    indvar_flatten_next381_fu_84_p2   | -   |        | indvar_flatten_next381  | add  | fabric | 0       |
+|  + forward_Pipeline_15               | 0   |        |                         |      |        |         |
+|    indvar_flatten_next405_fu_75_p2   | -   |        | indvar_flatten_next405  | add  | fabric | 0       |
+|  + forward_Pipeline_16               | 0   |        |                         |      |        |         |
+|    val_537_fu_52_p2                  | -   |        | val_537                 | add  | fabric | 0       |
+|  + forward_Pipeline_17               | 0   |        |                         |      |        |         |
+|    val_562_fu_52_p2                  | -   |        | val_562                 | add  | fabric | 0       |
+|  + forward_Pipeline_18               | 0   |        |                         |      |        |         |
+|    indvar_flatten_next429_fu_73_p2   | -   |        | indvar_flatten_next429  | add  | fabric | 0       |
+|  + forward_Pipeline_19               | 0   |        |                         |      |        |         |
+|    indvar_flatten_next453_fu_81_p2   | -   |        | indvar_flatten_next453  | add  | fabric | 0       |
+|    fdiv_32ns_32ns_32_30_no_dsp_1_U38 | -   |        | val_1                   | fdiv | fabric | 29      |
+|  + forward_Pipeline_20               | 0   |        |                         |      |        |         |
+|    indvar_flatten_next477_fu_72_p2   | -   |        | indvar_flatten_next477  | add  | fabric | 0       |
+|  + forward_Pipeline_21               | 0   |        |                         |      |        |         |
+|    indvar_flatten_next498_fu_52_p2   | -   |        | indvar_flatten_next498  | add  | fabric | 0       |
+|  + forward_Pipeline_22               | 0   |        |                         |      |        |         |
+|    indvar_flatten_next517_fu_52_p2   | -   |        | indvar_flatten_next517  | add  | fabric | 0       |
+|  + forward_Pipeline_23               | 0   |        |                         |      |        |         |
+|    indvar_flatten_next565_fu_80_p2   | -   |        | indvar_flatten_next565  | add  | fabric | 0       |
+|  + forward_Pipeline_24               | 0   |        |                         |      |        |         |
+|    indvar_flatten_next589_fu_81_p2   | -   |        | indvar_flatten_next589  | add  | fabric | 0       |
+|  + forward_Pipeline_25               | 0   |        |                         |      |        |         |
+|    indvar_flatten_next613_fu_86_p2   | -   |        | indvar_flatten_next613  | add  | fabric | 0       |
+|  + forward_Pipeline_26               | 0   |        |                         |      |        |         |
+|    indvar_flatten_next634_fu_52_p2   | -   |        | indvar_flatten_next634  | add  | fabric | 0       |
+|  + forward_Pipeline_27               | 0   |        |                         |      |        |         |
+|    indvar_flatten_next653_fu_52_p2   | -   |        | indvar_flatten_next653  | add  | fabric | 0       |
+|  + forward_Pipeline_28               | 0   |        |                         |      |        |         |
+|    indvar_flatten_next776_fu_80_p2   | -   |        | indvar_flatten_next776  | add  | fabric | 0       |
+|  + forward_Pipeline_29               | 0   |        |                         |      |        |         |
+|    indvar_flatten_next800_fu_86_p2   | -   |        | indvar_flatten_next800  | add  | fabric | 0       |
+|  + forward_Pipeline_30               | 0   |        |                         |      |        |         |
+|    indvar_flatten_next821_fu_50_p2   | -   |        | indvar_flatten_next821  | add  | fabric | 0       |
+|  + forward_Pipeline_31               | 0   |        |                         |      |        |         |
+|    indvar_flatten_next840_fu_50_p2   | -   |        | indvar_flatten_next840  | add  | fabric | 0       |
+|  + forward_Pipeline_32               | 0   |        |                         |      |        |         |
+|    indvar_flatten_next963_fu_80_p2   | -   |        | indvar_flatten_next963  | add  | fabric | 0       |
+|  + forward_Pipeline_33               | 0   |        |                         |      |        |         |
+|    indvar_flatten_next987_fu_86_p2   | -   |        | indvar_flatten_next987  | add  | fabric | 0       |
+|  + forward_Pipeline_34               | 0   |        |                         |      |        |         |
+|    val_1133_fu_52_p2                 | -   |        | val_1133                | add  | fabric | 0       |
+|  + forward_Pipeline_35               | 0   |        |                         |      |        |         |
+|    indvar_flatten_next994_fu_52_p2   | -   |        | indvar_flatten_next994  | add  | fabric | 0       |
+|  + forward_Pipeline_36               | 0   |        |                         |      |        |         |
+|    val_1162_fu_52_p2                 | -   |        | val_1162                | add  | fabric | 0       |
+|  + forward_Pipeline_37               | 0   |        |                         |      |        |         |
+|    indvar_flatten_next1003_fu_77_p2  | -   |        | indvar_flatten_next1003 | add  | fabric | 0       |
+|  + forward_Pipeline_38               | 0   |        |                         |      |        |         |
+|    val_1206_fu_86_p2                 | -   |        | val_1206                | add  | fabric | 0       |
+|  + forward_Pipeline_39               | 0   |        |                         |      |        |         |
+|    val_1219_fu_52_p2                 | -   |        | val_1219                | add  | fabric | 0       |
+|  + forward_Pipeline_40               | 0   |        |                         |      |        |         |
+|    indvar_flatten_next1010_fu_52_p2  | -   |        | indvar_flatten_next1010 | add  | fabric | 0       |
+|  + forward_Pipeline_41               | 0   |        |                         |      |        |         |
+|    val_1249_fu_52_p2                 | -   |        | val_1249                | add  | fabric | 0       |
+|  + forward_Pipeline_42               | 0   |        |                         |      |        |         |
+|    indvar_flatten_next1019_fu_77_p2  | -   |        | indvar_flatten_next1019 | add  | fabric | 0       |
+|  + forward_Pipeline_43               | 0   |        |                         |      |        |         |
+|    val_1295_fu_86_p2                 | -   |        | val_1295                | add  | fabric | 0       |
+|  + forward_Pipeline_44               | 0   |        |                         |      |        |         |
+|    val_1308_fu_52_p2                 | -   |        | val_1308                | add  | fabric | 0       |
+|  + forward_Pipeline_45               | 0   |        |                         |      |        |         |
+|    indvar_flatten_next1026_fu_52_p2  | -   |        | indvar_flatten_next1026 | add  | fabric | 0       |
+|  + forward_Pipeline_46               | 0   |        |                         |      |        |         |
+|    val_1338_fu_52_p2                 | -   |        | val_1338                | add  | fabric | 0       |
+|  + forward_Pipeline_47               | 0   |        |                         |      |        |         |
+|    indvar_flatten_next1035_fu_77_p2  | -   |        | indvar_flatten_next1035 | add  | fabric | 0       |
+|  + forward_Pipeline_48               | 0   |        |                         |      |        |         |
+|    val_1384_fu_86_p2                 | -   |        | val_1384                | add  | fabric | 0       |
+|  + forward_Pipeline_49               | 0   |        |                         |      |        |         |
+|    val_1397_fu_52_p2                 | -   |        | val_1397                | add  | fabric | 0       |
+|  + forward_Pipeline_50               | 0   |        |                         |      |        |         |
+|    indvar_flatten_next1042_fu_50_p2  | -   |        | indvar_flatten_next1042 | add  | fabric | 0       |
+|  + forward_Pipeline_51               | 0   |        |                         |      |        |         |
+|    val_1427_fu_52_p2                 | -   |        | val_1427                | add  | fabric | 0       |
+|  + forward_Pipeline_52               | 0   |        |                         |      |        |         |
+|    indvar_flatten_next1051_fu_75_p2  | -   |        | indvar_flatten_next1051 | add  | fabric | 0       |
+|  + forward_Pipeline_53               | 0   |        |                         |      |        |         |
+|    val_1473_fu_86_p2                 | -   |        | val_1473                | add  | fabric | 0       |
+|  + forward_Pipeline_54               | 0   |        |                         |      |        |         |
+|    val_1486_fu_52_p2                 | -   |        | val_1486                | add  | fabric | 0       |
+|  + forward_Pipeline_55               | 0   |        |                         |      |        |         |
+|    indvar_flatten_next1058_fu_52_p2  | -   |        | indvar_flatten_next1058 | add  | fabric | 0       |
+|  + forward_Pipeline_56               | 0   |        |                         |      |        |         |
+|    val_1516_fu_52_p2                 | -   |        | val_1516                | add  | fabric | 0       |
+|  + forward_Pipeline_57               | 0   |        |                         |      |        |         |
+|    indvar_flatten_next1067_fu_68_p2  | -   |        | indvar_flatten_next1067 | add  | fabric | 0       |
++--------------------------------------+-----+--------+-------------------------+------+--------+---------+
+
+
+================================================================
+== Bind Storage Report
+================================================================
+  No bind storage info in design
+
+================================================================
+== User Pragma Report
+================================================================
+  No pragmas found
+
