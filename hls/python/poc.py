@@ -90,7 +90,7 @@ PIPELINE = [
     "torch-verify-linalg-on-tensors-backend-contract",
     "tensor-constant-bufferize{alignment=0}",
     "builtin.func(linalg-detensorize)",
-    "builtin.module(linalg-comprehensive-module-bufferize)",
+    ## "builtin.module(linalg-comprehensive-module-bufferize)",
     "builtin.func(linalg-bufferize)",
     "builtin.func(std-bufferize)",
     "builtin.func(tensor-bufferize)",
@@ -102,19 +102,19 @@ PIPELINE = [
     "builtin.func(cse)",
     "torch-hls-promote-allocs",
     "builtin.func(cse)",
-    # "torch-hls-drop-public-return",
-    # "builtin.func(cse)",
-    # "builtin.func(convert-linalg-to-loops)",
-    # # "parallel-loop-fusion"
-    # "builtin.func(lower-affine)",
-    # "builtin.func(convert-scf-to-std)",
-    # "builtin.func(refback-expand-ops-for-llvm)",
-    # "builtin.func(arith-expand)",
-    # "builtin.func(convert-math-to-llvm)",
-    # "convert-memref-to-llvm{index-bitwidth=0 use-aligned-alloc=false}",
-    # # "convert-std-to-llvm{data-layout= emit-c-wrappers=true index-bitwidth=0 use-bare-ptr-memref-call-conv=false}",
-    # "convert-std-to-llvm{data-layout= emit-c-wrappers=false index-bitwidth=0 use-bare-ptr-memref-call-conv=true}",
-    # "reconcile-unrealized-casts",
+    "torch-hls-drop-public-return",
+    "builtin.func(cse)",
+    "builtin.func(convert-linalg-to-loops)",
+    # "parallel-loop-fusion"
+    "builtin.func(lower-affine)",
+    "builtin.func(convert-scf-to-std)",
+    "builtin.func(refback-expand-ops-for-llvm)",
+    "builtin.func(arith-expand)",
+    "builtin.func(convert-math-to-llvm)",
+    "convert-memref-to-llvm{index-bitwidth=0 use-aligned-alloc=false}",
+    # "convert-std-to-llvm{data-layout= emit-c-wrappers=true index-bitwidth=0 use-bare-ptr-memref-call-conv=false}",
+    "convert-std-to-llvm{data-layout= emit-c-wrappers=false index-bitwidth=0 use-bare-ptr-memref-call-conv=true}",
+    "reconcile-unrealized-casts",
 ]
 
 if __name__ == "__main__":
@@ -132,4 +132,4 @@ if __name__ == "__main__":
 
     asm_for_error_report = mb.module.operation.get_asm(
         large_elements_limit=1000, enable_debug_info=True)
-    open(f"braggnn.torch.mlir", "w").write(asm_for_error_report)
+    open(f"../scripts/braggnn.llvm.mlir", "w").write(asm_for_error_report)
