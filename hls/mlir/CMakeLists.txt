@@ -27,6 +27,7 @@ add_mlir_library(HLSTorch
         HLSRefineTypes.cpp
         HLSTorchToLinalg.cpp
         HLSPasses.cpp
+        MemoryPlanning.cpp
 
         ADDITIONAL_HEADER_DIRS
         ${PROJECT_SOURCE_DIR}/hls/mlir
