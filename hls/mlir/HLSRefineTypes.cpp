@@ -289,6 +289,8 @@ public:
       return visitAtenLinearOp(linear, operands);
     } else if (auto conv2d = llvm::dyn_cast<AtenConv2dOp>(op)) {
       return visitAtenConv2dOp(conv2d, operands);
+    } else if (auto convolution = llvm::dyn_cast<Aten_ConvolutionOp>(op)) {
+      return visitAten_ConvolutionOp(convolution, operands);
     } else if (auto conv2dout = llvm::dyn_cast<AtenTHNNConv2dOutOp>(op)) {
       return visitAtenTHNNConv2dOutOp(conv2dout, operands);
     } else if (auto maxPool2d = llvm::dyn_cast<AtenMaxPool2dOp>(op)) {
@@ -494,6 +496,9 @@ private:
                     ArrayRef<LatticeElement<ValueKnowledge> *> operands);
   ChangeResult
   visitAtenLinearOutOp(AtenLinearOutOp op,
+                    ArrayRef<LatticeElement<ValueKnowledge> *> operands);
+  ChangeResult
+  visitAten_ConvolutionOp(Aten_ConvolutionOp op,
                     ArrayRef<LatticeElement<ValueKnowledge> *> operands);
   ChangeResult
   visitAtenConv2dOp(AtenConv2dOp op,
@@ -874,6 +879,19 @@ ChangeResult TypeAnalyzer::visitAtenLinearOutOp(
 
 ChangeResult TypeAnalyzer::visitAtenConv2dOp(
     AtenConv2dOp op, ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
+  auto knowledge =
+      ValueKnowledge::getNotNonePessimisticValueState(op->getContext());
+  knowledge.hasSizes = true;
+  knowledge.sizes.resize(4, kUnknownSize);
+  // Running some experiments in PyTorch, the bias doesn't seem to
+  // contribute to the final element type.
+  knowledge.dtype = getPromotedResultTypeAssumingNonZeroRank(
+      op->getContext(), {&operands[0]->getValue(), &operands[1]->getValue()});
+  return getLatticeElement(op->getResult(0)).join(knowledge);
+}
+
+ChangeResult TypeAnalyzer::visitAten_ConvolutionOp(
+    Aten_ConvolutionOp op, ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
   auto knowledge =
       ValueKnowledge::getNotNonePessimisticValueState(op->getContext());
   knowledge.hasSizes = true;
