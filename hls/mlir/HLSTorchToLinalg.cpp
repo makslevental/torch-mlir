@@ -1271,8 +1271,8 @@ public:
     //    patterns.add<ConvertAtenLinearOutOp>(typeConverter, context);
     //    target.addIllegalOp<AtenPermuteOp>();
     //    patterns.add<ConvertAtenPermuteOp>(typeConverter, context);
-    target.addIllegalOp<Aten_ConvolutionOp>();
-    patterns.add<ConvertAten_ConvolutionOp>(typeConverter, context);
+//    target.addIllegalOp<Aten_ConvolutionOp>();
+//    patterns.add<ConvertAten_ConvolutionOp>(typeConverter, context);
 
     if (failed(applyPartialConversion(getOperation(), target,
                                       std::move(patterns))))

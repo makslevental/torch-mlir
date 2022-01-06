@@ -105,14 +105,15 @@ PIPELINE = [
     "torch-hls-drop-public-return",
     "builtin.func(cse)",
     "builtin.func(convert-linalg-to-loops)",
-    # "parallel-loop-fusion"
+    ## "parallel-loop-fusion"
     "builtin.func(lower-affine)",
     "builtin.func(convert-scf-to-std)",
     "builtin.func(refback-expand-ops-for-llvm)",
     "builtin.func(arith-expand)",
+    ## "builtin.func(quant-convert-const)",
     "builtin.func(convert-math-to-llvm)",
     "convert-memref-to-llvm{index-bitwidth=0 use-aligned-alloc=false}",
-    # "convert-std-to-llvm{data-layout= emit-c-wrappers=true index-bitwidth=0 use-bare-ptr-memref-call-conv=false}",
+    ## "convert-std-to-llvm{data-layout= emit-c-wrappers=true index-bitwidth=0 use-bare-ptr-memref-call-conv=false}",
     "convert-std-to-llvm{data-layout= emit-c-wrappers=false index-bitwidth=0 use-bare-ptr-memref-call-conv=true}",
     "reconcile-unrealized-casts",
 ]
@@ -131,5 +132,11 @@ if __name__ == "__main__":
         pm.run(mb.module)
 
     asm_for_error_report = mb.module.operation.get_asm(
-        large_elements_limit=1000, enable_debug_info=True)
+        large_elements_limit=100000, enable_debug_info=False)
     open(f"../scripts/braggnn.llvm.mlir", "w").write(asm_for_error_report)
+
+
+# kintex7 kintex7l artix7 artix7l aartix7 zynq azynq spartan7 aspartan7 virtexuplus virtexuplusHBM kintexuplus artixuplusb zynquplus azynquplus kintexu
+# set_directive_pipeline
+# set_directive_top
+# set_directive_unroll

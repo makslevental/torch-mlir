@@ -54,18 +54,20 @@ class PromoteAllocsPass : public HLSPromoteAllocsBase<PromoteAllocsPass> {
   void runOnOperation() override {
     auto module = getOperation();
     module.walk([&](FuncOp func) {
-      LiveRanges liveRanges_ = liveRanges(func);
-      SortedUniqueLiveRangeMap<size_t> sortedLiveRanges;
-      for (const auto &item : liveRanges_) {
-        auto op = llvm::cast<memref::AllocOp>(item.getFirst());
-        auto lvr = item.getSecond();
-        MemRefType type = op.getType();
-        sortedLiveRanges.insert(
-            {{{lvr[0], lvr[1]}, op, ""}, product(getConcreteShape(op, func))});
-      }
-      std::vector<PlannedAlloc> plannedAllocs =
-          greedyBySizeWithSmallestGap(sortedLiveRanges);
-      hoistAllocs(func, plannedAllocs);
+//      LiveRanges liveRanges_ = liveRanges(func);
+//      SortedUniqueLiveRangeMap<size_t> sortedLiveRanges;
+//      for (const auto &item : liveRanges_) {
+//        auto op = llvm::cast<memref::AllocOp>(item.getFirst());
+//        auto lvr = item.getSecond();
+//        MemRefType type = op.getType();
+//        sortedLiveRanges.insert(
+//            {{{lvr[0], lvr[1]}, op, ""}, product(getConcreteShape(op, func))});
+//      }
+//      std::vector<PlannedAlloc> plannedAllocs =
+//          greedyBySizeWithSmallestGap(sortedLiveRanges);
+//      hoistAllocs(func, plannedAllocs);
+      hoistAllocs(func);
+
     });
   }
 
@@ -163,6 +165,26 @@ class PromoteAllocsPass : public HLSPromoteAllocsBase<PromoteAllocsPass> {
     BlockArgument correctSlabArg = func.getArgument(func.getNumArguments() - 1);
     slabArg.replaceAllUsesWith(correctSlabArg);
     func.eraseArgument(func.getNumArguments() - 2);
+  }
+
+  void hoistAllocs(FuncOp func) {
+    WalkResult walkResult = func.walk([&](memref::AllocOp op) {
+      MemRefType type = op.getType();
+      auto shape = getConcreteShape(op, func);
+      auto promotedType =
+          MemRefType::get(shape, type.getElementType(), type.getLayout(),
+                          type.getMemorySpace());
+
+      func.insertArgument(func.getNumArguments(), promotedType, {});
+      BlockArgument arg = func.getArgument(func.getNumArguments()-1);
+      op.replaceAllUsesWith(arg);
+      return WalkResult::advance();
+    });
+    if (walkResult.wasInterrupted()) {
+      func.emitError() << "unimplemented: refining returns for function with "
+                          "more than one return op";
+      return signalPassFailure();
+    }
   }
 };
 

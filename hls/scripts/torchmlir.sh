@@ -116,6 +116,7 @@ set_top ${top_func}
 
 open_solution -reset solution1
 set_part "artix7"
+# xczu7ev-ffvc1156-2-e
 create_clock -period "300MHz"
 
 # /home/mlevental/dev_projects/phism/polygeist/llvm-project/build/bin/opt
