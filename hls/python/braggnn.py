@@ -3,12 +3,6 @@ from torch import nn
 from torch_mlir_e2e_test.torchscript.annotations import annotate_args, export
 
 
-def model_init(m):
-    if isinstance(m, torch.nn.Conv2d) or isinstance(m, torch.nn.Linear):
-        torch.nn.init.xavier_uniform_(m.weight)
-        torch.nn.init.zeros_(m.bias)
-
-
 class NLB(torch.nn.Module):
     def __init__(self, in_ch, relu_a=0.01):
         self.inter_ch = in_ch // 2
@@ -87,7 +81,7 @@ class BraggNN(torch.nn.Module):
                 nn.init.constant_(m.weight, 0)
                 nn.init.constant_(m.bias, 0)
 
-        self.cnn_layers_1 = torch.nn.Sequential(*self.cnn_ops[:1])
+        self.cnn_layers_1 = self.cnn_ops[0]
         self.cnn_layers_2 = torch.nn.Sequential(*self.cnn_ops[1:])
         self.dense_layers = torch.nn.Sequential(*self.dense_ops)
 

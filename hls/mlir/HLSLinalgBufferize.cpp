@@ -6,11 +6,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <mlir/Dialect/Linalg/Transforms/Transforms.h>
 #include "HLSPassDetail.h"
 #include "HLSPasses.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/Linalg/IR/LinalgOps.h"
-#include "mlir/Dialect/Linalg/Transforms/Transforms.h"
 #include "mlir/Dialect/Linalg/Utils/Utils.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/StandardOps/Utils/Utils.h"
@@ -22,6 +22,7 @@
 
 using namespace ::mlir;
 using namespace ::mlir::linalg;
+using namespace ::mlir::torch::HLS;
 
 static Value cloneMemref(Location loc, Value memref, OpBuilder &b) {
   auto memrefType = memref.getType().cast<MemRefType>();
@@ -56,7 +57,8 @@ allocateBuffersForResults(Location loc, LinalgOp linalgOp, ValueRange outputs,
     // Clone output buffers whose value is actually used.
     OpOperand *tiedOpOperand = linalgOp.getOutputOperand(resultIndex);
     if (linalgOp.payloadUsesValueFromOperand(tiedOpOperand)) {
-      resultBuffers.push_back(cloneMemref(loc, resultTensor, b));
+      resultBuffers.push_back(resultTensor);
+      //      resultBuffers.push_back(cloneMemref(loc, resultTensor, b));
       continue;
     }
 
@@ -70,6 +72,25 @@ allocateBuffersForResults(Location loc, LinalgOp linalgOp, ValueRange outputs,
         loc, memrefType, getDynOperands(loc, resultTensor, b)));
   }
   return success();
+}
+
+/// Create linalg op on buffers given the original tensor-based operation and
+/// the buffers for the outputs.
+LinalgOp
+createHLSLinalgOpOnBuffers(ConversionPatternRewriter &rewriter,
+                                      LinalgOp linalgOp, ValueRange inputs,
+                                      ValueRange outputs) {
+  SmallVector<Value, 8> newOperands = inputs;
+  newOperands.append(outputs.begin(), outputs.end());
+  auto *newOp = linalgOp.cloneWithoutRegions(rewriter, linalgOp.getLoc(),
+                                             /*resultTypes=*/ArrayRef<Type>{},
+                                             newOperands);
+  for (auto regions : llvm::zip(linalgOp->getRegions(), newOp->getRegions())) {
+    auto &oldRegion = std::get<0>(regions);
+    auto &newRegion = std::get<1>(regions);
+    rewriter.inlineRegionBefore(oldRegion, newRegion, newRegion.begin());
+  }
+  return newOp;
 }
 
 //===----------------------------------------------------------------------===//
@@ -154,22 +175,13 @@ public:
     linalg::GenericOpAdaptor adaptor(operands, op->getAttrDictionary());
     Location loc = op.getLoc();
     SmallVector<Value, 2> newOutputBuffers;
-    if (op->hasAttr("variant")) {
-      if (op->getAttr("variant").cast<StringAttr>().str() == "out") {
-        newOutputBuffers = adaptor.outputs();
-      } else if (op->getAttr("variant").cast<StringAttr>().str() == "inplace") {
-        newOutputBuffers = adaptor.inputs();
-      } else {
-        return failure();
-      }
-    } else {
-      if (failed(allocateBuffersForResults(loc, op, adaptor.outputs(),
-                                           newOutputBuffers, rewriter))) {
-        return op.emitOpError()
-               << "Failed to allocate buffers for tensor results.";
-      }
+
+    if (failed(allocateBuffersForResults(loc, op, adaptor.outputs(),
+                                         newOutputBuffers, rewriter))) {
+      return op.emitOpError()
+             << "Failed to allocate buffers for tensor results.";
     }
-    createLinalgOpOnBuffers(rewriter, op, adaptor.inputs(), newOutputBuffers);
+    createHLSLinalgOpOnBuffers(rewriter, op, adaptor.inputs(), newOutputBuffers);
     // Replace the results of the old op with the new output buffers.
     rewriter.replaceOp(op, newOutputBuffers);
     return success();
@@ -291,8 +303,25 @@ public:
 };
 } // namespace
 
+
 void populateHLSLinalgBufferizePatterns(BufferizeTypeConverter &typeConverter,
-                                        RewritePatternSet &patterns);
+                                        RewritePatternSet &patterns) {
+  // TODO: Drop this once tensor constants work in standard.
+  // clang-format off
+  patterns.add<
+      HLSBufferizeAnyLinalgOp,
+      BufferizeFillOp,
+      BufferizeInitTensorOp,
+      BufferizeTensorReshapeOp<TensorExpandShapeOp>,
+      BufferizeTensorReshapeOp<TensorCollapseShapeOp>,
+      ExtractSliceOpConverter,
+      InsertSliceOpConverter,
+      VectorTransferReadOpConverter,
+      VectorTransferWriteOpConverter
+  >(typeConverter, patterns.getContext());
+  // clang-format on
+    patterns.add<GeneralizePadTensorOpPattern>(patterns.getContext());
+}
 
 namespace {
 /// Converts Linalg operations that work on tensor-type operands or results to
@@ -308,8 +337,7 @@ struct HLSLinalgBufferizePass
     target.addLegalDialect<arith::ArithmeticDialect, AffineDialect,
                            memref::MemRefDialect, StandardOpsDialect,
                            tensor::TensorDialect>();
-    target.addIllegalOp<InitTensorOp, tensor::ExtractSliceOp,
-                        tensor::InsertSliceOp, PadTensorOp>();
+    target.addIllegalOp<linalg::CopyOp>();
 
     // Mark all Linalg operations illegal as long as they work on tensors.
     auto isLegalOperation = [&](Operation *op) {
@@ -334,21 +362,3 @@ mlir::torch::HLS::createHLSLinalgBufferizePass() {
   return std::make_unique<HLSLinalgBufferizePass>();
 }
 
-void populateHLSLinalgBufferizePatterns(BufferizeTypeConverter &typeConverter,
-                                        RewritePatternSet &patterns) {
-  // TODO: Drop this once tensor constants work in standard.
-  // clang-format off
-  patterns.add<
-      HLSBufferizeAnyLinalgOp,
-      BufferizeFillOp,
-      BufferizeInitTensorOp,
-      BufferizeTensorReshapeOp<TensorExpandShapeOp>,
-      BufferizeTensorReshapeOp<TensorCollapseShapeOp>,
-      ExtractSliceOpConverter,
-      InsertSliceOpConverter,
-      VectorTransferReadOpConverter,
-      VectorTransferWriteOpConverter
-    >(typeConverter, patterns.getContext());
-  // clang-format on
-  patterns.add<GeneralizePadTensorOpPattern>(patterns.getContext());
-}
