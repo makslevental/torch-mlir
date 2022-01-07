@@ -13,6 +13,7 @@
 #include "mlir/Pass/Pass.h"
 
 #include <memory>
+#include <mlir/Transforms/Bufferize.h>
 
 namespace mlir {
 namespace torch {
@@ -30,11 +31,12 @@ std::unique_ptr<OperationPass<FuncOp>> createHLSDecomposeComplexOpsPass();
 
 std::unique_ptr<OperationPass<FuncOp>> createHLSConvertTorchToLinalgPass();
 
-//std::unique_ptr<OperationPass<FuncOp>> createHLSReduceOpVariantsPass();
+// std::unique_ptr<OperationPass<FuncOp>> createHLSReduceOpVariantsPass();
 
-//std::unique_ptr<OperationPass<FuncOp>> createHLSConvertOperatorsPass();
+// std::unique_ptr<OperationPass<FuncOp>> createHLSConvertOperatorsPass();
 
-//std::unique_ptr<OperationPass<ModuleOp>> createHLSAdjustCallingConventionsPass();
+// std::unique_ptr<OperationPass<ModuleOp>>
+// createHLSAdjustCallingConventionsPass();
 
 void createTorchBackendToLinalgOnTensorsBackendPipeline(OpPassManager &pm);
 
