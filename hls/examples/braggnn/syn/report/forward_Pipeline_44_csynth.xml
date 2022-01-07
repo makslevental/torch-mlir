@@ -6,11 +6,11 @@
 
 <UserAssignments>
 <unit>ns</unit>
-<ProductFamily>artix7</ProductFamily>
-<Part>xc7a12ti-csg325-1L</Part>
+<ProductFamily>virtexuplus</ProductFamily>
+<Part>xcvu35p-fsvh2104-3-e</Part>
 <TopModelName>forward_Pipeline_44</TopModelName>
-<TargetClockPeriod>3.33</TargetClockPeriod>
-<ClockUncertainty>0.90</ClockUncertainty>
+<TargetClockPeriod>1.00</TargetClockPeriod>
+<ClockUncertainty>0.27</ClockUncertainty>
 <FlowTarget>vivado</FlowTarget>
 </UserAssignments>
 
@@ -18,26 +18,26 @@
 <PipelineType>no</PipelineType>
 <SummaryOfTimingAnalysis>
 <unit>ns</unit>
-<EstimatedClockPeriod>1.861</EstimatedClockPeriod>
+<EstimatedClockPeriod>1.468</EstimatedClockPeriod>
 </SummaryOfTimingAnalysis>
 <SummaryOfOverallLatency>
 <unit>clock cycles</unit>
-<Best-caseLatency>18</Best-caseLatency>
-<Average-caseLatency>18</Average-caseLatency>
-<Worst-caseLatency>18</Worst-caseLatency>
-<Best-caseRealTimeLatency>59.994 ns</Best-caseRealTimeLatency>
-<Average-caseRealTimeLatency>59.994 ns</Average-caseRealTimeLatency>
-<Worst-caseRealTimeLatency>59.994 ns</Worst-caseRealTimeLatency>
-<Interval-min>18</Interval-min>
-<Interval-max>18</Interval-max>
+<Best-caseLatency>210</Best-caseLatency>
+<Average-caseLatency>210</Average-caseLatency>
+<Worst-caseLatency>210</Worst-caseLatency>
+<Best-caseRealTimeLatency>0.308 us</Best-caseRealTimeLatency>
+<Average-caseRealTimeLatency>0.308 us</Average-caseRealTimeLatency>
+<Worst-caseRealTimeLatency>0.308 us</Worst-caseRealTimeLatency>
+<Interval-min>210</Interval-min>
+<Interval-max>210</Interval-max>
 </SummaryOfOverallLatency>
 <SummaryOfLoopLatency>
 <Loop1>
-<TripCount>16</TripCount>
-<Latency>16</Latency>
-<AbsoluteTimeLatency>53</AbsoluteTimeLatency>
-<PipelineII>1</PipelineII>
-<PipelineDepth>2</PipelineDepth>
+<TripCount>2</TripCount>
+<Latency>208</Latency>
+<AbsoluteTimeLatency>305</AbsoluteTimeLatency>
+<PipelineII>104</PipelineII>
+<PipelineDepth>105</PipelineDepth>
 <InstanceList>
 </InstanceList>
 </Loop1>
@@ -46,18 +46,18 @@
 
 <AreaEstimates>
 <Resources>
-<FF>13</FF>
-<LUT>65</LUT>
+<FF>176</FF>
+<LUT>618</LUT>
 <BRAM_18K>0</BRAM_18K>
 <DSP>0</DSP>
 <URAM>0</URAM>
 </Resources>
 <AvailableResources>
-<BRAM_18K>40</BRAM_18K>
-<DSP>40</DSP>
-<FF>16000</FF>
-<LUT>8000</LUT>
-<URAM>0</URAM>
+<BRAM_18K>2688</BRAM_18K>
+<DSP>5952</DSP>
+<FF>1743360</FF>
+<LUT>871680</LUT>
+<URAM>640</URAM>
 </AvailableResources>
 </AreaEstimates>
 
@@ -129,19 +129,85 @@
 <Attribute>control</Attribute>
 </RtlPorts>
 <RtlPorts>
-<name>arg_3</name>
-<Object>arg_3</Object>
+<name>grp_fu_622_p_din0</name>
+<Object>forward_Pipeline_44</Object>
+<Type>return value</Type>
+<Scope></Scope>
+<IOProtocol>ap_ctrl_hs</IOProtocol>
+<IOConfig></IOConfig>
+<Dir>out</Dir>
+<Bits>32</Bits>
+<Attribute>data</Attribute>
+</RtlPorts>
+<RtlPorts>
+<name>grp_fu_622_p_din1</name>
+<Object>forward_Pipeline_44</Object>
+<Type>return value</Type>
+<Scope></Scope>
+<IOProtocol>ap_ctrl_hs</IOProtocol>
+<IOConfig></IOConfig>
+<Dir>out</Dir>
+<Bits>32</Bits>
+<Attribute>data</Attribute>
+</RtlPorts>
+<RtlPorts>
+<name>grp_fu_622_p_opcode</name>
+<Object>forward_Pipeline_44</Object>
+<Type>return value</Type>
+<Scope></Scope>
+<IOProtocol>ap_ctrl_hs</IOProtocol>
+<IOConfig></IOConfig>
+<Dir>out</Dir>
+<Bits>2</Bits>
+<Attribute>data</Attribute>
+</RtlPorts>
+<RtlPorts>
+<name>grp_fu_622_p_dout0</name>
+<Object>forward_Pipeline_44</Object>
+<Type>return value</Type>
+<Scope></Scope>
+<IOProtocol>ap_ctrl_hs</IOProtocol>
+<IOConfig></IOConfig>
+<Dir>in</Dir>
+<Bits>32</Bits>
+<Attribute>data</Attribute>
+</RtlPorts>
+<RtlPorts>
+<name>grp_fu_622_p_ce</name>
+<Object>forward_Pipeline_44</Object>
+<Type>return value</Type>
+<Scope></Scope>
+<IOProtocol>ap_ctrl_hs</IOProtocol>
+<IOConfig></IOConfig>
+<Dir>out</Dir>
+<Bits>1</Bits>
+<Attribute>data</Attribute>
+</RtlPorts>
+<RtlPorts>
+<name>val_39</name>
+<Object>val_39</Object>
+<Type>scalar</Type>
+<Scope></Scope>
+<IOProtocol>ap_none</IOProtocol>
+<IOConfig></IOConfig>
+<Dir>in</Dir>
+<Bits>32</Bits>
+<Attribute>data</Attribute>
+</RtlPorts>
+<RtlPorts>
+<name>arg_32</name>
+<Object>arg_32</Object>
 <Type>pointer</Type>
 <Scope></Scope>
 <IOProtocol>ap_vld</IOProtocol>
 <IOConfig></IOConfig>
 <Dir>out</Dir>
-<Bits>8</Bits>
+<Bits>32</Bits>
 <Attribute>data</Attribute>
 </RtlPorts>
 <RtlPorts>
-<name>arg_3_ap_vld</name>
-<Object>arg_3</Object>
+<name>arg_32_ap_vld</name>
+<Object>arg_32</Object>
 <Type>pointer</Type>
 <Scope></Scope>
 <IOProtocol>ap_vld</IOProtocol>

@@ -14,8 +14,9 @@ module forward_forward_Pipeline_41 (
         ap_done,
         ap_idle,
         ap_ready,
-        arg_3,
-        arg_3_ap_vld
+        empty,
+        arg_31,
+        arg_31_ap_vld
 );
 
 parameter    ap_ST_fsm_pp0_stage0 = 1'd1;
@@ -26,11 +27,12 @@ input   ap_start;
 output   ap_done;
 output   ap_idle;
 output   ap_ready;
-output  [7:0] arg_3;
-output   arg_3_ap_vld;
+input  [31:0] empty;
+output  [31:0] arg_31;
+output   arg_31_ap_vld;
 
 reg ap_idle;
-reg arg_3_ap_vld;
+reg arg_31_ap_vld;
 
 (* fsm_encoding = "none" *) reg   [0:0] ap_CS_fsm;
 wire    ap_CS_fsm_pp0_stage0;
@@ -40,15 +42,15 @@ reg    ap_idle_pp0;
 wire    ap_block_state1_pp0_stage0_iter0;
 wire    ap_block_state2_pp0_stage0_iter1;
 wire    ap_block_pp0_stage0_subdone;
-wire   [0:0] exitcond23359_fu_46_p2;
+wire   [0:0] exitcond2066_fu_54_p2;
 reg    ap_condition_exit_pp0_iter0_stage0;
 wire    ap_loop_exit_ready;
 reg    ap_ready_int;
-wire   [5:0] val_1249_fu_52_p2;
-reg   [5:0] val_1249_reg_72;
+wire   [3:0] val_1137_fu_60_p2;
+reg   [3:0] val_1137_reg_80;
 wire    ap_block_pp0_stage0_11001;
-reg   [5:0] val_124037_fu_26;
-reg   [5:0] ap_sig_allocacmp_val_124037_load;
+reg   [3:0] val_11238_fu_28;
+reg   [3:0] ap_sig_allocacmp_val_11238_load;
 wire    ap_block_pp0_stage0;
 wire    ap_loop_init;
 wire    ap_block_pp0_stage0_01001;
@@ -117,21 +119,21 @@ end
 always @ (posedge ap_clk) begin
     if (((1'b0 == ap_block_pp0_stage0_11001) & (1'b1 == ap_CS_fsm_pp0_stage0))) begin
         if ((ap_loop_init == 1'b1)) begin
-            val_124037_fu_26 <= 6'd0;
+            val_11238_fu_28 <= 4'd0;
         end else if ((ap_enable_reg_pp0_iter1 == 1'b1)) begin
-            val_124037_fu_26 <= val_1249_reg_72;
+            val_11238_fu_28 <= val_1137_reg_80;
         end
     end
 end
 
 always @ (posedge ap_clk) begin
     if (((1'b0 == ap_block_pp0_stage0_11001) & (1'b1 == ap_CS_fsm_pp0_stage0))) begin
-        val_1249_reg_72 <= val_1249_fu_52_p2;
+        val_1137_reg_80 <= val_1137_fu_60_p2;
     end
 end
 
 always @ (*) begin
-    if (((exitcond23359_fu_46_p2 == 1'd1) & (1'b0 == ap_block_pp0_stage0_subdone) & (ap_enable_reg_pp0_iter0 == 1'b1) & (1'b1 == ap_CS_fsm_pp0_stage0))) begin
+    if (((exitcond2066_fu_54_p2 == 1'd1) & (1'b0 == ap_block_pp0_stage0_subdone) & (ap_enable_reg_pp0_iter0 == 1'b1) & (1'b1 == ap_CS_fsm_pp0_stage0))) begin
         ap_condition_exit_pp0_iter0_stage0 = 1'b1;
     end else begin
         ap_condition_exit_pp0_iter0_stage0 = 1'b0;
@@ -173,22 +175,22 @@ end
 always @ (*) begin
     if (((1'b0 == ap_block_pp0_stage0) & (1'b1 == ap_CS_fsm_pp0_stage0))) begin
         if ((ap_loop_init == 1'b1)) begin
-            ap_sig_allocacmp_val_124037_load = 6'd0;
+            ap_sig_allocacmp_val_11238_load = 4'd0;
         end else if ((ap_enable_reg_pp0_iter1 == 1'b1)) begin
-            ap_sig_allocacmp_val_124037_load = val_1249_reg_72;
+            ap_sig_allocacmp_val_11238_load = val_1137_reg_80;
         end else begin
-            ap_sig_allocacmp_val_124037_load = val_124037_fu_26;
+            ap_sig_allocacmp_val_11238_load = val_11238_fu_28;
         end
     end else begin
-        ap_sig_allocacmp_val_124037_load = val_124037_fu_26;
+        ap_sig_allocacmp_val_11238_load = val_11238_fu_28;
     end
 end
 
 always @ (*) begin
-    if (((1'b0 == ap_block_pp0_stage0_11001) & (ap_enable_reg_pp0_iter1 == 1'b1) & (1'b1 == ap_CS_fsm_pp0_stage0))) begin
-        arg_3_ap_vld = 1'b1;
+    if (((exitcond2066_fu_54_p2 == 1'd0) & (1'b0 == ap_block_pp0_stage0_11001) & (ap_enable_reg_pp0_iter0 == 1'b1) & (1'b1 == ap_CS_fsm_pp0_stage0))) begin
+        arg_31_ap_vld = 1'b1;
     end else begin
-        arg_3_ap_vld = 1'b0;
+        arg_31_ap_vld = 1'b0;
     end
 end
 
@@ -223,10 +225,10 @@ assign ap_enable_reg_pp0_iter0 = ap_start_int;
 
 assign ap_loop_exit_ready = ap_condition_exit_pp0_iter0_stage0;
 
-assign arg_3 = 8'd0;
+assign arg_31 = empty;
 
-assign exitcond23359_fu_46_p2 = ((ap_sig_allocacmp_val_124037_load == 6'd32) ? 1'b1 : 1'b0);
+assign exitcond2066_fu_54_p2 = ((ap_sig_allocacmp_val_11238_load == 4'd8) ? 1'b1 : 1'b0);
 
-assign val_1249_fu_52_p2 = (ap_sig_allocacmp_val_124037_load + 6'd1);
+assign val_1137_fu_60_p2 = (ap_sig_allocacmp_val_11238_load + 4'd1);
 
 endmodule //forward_forward_Pipeline_41
