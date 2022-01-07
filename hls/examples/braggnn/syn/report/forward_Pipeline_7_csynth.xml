@@ -6,11 +6,11 @@
 
 <UserAssignments>
 <unit>ns</unit>
-<ProductFamily>artix7</ProductFamily>
-<Part>xc7a12ti-csg325-1L</Part>
+<ProductFamily>virtexuplus</ProductFamily>
+<Part>xcvu35p-fsvh2104-3-e</Part>
 <TopModelName>forward_Pipeline_7</TopModelName>
-<TargetClockPeriod>3.33</TargetClockPeriod>
-<ClockUncertainty>0.90</ClockUncertainty>
+<TargetClockPeriod>1.00</TargetClockPeriod>
+<ClockUncertainty>0.27</ClockUncertainty>
 <FlowTarget>vivado</FlowTarget>
 </UserAssignments>
 
@@ -18,16 +18,16 @@
 <PipelineType>no</PipelineType>
 <SummaryOfTimingAnalysis>
 <unit>ns</unit>
-<EstimatedClockPeriod>2.131</EstimatedClockPeriod>
+<EstimatedClockPeriod>0.684</EstimatedClockPeriod>
 </SummaryOfTimingAnalysis>
 <SummaryOfOverallLatency>
 <unit>clock cycles</unit>
 <Best-caseLatency>2594</Best-caseLatency>
 <Average-caseLatency>2594</Average-caseLatency>
 <Worst-caseLatency>2594</Worst-caseLatency>
-<Best-caseRealTimeLatency>8.646 us</Best-caseRealTimeLatency>
-<Average-caseRealTimeLatency>8.646 us</Average-caseRealTimeLatency>
-<Worst-caseRealTimeLatency>8.646 us</Worst-caseRealTimeLatency>
+<Best-caseRealTimeLatency>2.594 us</Best-caseRealTimeLatency>
+<Average-caseRealTimeLatency>2.594 us</Average-caseRealTimeLatency>
+<Worst-caseRealTimeLatency>2.594 us</Worst-caseRealTimeLatency>
 <Interval-min>2594</Interval-min>
 <Interval-max>2594</Interval-max>
 </SummaryOfOverallLatency>
@@ -35,7 +35,7 @@
 <Loop1>
 <TripCount>2592</TripCount>
 <Latency>2592</Latency>
-<AbsoluteTimeLatency>8639</AbsoluteTimeLatency>
+<AbsoluteTimeLatency>2592</AbsoluteTimeLatency>
 <PipelineII>1</PipelineII>
 <PipelineDepth>2</PipelineDepth>
 <InstanceList>
@@ -47,17 +47,17 @@
 <AreaEstimates>
 <Resources>
 <FF>27</FF>
-<LUT>73</LUT>
+<LUT>74</LUT>
 <BRAM_18K>0</BRAM_18K>
 <DSP>0</DSP>
 <URAM>0</URAM>
 </Resources>
 <AvailableResources>
-<BRAM_18K>40</BRAM_18K>
-<DSP>40</DSP>
-<FF>16000</FF>
-<LUT>8000</LUT>
-<URAM>0</URAM>
+<BRAM_18K>2688</BRAM_18K>
+<DSP>5952</DSP>
+<FF>1743360</FF>
+<LUT>871680</LUT>
+<URAM>640</URAM>
 </AvailableResources>
 </AreaEstimates>
 
@@ -129,19 +129,19 @@
 <Attribute>control</Attribute>
 </RtlPorts>
 <RtlPorts>
-<name>arg_3</name>
-<Object>arg_3</Object>
+<name>arg_6</name>
+<Object>arg_6</Object>
 <Type>pointer</Type>
 <Scope></Scope>
 <IOProtocol>ap_vld</IOProtocol>
 <IOConfig></IOConfig>
 <Dir>out</Dir>
-<Bits>8</Bits>
+<Bits>32</Bits>
 <Attribute>data</Attribute>
 </RtlPorts>
 <RtlPorts>
-<name>arg_3_ap_vld</name>
-<Object>arg_3</Object>
+<name>arg_6_ap_vld</name>
+<Object>arg_6</Object>
 <Type>pointer</Type>
 <Scope></Scope>
 <IOProtocol>ap_vld</IOProtocol>

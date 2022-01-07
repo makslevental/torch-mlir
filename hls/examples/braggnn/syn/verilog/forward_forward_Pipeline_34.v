@@ -14,8 +14,8 @@ module forward_forward_Pipeline_34 (
         ap_done,
         ap_idle,
         ap_ready,
-        arg_3,
-        arg_3_ap_vld
+        arg_26,
+        arg_26_ap_vld
 );
 
 parameter    ap_ST_fsm_pp0_stage0 = 1'd1;
@@ -26,11 +26,11 @@ input   ap_start;
 output   ap_done;
 output   ap_idle;
 output   ap_ready;
-output  [7:0] arg_3;
-output   arg_3_ap_vld;
+output  [31:0] arg_26;
+output   arg_26_ap_vld;
 
 reg ap_idle;
-reg arg_3_ap_vld;
+reg arg_26_ap_vld;
 
 (* fsm_encoding = "none" *) reg   [0:0] ap_CS_fsm;
 wire    ap_CS_fsm_pp0_stage0;
@@ -40,15 +40,15 @@ reg    ap_idle_pp0;
 wire    ap_block_state1_pp0_stage0_iter0;
 wire    ap_block_state2_pp0_stage0_iter1;
 wire    ap_block_pp0_stage0_subdone;
-wire   [0:0] exitcond24371_fu_46_p2;
+wire   [0:0] exitcond21717_fu_44_p2;
 reg    ap_condition_exit_pp0_iter0_stage0;
 wire    ap_loop_exit_ready;
 reg    ap_ready_int;
-wire   [6:0] val_1133_fu_52_p2;
-reg   [6:0] val_1133_reg_72;
+wire   [4:0] val_1012_fu_50_p2;
+reg   [4:0] val_1012_reg_70;
 wire    ap_block_pp0_stage0_11001;
-reg   [6:0] val_112652_fu_26;
-reg   [6:0] ap_sig_allocacmp_val_112652_load;
+reg   [4:0] val_100524_fu_24;
+reg   [4:0] ap_sig_allocacmp_val_100524_load;
 wire    ap_block_pp0_stage0;
 wire    ap_loop_init;
 wire    ap_block_pp0_stage0_01001;
@@ -117,21 +117,21 @@ end
 always @ (posedge ap_clk) begin
     if (((1'b0 == ap_block_pp0_stage0_11001) & (1'b1 == ap_CS_fsm_pp0_stage0))) begin
         if ((ap_loop_init == 1'b1)) begin
-            val_112652_fu_26 <= 7'd0;
+            val_100524_fu_24 <= 5'd0;
         end else if ((ap_enable_reg_pp0_iter1 == 1'b1)) begin
-            val_112652_fu_26 <= val_1133_reg_72;
+            val_100524_fu_24 <= val_1012_reg_70;
         end
     end
 end
 
 always @ (posedge ap_clk) begin
     if (((1'b0 == ap_block_pp0_stage0_11001) & (1'b1 == ap_CS_fsm_pp0_stage0))) begin
-        val_1133_reg_72 <= val_1133_fu_52_p2;
+        val_1012_reg_70 <= val_1012_fu_50_p2;
     end
 end
 
 always @ (*) begin
-    if (((exitcond24371_fu_46_p2 == 1'd1) & (1'b0 == ap_block_pp0_stage0_subdone) & (ap_enable_reg_pp0_iter0 == 1'b1) & (1'b1 == ap_CS_fsm_pp0_stage0))) begin
+    if (((exitcond21717_fu_44_p2 == 1'd1) & (1'b0 == ap_block_pp0_stage0_subdone) & (ap_enable_reg_pp0_iter0 == 1'b1) & (1'b1 == ap_CS_fsm_pp0_stage0))) begin
         ap_condition_exit_pp0_iter0_stage0 = 1'b1;
     end else begin
         ap_condition_exit_pp0_iter0_stage0 = 1'b0;
@@ -173,22 +173,22 @@ end
 always @ (*) begin
     if (((1'b0 == ap_block_pp0_stage0) & (1'b1 == ap_CS_fsm_pp0_stage0))) begin
         if ((ap_loop_init == 1'b1)) begin
-            ap_sig_allocacmp_val_112652_load = 7'd0;
+            ap_sig_allocacmp_val_100524_load = 5'd0;
         end else if ((ap_enable_reg_pp0_iter1 == 1'b1)) begin
-            ap_sig_allocacmp_val_112652_load = val_1133_reg_72;
+            ap_sig_allocacmp_val_100524_load = val_1012_reg_70;
         end else begin
-            ap_sig_allocacmp_val_112652_load = val_112652_fu_26;
+            ap_sig_allocacmp_val_100524_load = val_100524_fu_24;
         end
     end else begin
-        ap_sig_allocacmp_val_112652_load = val_112652_fu_26;
+        ap_sig_allocacmp_val_100524_load = val_100524_fu_24;
     end
 end
 
 always @ (*) begin
     if (((1'b0 == ap_block_pp0_stage0_11001) & (ap_enable_reg_pp0_iter1 == 1'b1) & (1'b1 == ap_CS_fsm_pp0_stage0))) begin
-        arg_3_ap_vld = 1'b1;
+        arg_26_ap_vld = 1'b1;
     end else begin
-        arg_3_ap_vld = 1'b0;
+        arg_26_ap_vld = 1'b0;
     end
 end
 
@@ -223,10 +223,10 @@ assign ap_enable_reg_pp0_iter0 = ap_start_int;
 
 assign ap_loop_exit_ready = ap_condition_exit_pp0_iter0_stage0;
 
-assign arg_3 = 8'd0;
+assign arg_26 = 32'd0;
 
-assign exitcond24371_fu_46_p2 = ((ap_sig_allocacmp_val_112652_load == 7'd64) ? 1'b1 : 1'b0);
+assign exitcond21717_fu_44_p2 = ((ap_sig_allocacmp_val_100524_load == 5'd16) ? 1'b1 : 1'b0);
 
-assign val_1133_fu_52_p2 = (ap_sig_allocacmp_val_112652_load + 7'd1);
+assign val_1012_fu_50_p2 = (ap_sig_allocacmp_val_100524_load + 5'd1);
 
 endmodule //forward_forward_Pipeline_34

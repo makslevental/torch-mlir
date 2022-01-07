@@ -14,8 +14,8 @@ module forward_forward_Pipeline_26 (
         ap_done,
         ap_idle,
         ap_ready,
-        arg_3,
-        arg_3_ap_vld
+        arg_20,
+        arg_20_ap_vld
 );
 
 parameter    ap_ST_fsm_pp0_stage0 = 1'd1;
@@ -26,11 +26,11 @@ input   ap_start;
 output   ap_done;
 output   ap_idle;
 output   ap_ready;
-output  [7:0] arg_3;
-output   arg_3_ap_vld;
+output  [31:0] arg_20;
+output   arg_20_ap_vld;
 
 reg ap_idle;
-reg arg_3_ap_vld;
+reg arg_20_ap_vld;
 
 (* fsm_encoding = "none" *) reg   [0:0] ap_CS_fsm;
 wire    ap_CS_fsm_pp0_stage0;
@@ -40,15 +40,15 @@ reg    ap_idle_pp0;
 wire    ap_block_state1_pp0_stage0_iter0;
 wire    ap_block_state2_pp0_stage0_iter1;
 wire    ap_block_pp0_stage0_subdone;
-wire   [0:0] exitcond_flatten635_fu_46_p2;
+wire   [0:0] exitcond22929_fu_44_p2;
 reg    ap_condition_exit_pp0_iter0_stage0;
 wire    ap_loop_exit_ready;
 reg    ap_ready_int;
-wire   [10:0] indvar_flatten_next634_fu_52_p2;
-reg   [10:0] indvar_flatten_next634_reg_72;
+wire   [6:0] val_876_fu_50_p2;
+reg   [6:0] val_876_reg_70;
 wire    ap_block_pp0_stage0_11001;
-reg   [10:0] indvar_flatten633_fu_26;
-reg   [10:0] ap_sig_allocacmp_indvar_flatten633_load;
+reg   [6:0] val_86942_fu_24;
+reg   [6:0] ap_sig_allocacmp_val_86942_load;
 wire    ap_block_pp0_stage0;
 wire    ap_loop_init;
 wire    ap_block_pp0_stage0_01001;
@@ -117,21 +117,21 @@ end
 always @ (posedge ap_clk) begin
     if (((1'b0 == ap_block_pp0_stage0_11001) & (1'b1 == ap_CS_fsm_pp0_stage0))) begin
         if ((ap_loop_init == 1'b1)) begin
-            indvar_flatten633_fu_26 <= 11'd0;
+            val_86942_fu_24 <= 7'd0;
         end else if ((ap_enable_reg_pp0_iter1 == 1'b1)) begin
-            indvar_flatten633_fu_26 <= indvar_flatten_next634_reg_72;
+            val_86942_fu_24 <= val_876_reg_70;
         end
     end
 end
 
 always @ (posedge ap_clk) begin
     if (((1'b0 == ap_block_pp0_stage0_11001) & (1'b1 == ap_CS_fsm_pp0_stage0))) begin
-        indvar_flatten_next634_reg_72 <= indvar_flatten_next634_fu_52_p2;
+        val_876_reg_70 <= val_876_fu_50_p2;
     end
 end
 
 always @ (*) begin
-    if (((exitcond_flatten635_fu_46_p2 == 1'd1) & (1'b0 == ap_block_pp0_stage0_subdone) & (ap_enable_reg_pp0_iter0 == 1'b1) & (1'b1 == ap_CS_fsm_pp0_stage0))) begin
+    if (((exitcond22929_fu_44_p2 == 1'd1) & (1'b0 == ap_block_pp0_stage0_subdone) & (ap_enable_reg_pp0_iter0 == 1'b1) & (1'b1 == ap_CS_fsm_pp0_stage0))) begin
         ap_condition_exit_pp0_iter0_stage0 = 1'b1;
     end else begin
         ap_condition_exit_pp0_iter0_stage0 = 1'b0;
@@ -173,22 +173,22 @@ end
 always @ (*) begin
     if (((1'b0 == ap_block_pp0_stage0) & (1'b1 == ap_CS_fsm_pp0_stage0))) begin
         if ((ap_loop_init == 1'b1)) begin
-            ap_sig_allocacmp_indvar_flatten633_load = 11'd0;
+            ap_sig_allocacmp_val_86942_load = 7'd0;
         end else if ((ap_enable_reg_pp0_iter1 == 1'b1)) begin
-            ap_sig_allocacmp_indvar_flatten633_load = indvar_flatten_next634_reg_72;
+            ap_sig_allocacmp_val_86942_load = val_876_reg_70;
         end else begin
-            ap_sig_allocacmp_indvar_flatten633_load = indvar_flatten633_fu_26;
+            ap_sig_allocacmp_val_86942_load = val_86942_fu_24;
         end
     end else begin
-        ap_sig_allocacmp_indvar_flatten633_load = indvar_flatten633_fu_26;
+        ap_sig_allocacmp_val_86942_load = val_86942_fu_24;
     end
 end
 
 always @ (*) begin
     if (((1'b0 == ap_block_pp0_stage0_11001) & (ap_enable_reg_pp0_iter1 == 1'b1) & (1'b1 == ap_CS_fsm_pp0_stage0))) begin
-        arg_3_ap_vld = 1'b1;
+        arg_20_ap_vld = 1'b1;
     end else begin
-        arg_3_ap_vld = 1'b0;
+        arg_20_ap_vld = 1'b0;
     end
 end
 
@@ -223,10 +223,10 @@ assign ap_enable_reg_pp0_iter0 = ap_start_int;
 
 assign ap_loop_exit_ready = ap_condition_exit_pp0_iter0_stage0;
 
-assign arg_3 = 8'd0;
+assign arg_20 = 32'd0;
 
-assign exitcond_flatten635_fu_46_p2 = ((ap_sig_allocacmp_indvar_flatten633_load == 11'd1568) ? 1'b1 : 1'b0);
+assign exitcond22929_fu_44_p2 = ((ap_sig_allocacmp_val_86942_load == 7'd64) ? 1'b1 : 1'b0);
 
-assign indvar_flatten_next634_fu_52_p2 = (ap_sig_allocacmp_indvar_flatten633_load + 11'd1);
+assign val_876_fu_50_p2 = (ap_sig_allocacmp_val_86942_load + 7'd1);
 
 endmodule //forward_forward_Pipeline_26
