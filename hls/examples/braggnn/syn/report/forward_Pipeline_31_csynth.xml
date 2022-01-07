@@ -6,11 +6,11 @@
 
 <UserAssignments>
 <unit>ns</unit>
-<ProductFamily>artix7</ProductFamily>
-<Part>xc7a12ti-csg325-1L</Part>
+<ProductFamily>virtexuplus</ProductFamily>
+<Part>xcvu35p-fsvh2104-3-e</Part>
 <TopModelName>forward_Pipeline_31</TopModelName>
-<TargetClockPeriod>3.33</TargetClockPeriod>
-<ClockUncertainty>0.90</ClockUncertainty>
+<TargetClockPeriod>1.00</TargetClockPeriod>
+<ClockUncertainty>0.27</ClockUncertainty>
 <FlowTarget>vivado</FlowTarget>
 </UserAssignments>
 
@@ -18,24 +18,24 @@
 <PipelineType>no</PipelineType>
 <SummaryOfTimingAnalysis>
 <unit>ns</unit>
-<EstimatedClockPeriod>2.115</EstimatedClockPeriod>
+<EstimatedClockPeriod>0.684</EstimatedClockPeriod>
 </SummaryOfTimingAnalysis>
 <SummaryOfOverallLatency>
 <unit>clock cycles</unit>
-<Best-caseLatency>202</Best-caseLatency>
-<Average-caseLatency>202</Average-caseLatency>
-<Worst-caseLatency>202</Worst-caseLatency>
-<Best-caseRealTimeLatency>0.673 us</Best-caseRealTimeLatency>
-<Average-caseRealTimeLatency>0.673 us</Average-caseRealTimeLatency>
-<Worst-caseRealTimeLatency>0.673 us</Worst-caseRealTimeLatency>
-<Interval-min>202</Interval-min>
-<Interval-max>202</Interval-max>
+<Best-caseLatency>2050</Best-caseLatency>
+<Average-caseLatency>2050</Average-caseLatency>
+<Worst-caseLatency>2050</Worst-caseLatency>
+<Best-caseRealTimeLatency>2.050 us</Best-caseRealTimeLatency>
+<Average-caseRealTimeLatency>2.050 us</Average-caseRealTimeLatency>
+<Worst-caseRealTimeLatency>2.050 us</Worst-caseRealTimeLatency>
+<Interval-min>2050</Interval-min>
+<Interval-max>2050</Interval-max>
 </SummaryOfOverallLatency>
 <SummaryOfLoopLatency>
 <Loop1>
-<TripCount>200</TripCount>
-<Latency>200</Latency>
-<AbsoluteTimeLatency>666</AbsoluteTimeLatency>
+<TripCount>2048</TripCount>
+<Latency>2048</Latency>
+<AbsoluteTimeLatency>2048</AbsoluteTimeLatency>
 <PipelineII>1</PipelineII>
 <PipelineDepth>2</PipelineDepth>
 <InstanceList>
@@ -46,18 +46,18 @@
 
 <AreaEstimates>
 <Resources>
-<FF>19</FF>
-<LUT>68</LUT>
+<FF>27</FF>
+<LUT>74</LUT>
 <BRAM_18K>0</BRAM_18K>
 <DSP>0</DSP>
 <URAM>0</URAM>
 </Resources>
 <AvailableResources>
-<BRAM_18K>40</BRAM_18K>
-<DSP>40</DSP>
-<FF>16000</FF>
-<LUT>8000</LUT>
-<URAM>0</URAM>
+<BRAM_18K>2688</BRAM_18K>
+<DSP>5952</DSP>
+<FF>1743360</FF>
+<LUT>871680</LUT>
+<URAM>640</URAM>
 </AvailableResources>
 </AreaEstimates>
 
@@ -129,19 +129,19 @@
 <Attribute>control</Attribute>
 </RtlPorts>
 <RtlPorts>
-<name>arg_3</name>
-<Object>arg_3</Object>
+<name>arg_24</name>
+<Object>arg_24</Object>
 <Type>pointer</Type>
 <Scope></Scope>
 <IOProtocol>ap_vld</IOProtocol>
 <IOConfig></IOConfig>
 <Dir>out</Dir>
-<Bits>8</Bits>
+<Bits>32</Bits>
 <Attribute>data</Attribute>
 </RtlPorts>
 <RtlPorts>
-<name>arg_3_ap_vld</name>
-<Object>arg_3</Object>
+<name>arg_24_ap_vld</name>
+<Object>arg_24</Object>
 <Type>pointer</Type>
 <Scope></Scope>
 <IOProtocol>ap_vld</IOProtocol>
