@@ -115,9 +115,12 @@ add_files ${dummy_c_src}
 set_top ${top_func}
 
 open_solution -reset solution1
-set_part "artix7"
-# xczu7ev-ffvc1156-2-e
-create_clock -period "300MHz"
+set_part "xcvu35p-fsvh2104-3-e"
+create_clock -period "1000MHz"
+set_directive_dataflow ${top_func} -disable_start_propagation
+set_directive_loop_flatten ${top_func}
+set_directive_pipeline ${top_func}
+set_directive_unroll ${top_func}
 
 # /home/mlevental/dev_projects/phism/polygeist/llvm-project/build/bin/opt
 
