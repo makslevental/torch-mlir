@@ -22,7 +22,10 @@ class Torch_Op<string mnemonic, list<Trait> traits = []>
     : Op<Torch_Dialect, mnemonic, traits> {
 }
 
-include "torch-mlir/Dialect/Torch/IR/GeneratedTorchOps.td"
+include "torch-mlir/Dialect/Torch/IR/GeneratedAtenOps.td"
+include "/home/mlevental/dev_projects/torch-mlir/hls/mlir/HLSTorchOps.td"
+include "torch-mlir/Dialect/Torch/IR/GeneratedPrimOps.td"
+include "torch-mlir/Dialect/Torch/IR/GeneratedQuantizedOps.td"
 
 //===----------------------------------------------------------------------===//
 // TorchScript `torch.nn.Module` object instantiation ops.
@@ -1105,10 +1108,10 @@ def Torch_ValsemVariantAtenCopyOp : Torch_Op<"valsem.aten.copy", [
   let assemblyFormat = "$self `,` $src `,` $non_blocking attr-dict `:` qualified(type($self)) `,` qualified(type($src)) `,` qualified(type($non_blocking)) `->` qualified(type($result))";
 }
 
-// To handle runtime assertions, torchscript provides us `torch._assert` operation. 
-// But TS compiler introduces control flow for `torch._assert` operation. The 
-// `torch._assert` would introduce control flow like: 
-// 
+// To handle runtime assertions, torchscript provides us `torch._assert` operation.
+// But TS compiler introduces control flow for `torch._assert` operation. The
+// `torch._assert` would introduce control flow like:
+//
 //            %cond = "torch.aten.Bool.Tensor"(%0) : (!torch.tensor) -> !torch.bool
 //            "torch.prim.If"(%cond) ({
 //              "torch.prim.If.yield"() : () -> ()
