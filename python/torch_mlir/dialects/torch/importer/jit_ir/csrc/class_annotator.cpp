@@ -12,6 +12,7 @@
 #include <stdexcept>
 
 #include "torch/csrc/Dtype.h"
+#include "ATen/core/function.h"
 
 using namespace torch_mlir;
 

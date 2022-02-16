@@ -3,11 +3,11 @@ set -o pipefail
 set -o nounset
 
 # ---------------------- GLOBALS --------------------------------
-VITIS_DIR="/home/mlevental/dev_projects/Xilinx/Vitis_HLS/2021.2"
+VITIS_DIR="/home/mlevental/dev_projects/Xilinx_vitis/Vitis_HLS/2021.1"
 source "${VITIS_DIR}/settings64.sh"
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-ROOT_DIR="${DIR}/../../"
+ROOT_DIR="${DIR}/../.."
 ROOT_BINDIR="${ROOT_DIR}/build/bin"
 ROOT_LIBDIR="${ROOT_DIR}/build/lib"
 PROJ_DIR="${DIR}/vitis_stuff"
@@ -34,7 +34,7 @@ function preprocess_mlir() {
 
 function lower_mlir_to_llvm() {
   local src_file="${1}"
-  local opt_file="${src_file}.opt.ll"
+  local opt_file="${src_file}.opt.mlir"
   local dst_file="${src_file%.mlir}.ll"
 
   mlir-opt "${src_file}" \
@@ -55,17 +55,16 @@ function opt_llvm_for_vitis() {
   local top_func
   top_func="$(get_top_func "${src_file}")"
 
-  #-mem2ptr \
-  # -mem2arr \
   "${ROOT_BINDIR}/opt" "${src_file}" \
     -S \
     -enable-new-pm=0 \
     -load "${ROOT_LIBDIR}/VhlsLLVMRewriter.so" \
+    -mem2arr \
     -strip-debug \
     -instcombine \
+    -xlnanno -xlntop="${top_func}" \
     -xlnmath \
     -xlnname \
-    -xlnanno -xlntop="${top_func}" \
     -strip-attr \
     -xlnunroll \
     -xlnarraypartition \
@@ -86,7 +85,7 @@ function gen_dummy_c() {
   top_func="$(get_top_func "${src_file}")"
 
   cat <<EOF >"${dst_file}"
-void ${top_func}() {}
+void ${top_func}_dummy() {}
 EOF
 
   echo "${dst_file}"
@@ -106,27 +105,26 @@ function gen_vitis_phism_tcl() {
   src_base="$(basename "${src_dir}")"
   dst_file="$(dirname "${src_file}")/run_hls.tcl"
   top_func="$(get_top_func "${src_file}")"
-  dummy_c_src="$(gen_dummy_c "${src_file}")"
+#  dummy_c_src="$(gen_dummy_c "${src_file}")"
 
   # Synthesis script
   cat <<EOF >"${dst_file}"
 open_project -reset proj
-add_files ${dummy_c_src}
-set_top ${top_func}
+#add_files /home/mlevental/dev_projects/torch-mlir/hls/scripts/vitis_stuff/vitis_stuff.dummy.c
+add_files /home/mlevental/dev_projects/torch-mlir/hls/scripts/vitis_stuff/wrapper.cpp
+set_top wrapper
 
 open_solution -reset solution1
-set_part "xcvu35p-fsvh2104-3-e"
-create_clock -period "1000MHz"
-set_directive_dataflow ${top_func} -disable_start_propagation
-set_directive_loop_flatten ${top_func}
-set_directive_pipeline ${top_func}
-set_directive_unroll ${top_func}
-
-# /home/mlevental/dev_projects/phism/polygeist/llvm-project/build/bin/opt
+#set_part "xcvu35p-fsvh2104-3-e"
+set_part "xc7a200tfbg484-3"
+create_clock -period "100MHz"
+config_export -format ip_catalog -rtl verilog
 
 set ::LLVM_CUSTOM_CMD {\$LLVM_CUSTOM_OPT ${src_file} -o \$LLVM_CUSTOM_OUTPUT}
 
 csynth_design
+
+export_design -rtl verilog -format ip_catalog
 
 EOF
 

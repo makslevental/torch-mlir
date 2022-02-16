@@ -8,6 +8,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "get_registered_ops.h"
+#include "torch/csrc/jit/runtime/operator.h"
 
 #include <torch/csrc/jit/ir/ir.h>
 
