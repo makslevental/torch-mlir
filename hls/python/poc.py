@@ -2,6 +2,7 @@
 # sh_obj = ctypes.cdll.LoadLibrary('/home/mlevental/dev_projects/torch-mlir/build/lib/libruntimePatchLinalg.so')
 import torch
 # noinspection PyUnresolvedReferences
+from torch import nn
 from torch_mlir.dialects.torch.importer.jit_ir import ModuleBuilder, ClassAnnotator
 # noinspection PyUnresolvedReferences
 from torch_mlir.passmanager import PassManager
@@ -41,6 +42,25 @@ def make_mod():
     )
 
 
+def make_conv():
+    mod = torch.nn.Conv2d(
+        in_channels=1, out_channels=1, kernel_size=3, stride=1, padding=0
+    )
+    for m in mod.modules():
+        if hasattr(m, "weight"):
+            nn.init.constant_(m.weight, 1)
+            nn.init.constant_(m.bias, 1)
+    # t = torch.randn((1, 1, 11, 11))
+    # y = mod(t)
+    mod.train(False)
+    return make_layer(
+        mod,
+        [
+            None,
+            ([1, 1, 8, 8], torch.float32, True),
+        ],
+    )
+
 def make_braggnn():
     mod = BraggNN()
     # t = torch.randn((1, 1, 11, 11))
@@ -50,7 +70,7 @@ def make_braggnn():
         mod,
         [
             None,
-            ([1, 1, 11, 11], torch.float32, True),
+            ([1, 1, 8, 8], torch.float32, True),
         ],
     )
 
@@ -118,15 +138,15 @@ LOWERING_PIPELINE = [
     # "builtin.func(parallel-loop-fusion)",
     # "builtin.func(affine-loop-fusion)",
     "builtin.func(lower-affine)",
-    "builtin.func(convert-scf-to-std)",
-    "builtin.func(refback-expand-ops-for-llvm)",
-    "builtin.func(arith-expand)",
+    # "builtin.func(convert-scf-to-std)",
+    # "builtin.func(refback-expand-ops-for-llvm)",
+    # "builtin.func(arith-expand)",
     # ## "builtin.func(quant-convert-const)",
-    "builtin.func(convert-math-to-llvm)",
-    "convert-memref-to-llvm{index-bitwidth=0 use-aligned-alloc=false}",
+    # "builtin.func(convert-math-to-llvm)",
+    # "convert-memref-to-llvm{index-bitwidth=0 use-aligned-alloc=false}",
     # ## "convert-std-to-llvm{data-layout= emit-c-wrappers=true index-bitwidth=0 use-bare-ptr-memref-call-conv=false}",
-    "convert-std-to-llvm{data-layout= emit-c-wrappers=false index-bitwidth=0 use-bare-ptr-memref-call-conv=true}",
-    "reconcile-unrealized-casts",
+    # "convert-std-to-llvm{data-layout= emit-c-wrappers=false index-bitwidth=0 use-bare-ptr-memref-call-conv=true}",
+    # "reconcile-unrealized-casts",
 ]
 
 PIPELINE = TORCH_PIPELINE + TO_LINALG_PIPELINE + BUFFERIZATION_PIPELINE + LOWERING_PIPELINE
@@ -134,7 +154,7 @@ PIPELINE = TORCH_PIPELINE + TO_LINALG_PIPELINE + BUFFERIZATION_PIPELINE + LOWERI
 if __name__ == "__main__":
     # mod = BraggNN()
     mb = ModuleBuilder()
-    mb.import_module(*make_braggnn())
+    mb.import_module(*make_conv())
     # mb = make_traced_mod()
     # mb = make_traced_mod()
     # Verify again with debug info present. Just checking that it makes it in there.
@@ -146,7 +166,7 @@ if __name__ == "__main__":
 
     asm_for_error_report = mb.module.operation.get_asm(
         large_elements_limit=100000, enable_debug_info=False)
-    open(f"../scripts/braggnn.llvm.mlir", "w").write(asm_for_error_report)
+    open(f"../scripts/braggnn.affine.mlir", "w").write(asm_for_error_report)
 
 # kintex7 kintex7l artix7 artix7l aartix7 zynq azynq spartan7 aspartan7 virtexuplus virtexuplusHBM kintexuplus artixuplusb zynquplus azynquplus kintexu
 # set_directive_pipeline
