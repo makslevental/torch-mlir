@@ -260,8 +260,8 @@ MlirAttribute torch_mlir::convertTensorToMlirElementsAttr(at::Tensor tensor,
 
   // The flat number of bytes throws an exception for tensors that are not
   // dense and accessible as such.
-  at::checkLayout(at::CheckedFrom("accessing contiguous"), tensor,
-                  c10::Layout::Strided);
+//  at::checkLayout(at::CheckedFrom("accessing contiguous"), tensor,
+//                  c10::Layout::Strided);
 
   // Construct the ShapedType.
 

@@ -23,7 +23,7 @@ class Torch_Op<string mnemonic, list<OpTrait> traits = []>
 }
 
 include "torch-mlir/Dialect/Torch/IR/GeneratedAtenOps.td"
-include "/Users/mlevental/dev_projects/torch-mlir/hls/mlir/HLSTorchOps.td"
+include "/home/mlevental/dev_projects/torch-mlir/hls/mlir/HLSTorchOps.td"
 include "torch-mlir/Dialect/Torch/IR/GeneratedPrimOps.td"
 include "torch-mlir/Dialect/Torch/IR/GeneratedQuantizedOps.td"
 

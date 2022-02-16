@@ -22,8 +22,8 @@ class NLB(torch.nn.Module):
 
         for m in self.modules():
             if hasattr(m, "weight"):
-                nn.init.constant_(m.weight, 0)
-                nn.init.constant_(m.bias, 0)
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 1)
 
     def forward(self, x):
         theta = self.theta_layer(x)
@@ -73,13 +73,13 @@ class BraggNN(torch.nn.Module):
 
         for m in self.cnn_ops:
             if hasattr(m, "weight"):
-                nn.init.constant_(m.weight, 0)
-                nn.init.constant_(m.bias, 0)
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 1)
 
         for m in self.dense_ops:
             if hasattr(m, "weight"):
-                nn.init.constant_(m.weight, 0)
-                nn.init.constant_(m.bias, 0)
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 1)
 
         self.cnn_layers_1 = self.cnn_ops[0]
         self.cnn_layers_2 = torch.nn.Sequential(*self.cnn_ops[1:])
@@ -87,15 +87,15 @@ class BraggNN(torch.nn.Module):
 
         for m in self.modules():
             if hasattr(m, "weight"):
-                nn.init.constant_(m.weight, 0)
-                nn.init.constant_(m.bias, 0)
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 1)
 
     def forward(self, x):
         _out = x
         _out = self.cnn_layers_1(_out)
-        _out = self.nlb(_out)
-        _out = self.cnn_layers_2(_out)
-        _out = _out.flatten(start_dim=1)
-        _out = self.dense_layers(_out)
+        # _out = self.nlb(_out)
+        # _out = self.cnn_layers_2(_out)
+        # _out = _out.flatten(start_dim=1)
+        # _out = self.dense_layers(_out)
 
         return _out
