@@ -63,14 +63,15 @@ def make_conv():
 
 def make_braggnn():
     mod = BraggNN()
-    # t = torch.randn((1, 1, 11, 11))
-    # y = mod(t)
+    t = torch.randn((1, 1, 11, 11))
+    y = mod(t)
+    print(y.shape)
     mod.train(False)
     return make_layer(
         mod,
         [
             None,
-            ([1, 1, 8, 8], torch.float32, True),
+            ([1, 1, 11, 11], torch.float32, True),
         ],
     )
 
@@ -104,7 +105,7 @@ TO_LINALG_PIPELINE = [
     "builtin.func(convert-torch-to-std)",
     "builtin.func(convert-torch-to-scf)",
     "builtin.func(linalg-strategy-tile-and-fuse-pass)",
-    "builtin.func(std-expand)",
+    # "builtin.func(std-expand)",
     "builtin.func(canonicalize{  max-iterations=10 region-simplify=true top-down=true})",
     "builtin.func(resolve-shaped-type-result-dims)",
     "builtin.func(cse)",
@@ -114,11 +115,11 @@ TO_LINALG_PIPELINE = [
 ]
 
 BUFFERIZATION_PIPELINE = [
-    "tensor-constant-bufferize{alignment=0}",
+    # "tensor-constant-bufferize{alignment=0}",
     "builtin.func(torch-hls-linalg-bufferize)",
     "builtin.func(linalg-bufferize)",
     "builtin.func(cse)",
-    "builtin.func(std-bufferize)",
+    "arith-bufferize",
     "builtin.func(tensor-bufferize)",
     "func-bufferize",
     ## "builtin.func(buffer-hoisting)",
@@ -129,7 +130,6 @@ BUFFERIZATION_PIPELINE = [
     ]
 
 LOWERING_PIPELINE = [
-    "torch-hls-promote-allocs",
     "builtin.func(cse)",
     "torch-hls-drop-public-return",
     "builtin.func(cse)",
@@ -138,6 +138,7 @@ LOWERING_PIPELINE = [
     # "builtin.func(parallel-loop-fusion)",
     # "builtin.func(affine-loop-fusion)",
     "builtin.func(lower-affine)",
+    "torch-hls-promote-allocs",
     # "builtin.func(convert-scf-to-std)",
     # "builtin.func(refback-expand-ops-for-llvm)",
     # "builtin.func(arith-expand)",
@@ -154,7 +155,7 @@ PIPELINE = TORCH_PIPELINE + TO_LINALG_PIPELINE + BUFFERIZATION_PIPELINE + LOWERI
 if __name__ == "__main__":
     # mod = BraggNN()
     mb = ModuleBuilder()
-    mb.import_module(*make_conv())
+    mb.import_module(*make_braggnn())
     # mb = make_traced_mod()
     # mb = make_traced_mod()
     # Verify again with debug info present. Just checking that it makes it in there.
@@ -164,9 +165,10 @@ if __name__ == "__main__":
         # pm.enable_ir_printing()
         pm.run(mb.module)
 
+    dialect = "affine"
     asm_for_error_report = mb.module.operation.get_asm(
         large_elements_limit=100000, enable_debug_info=False)
-    open(f"../scripts/braggnn.affine.mlir", "w").write(asm_for_error_report)
+    open(f"../scripts/braggnn.{dialect}.mlir", "w").write(asm_for_error_report)
 
 # kintex7 kintex7l artix7 artix7l aartix7 zynq azynq spartan7 aspartan7 virtexuplus virtexuplusHBM kintexuplus artixuplusb zynquplus azynquplus kintexu
 # set_directive_pipeline

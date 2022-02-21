@@ -31,7 +31,8 @@ class NLB(torch.nn.Module):
         g = self.g_layer(x)
 
         theta_phi = theta * phi
-        theta_phi = theta_phi.exp() / theta_phi.exp().sum((-2, -1), keepdim=True)
+        # theta_phi = theta_phi.exp() / theta_phi.exp().sum((-2, -1), keepdim=True)
+        # theta_phi = torch.ops.aten._softmax(theta_phi, -1, False)
         theta_phi_g = theta_phi * g
 
         _out_tmp = self.out_cnn(theta_phi_g)
@@ -41,15 +42,21 @@ class NLB(torch.nn.Module):
 
 
 class BraggNN(torch.nn.Module):
-    def __init__(self, imgsz=11, fcsz=(64, 32, 16, 8)):
+    def __init__(
+        self,
+        imgsz=11,
+        # fcsz=(64, 32, 16, 8)
+        fcsz=(16, 8, 4, 2),
+    ):
         super().__init__()
         self.cnn_ops = []
-        cnn_out_chs = (64, 32, 8)
+        cnn_out_chs = (16, 8, 2)
+        # cnn_out_chs = (64, 32, 8)
         cnn_in_chs = (1,) + cnn_out_chs[:-1]
         fsz = imgsz
         for (
-                ic,
-                oc,
+            ic,
+            oc,
         ) in zip(cnn_in_chs, cnn_out_chs):
             self.cnn_ops += [
                 torch.nn.Conv2d(
@@ -93,9 +100,9 @@ class BraggNN(torch.nn.Module):
     def forward(self, x):
         _out = x
         _out = self.cnn_layers_1(_out)
-        # _out = self.nlb(_out)
-        # _out = self.cnn_layers_2(_out)
-        # _out = _out.flatten(start_dim=1)
-        # _out = self.dense_layers(_out)
+        _out = self.nlb(_out)
+        _out = self.cnn_layers_2(_out)
+        _out = _out.flatten(start_dim=1)
+        _out = self.dense_layers(_out)
 
         return _out
