@@ -13,6 +13,7 @@
 #include "mlir/Analysis/SliceAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -65,9 +66,9 @@ class PromoteAllocsPass : public HLSPromoteAllocsBase<PromoteAllocsPass> {
 //      }
 //      std::vector<PlannedAlloc> plannedAllocs =
 //          greedyBySizeWithSmallestGap(sortedLiveRanges);
-//      hoistAllocs(func, plannedAllocs);
-      hoistAllocs(func);
-
+//      hoistLastStoreAlloc(func, plannedAllocs);
+      hoistLastStoreAlloc(func);
+      dropAsserts(func);
     });
   }
 
@@ -92,6 +93,28 @@ class PromoteAllocsPass : public HLSPromoteAllocsBase<PromoteAllocsPass> {
     }
     return shape;
   }
+
+//  std::vector<int64_t> getConcreteShape(memref::StoreOp op, FuncOp func) {
+//    MemRefType type = op.getMemRefType();
+//    std::vector<int64_t> shape;
+//    auto dynamicSizes = op.getDynamicSizes();
+//    for (int idx = 0; idx < type.getShape().size(); ++idx) {
+//      auto dimSize = type.getShape()[idx];
+//      if (dimSize < 0) {
+//        if (isMemRefSizeValidSymbol(op, idx, func->getParentRegion())) {
+//          unsigned dynamicDimPos = type.getDynamicDimIndex(idx);
+//          dimSize = dynamicSizes[dynamicDimPos]
+//                        .getDefiningOp<arith::ConstantIndexOp>()
+//                        .value();
+//        } else {
+//          shape.push_back(-1);
+//          continue;
+//        }
+//      }
+//      shape.push_back(dimSize);
+//    }
+//    return shape;
+//  }
 
   LiveRanges liveRanges(FuncOp func) {
     SetVector<Operation *> sortedOps;
@@ -129,11 +152,11 @@ class PromoteAllocsPass : public HLSPromoteAllocsBase<PromoteAllocsPass> {
     return allocLiveRange;
   }
 
-  void hoistAllocs(FuncOp func, std::vector<PlannedAlloc> plannedAllocs) {
+  void hoistLastStoreAlloc(FuncOp func, std::vector<PlannedAlloc> plannedAllocs) {
 
     auto inputSlab =
         MemRefType::get({1000000}, IntegerType::get(func.getContext(), 8));
-    func.insertArgument(func.getNumArguments(), inputSlab, {});
+    func.insertArgument(func.getNumArguments(), inputSlab, {}, func->getLoc());
     BlockArgument slabArg = func.getArgument(func.getNumArguments() - 1);
     OpBuilder builder(func.getBody());
 
@@ -161,30 +184,36 @@ class PromoteAllocsPass : public HLSPromoteAllocsBase<PromoteAllocsPass> {
     auto correctInputSlab =
         MemRefType::get({static_cast<long>(maxSize * 4)},
                         IntegerType::get(func.getContext(), 8));
-    func.insertArgument(func.getNumArguments(), correctInputSlab, {});
+    func.insertArgument(func.getNumArguments(), correctInputSlab, {}, func->getLoc());
     BlockArgument correctSlabArg = func.getArgument(func.getNumArguments() - 1);
     slabArg.replaceAllUsesWith(correctSlabArg);
     func.eraseArgument(func.getNumArguments() - 2);
   }
 
-  void hoistAllocs(FuncOp func) {
-    WalkResult walkResult = func.walk([&](memref::AllocOp op) {
-      MemRefType type = op.getType();
-      auto shape = getConcreteShape(op, func);
-      auto promotedType =
-          MemRefType::get(shape, type.getElementType(), type.getLayout(),
-                          type.getMemorySpace());
-
-      func.insertArgument(func.getNumArguments(), promotedType, {});
-      BlockArgument arg = func.getArgument(func.getNumArguments()-1);
-      op.replaceAllUsesWith(arg);
-      return WalkResult::advance();
+  void hoistLastStoreAlloc(FuncOp func) {
+    llvm::SmallVector<memref::StoreOp> stores;
+    func.walk([&](memref::StoreOp op) {
+      stores.push_back(op);
     });
-    if (walkResult.wasInterrupted()) {
-      func.emitError() << "unimplemented: refining returns for function with "
-                          "more than one return op";
+
+    if (stores.empty()) {
+      func.emitError() << "no stores found";
       return signalPassFailure();
     }
+
+    auto last_store = stores.back();
+    func.insertArgument(func.getNumArguments(), last_store.getMemRefType(), {}, func->getLoc());
+    BlockArgument arg = func.getArgument(func.getNumArguments()-1);
+    auto memref_alloc = last_store.getMemRef().getDefiningOp<memref::AllocOp>();
+    memref_alloc.replaceAllUsesWith(arg);
+  }
+
+  void dropAsserts(FuncOp func) {
+    func.walk([&](cf::AssertOp op) {
+      op->remove();
+      op->destroy();
+    });
+
   }
 };
 
