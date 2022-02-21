@@ -10,17 +10,18 @@
 #include "HLSPassDetail.h"
 #include "HLSPasses.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
-#include "mlir/Dialect/Linalg/IR/LinalgOps.h"
+#include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Linalg/Utils/Utils.h"
 #include "mlir/Dialect/Math/IR/Math.h"
-#include "mlir/Dialect/StandardOps/Utils/Utils.h"
+//#include "mlir/Dialect/StandardOps/Utils/Utils.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
-#include "mlir/Dialect/Vector/VectorOps.h"
+#include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/Pass/Pass.h"
-#include "mlir/Transforms/Bufferize.h"
+#include "mlir/Dialect/Bufferization/Transforms/Bufferize.h"
 
 using namespace ::mlir;
+using namespace ::mlir::bufferization;
 using namespace ::mlir::linalg;
 using namespace ::mlir::torch::HLS;
 
@@ -28,7 +29,7 @@ static Value cloneMemref(Location loc, Value memref, OpBuilder &b) {
   auto memrefType = memref.getType().cast<MemRefType>();
   auto alloc = b.create<memref::AllocOp>(loc, memrefType,
                                          getDynOperands(loc, memref, b));
-  b.create<linalg::CopyOp>(loc, memref, alloc);
+  b.create<memref::CopyOp>(loc, memref, alloc);
   return alloc;
 }
 
@@ -122,7 +123,7 @@ class BufferizeTensorReshapeOp : public OpConversionPattern<TensorReshapeOp> {
 public:
   using OpConversionPattern<TensorReshapeOp>::OpConversionPattern;
   using ReshapeOp = typename std::conditional_t<
-      std::is_same<TensorReshapeOp, TensorExpandShapeOp>::value,
+      std::is_same<TensorReshapeOp, tensor::ExpandShapeOp>::value,
       memref::ExpandShapeOp, memref::CollapseShapeOp>;
 
   LogicalResult
@@ -219,7 +220,7 @@ public:
     Value subView = rewriter.create<memref::SubViewOp>(
         op.getLoc(), sourceMemref, op.getMixedOffsets(), op.getMixedSizes(),
         op.getMixedStrides());
-    rewriter.create<linalg::CopyOp>(op.getLoc(), subView, alloc);
+    rewriter.create<memref::CopyOp>(op.getLoc(), subView, alloc);
     rewriter.replaceOp(op, alloc);
     return success();
   }
@@ -259,7 +260,7 @@ public:
         op.getLoc(), destMemRef, op.getMixedOffsets(), op.getMixedSizes(),
         op.getMixedStrides());
     // Copy the small memref.
-    rewriter.create<linalg::CopyOp>(op.getLoc(), sourceMemRef, subview);
+    rewriter.create<memref::CopyOp>(op.getLoc(), sourceMemRef, subview);
     rewriter.replaceOp(op, destMemRef);
     return success();
   }
@@ -277,11 +278,12 @@ public:
       return failure();
     rewriter.replaceOpWithNewOp<vector::TransferReadOp>(
         readOp, readOp.getType(), adaptor.source(), adaptor.indices(),
-        adaptor.permutation_map(), adaptor.padding(), adaptor.mask(),
-        adaptor.in_bounds());
+        adaptor.permutation_mapAttr(), adaptor.padding(), adaptor.mask(),
+        adaptor.in_boundsAttr());
     return success();
   }
 };
+
 
 class VectorTransferWriteOpConverter
     : public OpConversionPattern<vector::TransferWriteOp> {
@@ -295,8 +297,8 @@ public:
       return failure();
     rewriter.create<vector::TransferWriteOp>(
         writeOp.getLoc(), adaptor.vector(), adaptor.source(), adaptor.indices(),
-        adaptor.permutation_map(),
-        adaptor.in_bounds() ? adaptor.in_bounds() : ArrayAttr());
+        adaptor.permutation_mapAttr(),
+        adaptor.in_bounds() ? adaptor.in_boundsAttr() : ArrayAttr());
     rewriter.replaceOp(writeOp, adaptor.source());
     return success();
   }
@@ -312,15 +314,15 @@ void populateHLSLinalgBufferizePatterns(BufferizeTypeConverter &typeConverter,
       HLSBufferizeAnyLinalgOp,
       BufferizeFillOp,
       BufferizeInitTensorOp,
-      BufferizeTensorReshapeOp<TensorExpandShapeOp>,
-      BufferizeTensorReshapeOp<TensorCollapseShapeOp>,
+      BufferizeTensorReshapeOp<tensor::ExpandShapeOp>,
+      BufferizeTensorReshapeOp<tensor::CollapseShapeOp>,
       ExtractSliceOpConverter,
       InsertSliceOpConverter,
       VectorTransferReadOpConverter,
       VectorTransferWriteOpConverter
   >(typeConverter, patterns.getContext());
   // clang-format on
-    patterns.add<GeneralizePadTensorOpPattern>(patterns.getContext());
+    patterns.add<GeneralizePadOpPattern>(patterns.getContext());
 }
 
 namespace {
@@ -337,7 +339,7 @@ struct HLSLinalgBufferizePass
     target.addLegalDialect<arith::ArithmeticDialect, AffineDialect,
                            memref::MemRefDialect, StandardOpsDialect,
                            tensor::TensorDialect>();
-    target.addIllegalOp<linalg::CopyOp>();
+    target.addIllegalOp<memref::CopyOp>();
 
     // Mark all Linalg operations illegal as long as they work on tensors.
     auto isLegalOperation = [&](Operation *op) {

@@ -27,19 +27,19 @@ using namespace mlir::torch::HLS;
 using namespace mlir::torch::torch_upstream; // For ScalarType and type
                                              // promotion related helpers.
 
-static ScalarType getScalarTypeForType(Type type) {
-  if (type.isa<Float32Type>())
-    return ScalarType::Float;
-  if (type.isa<Float64Type>())
-    return ScalarType::Double;
-  if (type.isSignedInteger(64))
-    return ScalarType::Long;
-  if (type.isSignedInteger(32))
-    return ScalarType::Int;
-  if (type.isUnsignedInteger(1))
-    return ScalarType::Bool;
-  llvm::report_fatal_error("unhandled type for getScalarTypeForType");
-}
+//static ScalarType getScalarTypeForType(Type type) {
+//  if (type.isa<Float32Type>())
+//    return ScalarType::Float;
+//  if (type.isa<Float64Type>())
+//    return ScalarType::Double;
+//  if (type.isSignedInteger(64))
+//    return ScalarType::Long;
+//  if (type.isSignedInteger(32))
+//    return ScalarType::Int;
+//  if (type.isUnsignedInteger(1))
+//    return ScalarType::Bool;
+//  llvm::report_fatal_error("unhandled type for getScalarTypeForType");
+//}
 
 static Type getTypeForScalarType(MLIRContext *context, ScalarType dtypeInt) {
   switch (dtypeInt) {

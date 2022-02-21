@@ -1,10 +1,13 @@
 #include "HLSPassDetail.h"
 #include "HLSPasses.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
-#include "mlir/Dialect/Linalg/IR/LinalgOps.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Linalg/Transforms/Transforms.h"
 #include "mlir/Dialect/Math/IR/Math.h"
+#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/Dialect/Tensor/Utils/Utils.h"
 #include "mlir/Dialect/Traits.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -106,8 +109,9 @@ static void checkDimEqualHelper(OpBuilder &b, Location loc, Value lhsDim,
   Value rhsDimInt = rhsType.isIndex() ? castIndexToInt(b, loc, rhsDim) : rhsDim;
   Value contractingDimEqual = b.create<arith::CmpIOp>(
       loc, arith::CmpIPredicate::eq, lhsDimInt, rhsDimInt);
-  b.create<AssertOp>(loc, contractingDimEqual,
-                     b.getStringAttr("mismatching contracting dimension"));
+  b.create<RuntimeAssertOp>(
+      loc, contractingDimEqual,
+      b.getStringAttr("mismatching contracting dimension"));
 }
 
 static SmallVector<Value>
@@ -134,9 +138,9 @@ static Value getPaddedTensor(Operation *op, OpBuilder &b, Value &input,
       loc,
       b.getZeroAttr(input.getType().cast<RankedTensorType>().getElementType()));
   SmallVector<OpFoldResult> paddings = getAsOpFoldResult(b, loc, paddingInts);
-  Type ranked4DTensorType = linalg::PadTensorOp::inferResultType(
+  Type ranked4DTensorType = tensor::PadOp::inferResultType(
       input.getType().cast<RankedTensorType>(), paddingInts, paddingInts);
-  Value paddedInput = linalg::PadTensorOp::createPadScalarOp(
+  Value paddedInput = tensor::createPadScalarOp(
       ranked4DTensorType, input, c0, /*low=*/paddings, /*high=*/paddings,
       /*packing=*/false, loc, b);
   return paddedInput;
@@ -174,8 +178,8 @@ static Value convertScalarToDtype(OpBuilder &b, Location loc, Value scalar,
   };
 
   if (isByteOrChar(scalarType) || isByteOrChar(dtype) ||
-      scalarType.isSignlessInteger(1) || dtype.isSignlessInteger(1)) {
-    // TODO: Handle bool type.
+      dtype.isSignlessInteger(1)) {
+    // TODO: Handle to-boolean conversion(from-boolean conversion is handled).
     mlir::emitError(loc)
         << "unsupported byte, char or bool type for convertScalarToDtype "
         << scalarType << "(scalar type) -> " << dtype << "(dtype)";
@@ -185,27 +189,31 @@ static Value convertScalarToDtype(OpBuilder &b, Location loc, Value scalar,
   if (auto dtypeFloat = dtype.dyn_cast<mlir::FloatType>()) {
     if (auto scalarFloat = scalarType.dyn_cast<mlir::FloatType>()) {
       if (scalarFloat.getWidth() > dtypeFloat.getWidth())
-        return b.create<arith::TruncFOp>(loc, scalar, dtype);
+        return b.create<arith::TruncFOp>(loc, dtype, scalar);
       // Only scalarFloat width < dtypeFloat width can reach here.
-      return b.create<arith::ExtFOp>(loc, scalar, dtype);
+      return b.create<arith::ExtFOp>(loc, dtype, scalar);
     }
     assert(scalarType.isa<mlir::IntegerType>());
+    if (scalarType.isSignlessInteger(1))
+      return b.create<arith::UIToFPOp>(loc, dtype, scalar);
     // It's safe to use SIToFPOp because ui8/si8 are the only ones where
     // unsigned handling is needed, and we checked for that case above.
-    return b.create<arith::SIToFPOp>(loc, scalar, dtype);
+    return b.create<arith::SIToFPOp>(loc, dtype, scalar);
   }
 
   if (auto dtypeInteger = dtype.dyn_cast<mlir::IntegerType>()) {
     if (auto scalarFloat = scalarType.dyn_cast<mlir::FloatType>())
-      return b.create<arith::FPToSIOp>(loc, scalar, dtype);
+      return b.create<arith::FPToSIOp>(loc, dtype, scalar);
     assert(scalarType.isa<mlir::IntegerType>());
     auto scalarInteger = scalarType.cast<mlir::IntegerType>();
     if (scalarInteger.getWidth() > dtypeInteger.getWidth())
-      return b.create<arith::TruncIOp>(loc, scalar, dtype);
+      return b.create<arith::TruncIOp>(loc, dtype, scalar);
+    if (scalarType.isSignlessInteger(1))
+      return b.create<arith::ExtUIOp>(loc, dtype, scalar);
     // Only scalarInteger width < dtypeInteger width can reach here.
     // It's safe to use ExtSIOp here because ui8/si8 are the only ones where
     // unsigned handling is needed, and we checked for that case above.
-    return b.create<arith::ExtSIOp>(loc, scalar, dtype);
+    return b.create<arith::ExtSIOp>(loc, dtype, scalar);
   }
 
   llvm_unreachable("convertScalarToDtype should handle all the types");
@@ -273,7 +281,7 @@ Value createLinalgPayloadCalculationForElementwiseOp(OpBuilder &b, Location loc,
         b.create<arith::ConstantOp>(loc, b.getZeroAttr(elementType));
     Value pred = b.create<arith::CmpFOp>(loc, arith::CmpFPredicate::UGT,
                                          payloadArgs[0], constZero);
-    return b.create<SelectOp>(loc, pred, payloadArgs[0], constZero);
+    return b.create<arith::SelectOp>(loc, pred, payloadArgs[0], constZero);
   }
   if (auto add = dyn_cast<AtenAddOutTensorOp>(op)) {
     AtenAddOutTensorOp::Adaptor adaptor(operands);
@@ -323,10 +331,10 @@ public:
     Value rhsDim1 = rewriter.create<tensor::DimOp>(loc, rhs, 1);
     Value contractingDimEqual = rewriter.create<arith::CmpIOp>(
         loc, arith::CmpIPredicate::eq, lhsDim1, rhsDim0);
-    rewriter.create<AssertOp>(
-        loc, contractingDimEqual,
-        rewriter.getStringAttr(
-            "mismatching contracting dimension for torch.aten.mm"));
+    //    rewriter.create<AssertOp>(
+    //        loc, contractingDimEqual,
+    //        rewriter.getStringAttr(
+    //            "mismatching contracting dimension for torch.aten.mm"));
 
     Type newResultType = getTypeConverter()->convertType(op.getType());
     NamedAttribute variant(rewriter.getStringAttr("variant"),
@@ -650,8 +658,8 @@ struct ConvertElementwiseOp : ConversionPattern {
         auto equalToRunning = rewriter.create<arith::CmpIOp>(
             loc, arith::CmpIPredicate::eq, resultShape[resultDim],
             currentDimSize);
-        rewriter.create<AssertOp>(loc, equalToRunning,
-                                  "mismatched size for broadcast");
+        //        rewriter.create<cf::AssertOp>(loc, equalToRunning,
+        //                                  "mismatched size for broadcast");
       }
       indexingMaps.push_back(AffineMap::get(
           /*dimCount=*/resultRank, /*symbolCount=*/0, exprs, getContext()));
@@ -743,9 +751,9 @@ public:
         loc, IntegerAttr::get(rewriter.getIntegerType(1), 0));
     Value ceilModeFalse = rewriter.create<arith::CmpIOp>(
         loc, arith::CmpIPredicate::eq, ceilMode, falseValue);
-    rewriter.create<AssertOp>(
-        loc, ceilModeFalse,
-        rewriter.getStringAttr("only ceil_mode false is supported"));
+    //    rewriter.create<cf::AssertOp>(
+    //        loc, ceilModeFalse,
+    //        rewriter.getStringAttr("only ceil_mode false is supported"));
 
     //    SmallVector<int64_t, 4> paddingIncludingNC = {0, 0};
     //    paddingIncludingNC.insert(paddingIncludingNC.end(),
@@ -963,9 +971,9 @@ public:
         loc, IntegerAttr::get(IntegerType::get(context, 1), 0));
     auto trainingFalse = rewriter.create<arith::CmpIOp>(
         loc, arith::CmpIPredicate::eq, training, constFalse);
-    rewriter.create<AssertOp>(
-        loc, trainingFalse,
-        rewriter.getStringAttr("training is not supported for now"));
+    //    rewriter.create<cf::AssertOp>(
+    //        loc, trainingFalse,
+    //        rewriter.getStringAttr("training is not supported for now"));
 
     // num_features – C from an expected input of size (N,C,D,H,W ...)
     Value numFeatures = rewriter.create<tensor::DimOp>(loc, input, 1);
@@ -973,10 +981,11 @@ public:
       auto dim0 = rewriter.create<tensor::DimOp>(loc, v, 0);
       auto dim0Equal = rewriter.create<arith::CmpIOp>(
           loc, arith::CmpIPredicate::eq, numFeatures, dim0);
-      rewriter.create<AssertOp>(
-          loc, dim0Equal,
-          rewriter.getStringAttr(
-              "expect the size of dim 0 equal to the number of features"));
+      //      rewriter.create<cf::AssertOp>(
+      //          loc, dim0Equal,
+      //          rewriter.getStringAttr(
+      //              "expect the size of dim 0 equal to the number of
+      //              features"));
     };
     contractingDim0EqualsNumFeatures(weight);
     contractingDim0EqualsNumFeatures(bias);
@@ -1076,15 +1085,15 @@ public:
     Value biasDim0 = getDimOp(rewriter, loc, bias, 0);
     Value contractingDimEqual = rewriter.create<arith::CmpIOp>(
         loc, arith::CmpIPredicate::eq, inputDim1, weightDim0);
-    rewriter.create<AssertOp>(
-        loc, contractingDimEqual,
-        rewriter.getStringAttr(
-            "mismatching contracting dimension for aten.linear"));
+    //    rewriter.create<cf::AssertOp>(
+    //        loc, contractingDimEqual,
+    //        rewriter.getStringAttr(
+    //            "mismatching contracting dimension for aten.linear"));
     Value biasSizeCorrect = rewriter.create<arith::CmpIOp>(
         loc, arith::CmpIPredicate::eq, weightDim1, biasDim0);
-    rewriter.create<AssertOp>(
-        loc, biasSizeCorrect,
-        rewriter.getStringAttr("mismatching bias size for aten.linear"));
+    //    rewriter.create<cf::AssertOp>(
+    //        loc, biasSizeCorrect,
+    //        rewriter.getStringAttr("mismatching bias size for aten.linear"));
 
     Value matmul;
     NamedAttribute variant(rewriter.getStringAttr("variant"),
@@ -1154,8 +1163,9 @@ public:
         rewriter.create<arith::ConstantOp>(loc, IntegerAttr::get(intType, 1));
     Value groupEqual1 = rewriter.create<arith::CmpIOp>(
         loc, arith::CmpIPredicate::eq, groups, c1);
-    rewriter.create<AssertOp>(loc, groupEqual1,
-                              rewriter.getStringAttr("expect groups to be 1"));
+    //    rewriter.create<cf::AssertOp>(loc, groupEqual1,
+    //                              rewriter.getStringAttr("expect groups to be
+    //                              1"));
 
     // Pad the input tensor according to padding.
     SmallVector<int64_t, 4> paddingIncludingNC = {0, 0};
@@ -1271,8 +1281,8 @@ public:
     //    patterns.add<ConvertAtenLinearOutOp>(typeConverter, context);
     //    target.addIllegalOp<AtenPermuteOp>();
     //    patterns.add<ConvertAtenPermuteOp>(typeConverter, context);
-//    target.addIllegalOp<Aten_ConvolutionOp>();
-//    patterns.add<ConvertAten_ConvolutionOp>(typeConverter, context);
+    //    target.addIllegalOp<Aten_ConvolutionOp>();
+    //    patterns.add<ConvertAten_ConvolutionOp>(typeConverter, context);
 
     if (failed(applyPartialConversion(getOperation(), target,
                                       std::move(patterns))))
