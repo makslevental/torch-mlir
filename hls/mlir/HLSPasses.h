@@ -13,7 +13,7 @@
 #include "mlir/Pass/Pass.h"
 
 #include <memory>
-#include <mlir/Transforms/Bufferize.h>
+#include <mlir/Dialect/Bufferization/Transforms/Bufferize.h>
 
 namespace mlir {
 namespace torch {
