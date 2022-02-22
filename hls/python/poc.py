@@ -1,5 +1,6 @@
 # import ctypes
 # sh_obj = ctypes.cdll.LoadLibrary('/home/mlevental/dev_projects/torch-mlir/build/lib/libruntimePatchLinalg.so')
+import re
 import torch
 # noinspection PyUnresolvedReferences
 from torch import nn
@@ -12,6 +13,7 @@ from torch_mlir_e2e_test.linalg_on_tensors_backends.refbackend import RefBackend
 # noinspection PyUnresolvedReferences
 from torch_mlir_e2e_test.torchscript.annotations import annotate_args, export
 from torchvision.models.resnet import BasicBlock
+import subprocess
 
 from braggnn import BraggNN
 from layers import make_layer
@@ -61,8 +63,10 @@ def make_conv():
         ],
     )
 
+
 def make_braggnn():
     mod = BraggNN()
+    print(mod)
     t = torch.randn((1, 1, 11, 11))
     y = mod(t)
     print(y.shape)
@@ -75,6 +79,24 @@ def make_braggnn():
         ],
     )
 
+def hack_for_calyx(out):
+    out = out.replace("f32", "i32").replace("2.000000e+00", "2").replace(
+        "1.000000e+00", "1")
+    open(f"../scripts/braggnn.affine.mlir", "w").write(out)
+    out = subprocess.run(["/home/mlevental/dev_projects/torch-mlir/cmake-build-debug/bin/torch-mlir-opt",
+                          "-pass-pipeline=reconcile-unrealized-casts",
+                          "/home/mlevental/dev_projects/torch-mlir/hls/scripts/braggnn.affine.mlir"],
+                         capture_output=True)
+
+    # %0 = memref.get_global @__constant_16x1x3x3xi32 : memref<16x1x3x3xi32>
+    # arith.constant dense<1.000000e+00> : vector<32x256xf32>
+    # out = re.sub(r"memref.get_global .* : memref<(.*)xi32>", r"arith.constant dense<1> : vector<\1xi32>", out.stdout.decode())
+    out = re.sub(r"memref.collapse_shape .* into", "memref.alloc() :", out.stdout.decode())
+    out = re.sub(r"memref.get_global .* :", "memref.alloc() :", out)
+    out = re.sub(r"memref.global .*", "", out)
+
+    open(f"../scripts/braggnn.affine.mlir", "w").write(out)
+    open(f"/home/mlevental/dev_projects/circt/hls/braggnn.{dialect}.mlir", "w").write(out)
 
 TORCH_PIPELINE = [
     "symbol-dce",
@@ -97,7 +119,7 @@ TORCH_PIPELINE = [
     "builtin.func(torch-decompose-complex-ops)",
     "torch-verify-invariants-before-backend-lowering",
     "builtin.module(symbol-dce)",
-    ]
+]
 
 TO_LINALG_PIPELINE = [
     ## "builtin.func(convert-torch-hls-to-linalg)",
@@ -127,16 +149,22 @@ BUFFERIZATION_PIPELINE = [
     ## "builtin.module(buffer-results-to-out-params)",
     "builtin.func(finalizing-bufferize)",
     "builtin.func(cse)",
-    ]
+]
 
 LOWERING_PIPELINE = [
     "builtin.func(cse)",
     "torch-hls-drop-public-return",
     "builtin.func(cse)",
-    "builtin.func(convert-linalg-to-loops)",
-    # "builtin.func(convert-linalg-to-affine-loops)",
-    # "builtin.func(parallel-loop-fusion)",
-    # "builtin.func(affine-loop-fusion)",
+    # "builtin.func(convert-linalg-to-loops)",
+    "builtin.func(convert-linalg-to-affine-loops)",
+    "builtin.func(affine-loop-invariant-code-motion)",
+    "builtin.func(affine-loop-fusion)",
+    "builtin.func(affine-loop-coalescing)",
+    "builtin.func(affine-loop-unroll{unroll-full})",
+    # "builtin.func(affine-loop-tile)",
+    # "builtin.func(affine-loop-unroll-jam)",
+    # "builtin.func(affine-pipeline-data-transfer)",
+    # "builtin.func(affine-super-vectorize)",
     "builtin.func(lower-affine)",
     "torch-hls-promote-allocs",
     # "builtin.func(convert-scf-to-std)",
@@ -165,10 +193,12 @@ if __name__ == "__main__":
         # pm.enable_ir_printing()
         pm.run(mb.module)
 
-    dialect = "affine"
-    asm_for_error_report = mb.module.operation.get_asm(
+    dialect = "scf"
+    out = mb.module.operation.get_asm(
         large_elements_limit=100000, enable_debug_info=False)
-    open(f"../scripts/braggnn.{dialect}.mlir", "w").write(asm_for_error_report)
+    # hard coded here for vitis
+    open(f"../scripts/braggnn.affine.mlir", "w").write(out)
+    # hack_for_calyx(out)
 
 # kintex7 kintex7l artix7 artix7l aartix7 zynq azynq spartan7 aspartan7 virtexuplus virtexuplusHBM kintexuplus artixuplusb zynquplus azynquplus kintexu
 # set_directive_pipeline

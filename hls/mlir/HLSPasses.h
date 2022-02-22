@@ -25,11 +25,15 @@ std::unique_ptr<OperationPass<ModuleOp>> createHLSDropPublicReturnPass();
 
 std::unique_ptr<OperationPass<ModuleOp>> createHLSPromoteAllocsPass();
 
+std::unique_ptr<OperationPass<ModuleOp>> createHLSHLSQuantizeModulePass();
+
 std::unique_ptr<OperationPass<FuncOp>> createHLSLinalgBufferizePass();
 
 std::unique_ptr<OperationPass<FuncOp>> createHLSDecomposeComplexOpsPass();
 
 std::unique_ptr<OperationPass<FuncOp>> createHLSConvertTorchToLinalgPass();
+
+std::unique_ptr<OperationPass<FuncOp>> createHLSQuantizePass();
 
 // std::unique_ptr<OperationPass<FuncOp>> createHLSReduceOpVariantsPass();
 
