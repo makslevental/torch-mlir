@@ -23,6 +23,7 @@ add_mlir_library(HLSTorch
         HLSDecomposeComplexOps.cpp
         HLSDropPublicReturn.cpp
         HLSPromoteAllocs.cpp
+        HLSQuantize.cpp
         HLSLinalgBufferize.cpp
         HLSRefineTypes.cpp
         HLSTorchToLinalg.cpp
