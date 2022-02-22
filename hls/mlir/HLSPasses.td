@@ -46,4 +46,16 @@ def HLSPromoteAllocs : Pass<"torch-hls-promote-allocs", "ModuleOp"> {
     }];
 }
 
+def HLSHLSQuantizeModule : Pass<"torch-hls-quantize-module", "ModuleOp"> {
+  let constructor = "mlir::torch::HLS::createHLSHLSQuantizeModulePass()";
+  let description = [{
+  }];
+}
+
+def HLSQuantize : Pass<"torch-hls-quantize", "FuncOp"> {
+  let constructor = "mlir::torch::HLS::createHLSQuantizePass()";
+  let description = [{
+  }];
+}
+
 #endif
