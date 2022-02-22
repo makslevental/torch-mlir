@@ -41,12 +41,23 @@ class NLB(torch.nn.Module):
         return _out_tmp
 
 
+class Exp(torch.nn.Module):
+    def __init__(
+            self,
+    ):
+        super().__init__()
+
+    # e^x = 1 + x + x^2/2!
+    def forward(self, x):
+        return 1 + x + x * x / 2
+
+
 class BraggNN(torch.nn.Module):
     def __init__(
-        self,
-        imgsz=11,
-        # fcsz=(64, 32, 16, 8)
-        fcsz=(16, 8, 4, 2),
+            self,
+            imgsz=11,
+            # fcsz=(64, 32, 16, 8)
+            fcsz=(16, 8, 4, 2),
     ):
         super().__init__()
         self.cnn_ops = []
@@ -55,14 +66,15 @@ class BraggNN(torch.nn.Module):
         cnn_in_chs = (1,) + cnn_out_chs[:-1]
         fsz = imgsz
         for (
-            ic,
-            oc,
+                ic,
+                oc,
         ) in zip(cnn_in_chs, cnn_out_chs):
             self.cnn_ops += [
                 torch.nn.Conv2d(
                     in_channels=ic, out_channels=oc, kernel_size=3, stride=1, padding=0
                 ),
                 torch.nn.LeakyReLU(negative_slope=0.01),
+                # Exp()
             ]
             fsz -= 2
         self.nlb = NLB(in_ch=cnn_out_chs[0])
@@ -72,6 +84,7 @@ class BraggNN(torch.nn.Module):
             self.dense_ops += [
                 torch.nn.Linear(ic, oc),
                 torch.nn.LeakyReLU(negative_slope=0.01),
+                # Exp()
             ]
         # output layer
         self.dense_ops += [
