@@ -27,9 +27,10 @@ dst_file=/home/mlevental/dev_projects/torch-mlir/hls/scripts/vitis_stuff/$FN.opt
   -xlnmath \
   -xlnname \
   -strip-attr \
-  -xlnunroll \
-  -xlnarraypartition \
   > "${dst_file}"
 #
 ##cp wrapper.cpp vitis_stuff/wrapper.cpp
 ##cp run_hls.tcl vitis_stuff/run_hls.tcl
+
+#  -xlnunroll \
+#  -xlnarraypartition \
