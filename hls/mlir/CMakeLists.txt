@@ -19,6 +19,7 @@ add_public_tablegen_target(HLSTorchIncGen)
 #        HLSTorchOps.cpp
 #        HLSAdjustCallingConventions.cpp
 #        HLSReduceOpVariants.cpp
+#SimplifyMemrefAccess.cpp
 add_mlir_library(HLSTorch
         HLSDecomposeComplexOps.cpp
         HLSDropPublicReturn.cpp
@@ -29,6 +30,7 @@ add_mlir_library(HLSTorch
         HLSTorchToLinalg.cpp
         HLSPasses.cpp
         MemoryPlanning.cpp
+        ConvertCopyToAffineLoops.cpp
 
         ADDITIONAL_HEADER_DIRS
         ${PROJECT_SOURCE_DIR}/hls/mlir

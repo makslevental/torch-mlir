@@ -1,0 +1,244 @@
+{
+  "AffineDataCopyGeneration": {
+    "pass_name": "AffineDataCopyGeneration",
+    "argument": "affine-data-copy-generate",
+    "summary": "Generate explicit copying for affine memory operations",
+    "options": {
+      "fastMemoryCapacity": {
+        "argument": "fast-mem-capacity",
+        "defaultValue": "std::numeric_limits<uint64_t>::max()",
+        "description": "Set fast memory space capacity in KiB (default: unlimited)",
+        "type": "uint64_t",
+        "additionalOptFlags": ""
+      },
+      "fastMemorySpace": {
+        "argument": "fast-mem-space",
+        "defaultValue": "1",
+        "description": "Fast memory space identifier for copy generation (default: 1)",
+        "type": "unsigned",
+        "additionalOptFlags": ""
+      },
+      "generateDma": {
+        "argument": "generate-dma",
+        "defaultValue": "true",
+        "description": "Generate DMA instead of point-wise copy",
+        "type": "bool",
+        "additionalOptFlags": ""
+      },
+      "minDmaTransferSize": {
+        "argument": "min-dma-transfer",
+        "defaultValue": "1024",
+        "description": "Minimum DMA transfer size supported by the target in bytes",
+        "type": "int",
+        "additionalOptFlags": ""
+      },
+      "slowMemorySpace": {
+        "argument": "slow-mem-space",
+        "defaultValue": "0",
+        "description": "Slow memory space identifier for copy generation (default: 0)",
+        "type": "unsigned",
+        "additionalOptFlags": ""
+      },
+      "skipNonUnitStrideLoops": {
+        "argument": "skip-non-unit-stride-loops",
+        "defaultValue": "false",
+        "description": "Testing purposes: avoid non-unit stride loop choice depths for copy placement",
+        "type": "bool",
+        "additionalOptFlags": ""
+      },
+      "tagMemorySpace": {
+        "argument": "tag-mem-space",
+        "defaultValue": "0",
+        "description": "Tag memory space identifier for copy generation (default: 0)",
+        "type": "unsigned",
+        "additionalOptFlags": ""
+      }
+    }
+  },
+  "AffineLoopUnroll": {
+    "pass_name": "AffineLoopUnroll",
+    "argument": "affine-loop-unroll",
+    "summary": "Unroll affine loops",
+    "options": {
+      "unrollFactor": {
+        "argument": "unroll-factor",
+        "defaultValue": "4",
+        "description": "Use this unroll factor for all loops being unrolled",
+        "type": "unsigned",
+        "additionalOptFlags": ""
+      },
+      "unrollUpToFactor": {
+        "argument": "unroll-up-to-factor",
+        "defaultValue": "false",
+        "description": "Allow unrolling up to the factor specified",
+        "type": "bool",
+        "additionalOptFlags": ""
+      },
+      "unrollFull": {
+        "argument": "unroll-full",
+        "defaultValue": "false",
+        "description": "Fully unroll loops",
+        "type": "bool",
+        "additionalOptFlags": ""
+      },
+      "numRepetitions": {
+        "argument": "unroll-num-reps",
+        "defaultValue": "1",
+        "description": "Unroll innermost loops repeatedly this many times",
+        "type": "unsigned",
+        "additionalOptFlags": ""
+      },
+      "unrollFullThreshold": {
+        "argument": "unroll-full-threshold",
+        "defaultValue": "1",
+        "description": "Unroll all loops with trip count less than or equal to this",
+        "type": "unsigned",
+        "additionalOptFlags": ""
+      }
+    }
+  },
+  "AffineLoopFusion": {
+    "pass_name": "AffineLoopFusion",
+    "argument": "affine-loop-fusion",
+    "summary": "Fuse affine loop nests",
+    "options": {
+      "computeToleranceThreshold": {
+        "argument": "fusion-compute-tolerance",
+        "defaultValue": "0.30f",
+        "description": "Fractional increase in additional computation tolerated while fusing",
+        "type": "double",
+        "additionalOptFlags": ""
+      },
+      "fastMemorySpace": {
+        "argument": "fusion-fast-mem-space",
+        "defaultValue": "0",
+        "description": "Faster memory space number to promote fusion buffers to",
+        "type": "unsigned",
+        "additionalOptFlags": ""
+      },
+      "localBufSizeThreshold": {
+        "argument": "fusion-local-buf-threshold",
+        "defaultValue": "0",
+        "description": "Threshold size (KiB) for promoting local buffers to fast memory space",
+        "type": "uint64_t",
+        "additionalOptFlags": ""
+      },
+      "maximalFusion": {
+        "argument": "fusion-maximal",
+        "defaultValue": "false",
+        "description": "Enables maximal loop fusion",
+        "type": "bool",
+        "additionalOptFlags": ""
+      },
+      "affineFusionMode": {
+        "argument": "mode",
+        "defaultValue": "mlir::FusionMode::Greedy",
+        "description": "fusion mode to attempt",
+        "type": "enum",
+        "additionalOptFlags": [
+          "greedy",
+          "producer",
+          "sibling"
+        ]
+      }
+    }
+  },
+  "AffineLoopTiling": {
+    "pass_name": "AffineLoopTiling",
+    "argument": "affine-loop-tile",
+    "summary": "Tile affine loop nests",
+    "options": {
+      "cacheSizeInKiB": {
+        "argument": "cache-size",
+        "defaultValue": "512",
+        "description": "Set size of cache to tile for in KiB",
+        "type": "uint64_t",
+        "additionalOptFlags": ""
+      },
+      "separate": {
+        "argument": "separate",
+        "defaultValue": "",
+        "description": "Separate full and partial tiles",
+        "type": "bool",
+        "additionalOptFlags": ""
+      },
+      "tileSize": {
+        "argument": "tile-size",
+        "defaultValue": "",
+        "description": "Use this tile size for all loops",
+        "type": "unsigned",
+        "additionalOptFlags": ""
+      },
+      "tileSizes": {
+        "argument": "tile-sizes",
+        "defaultValue": "",
+        "description": "List of tile sizes for each perfect nest (overridden by -tile-size)",
+        "type": "unsigned",
+        "additionalOptFlags": "llvm::cl::ZeroOrMore"
+      }
+    }
+  },
+  "AffineLoopUnrollAndJam": {
+    "pass_name": "AffineLoopUnrollAndJam",
+    "argument": "affine-loop-unroll-jam",
+    "summary": "Unroll and jam affine loops",
+    "options": {
+      "unrollJamFactor": {
+        "argument": "unroll-jam-factor",
+        "defaultValue": "4",
+        "description": "Use this unroll jam factor for all loops (default 4)",
+        "type": "unsigned",
+        "additionalOptFlags": ""
+      }
+    }
+  },
+  "AffineParallelize": {
+    "pass_name": "AffineParallelize",
+    "argument": "affine-parallelize",
+    "summary": "Convert affine.for ops into 1-D affine.parallel",
+    "options": {
+      "maxNested": {
+        "argument": "max-nested",
+        "defaultValue": "-1u",
+        "description": "Maximum number of nested parallel loops to produce. Defaults to unlimited (UINT_MAX).",
+        "type": "unsigned",
+        "additionalOptFlags": ""
+      },
+      "parallelReductions": {
+        "argument": "parallel-reductions",
+        "defaultValue": "false",
+        "description": "Whether to parallelize reduction loops. Defaults to false.",
+        "type": "bool",
+        "additionalOptFlags": ""
+      }
+    }
+  },
+  "AffineVectorize": {
+    "pass_name": "AffineVectorize",
+    "argument": "affine-super-vectorize",
+    "summary": "Vectorize to a target independent n-D vector abstraction",
+    "options": {
+      "vectorSizes": {
+        "argument": "virtual-vector-size",
+        "defaultValue": "",
+        "description": "Specify an n-D virtual vector size for vectorization",
+        "type": "int64_t",
+        "additionalOptFlags": "llvm::cl::ZeroOrMore, llvm::cl::MiscFlags::CommaSeparated"
+      },
+      "fastestVaryingPattern": {
+        "argument": "test-fastest-varying",
+        "defaultValue": "",
+        "description": "Specify a 1-D, 2-D or 3-D pattern of fastest varying memory dimensions to match. See defaultPatterns in Vectorize.cpp for a description and examples. This is used for testing purposes",
+        "type": "int64_t",
+        "additionalOptFlags": "llvm::cl::ZeroOrMore, llvm::cl::MiscFlags::CommaSeparated"
+      },
+      "vectorizeReductions": {
+        "argument": "vectorize-reductions",
+        "defaultValue": "false",
+        "description": "Vectorize known reductions expressed via iter_args. Switched off by default.",
+        "type": "bool",
+        "additionalOptFlags": ""
+      }
+    }
+  }
+}
