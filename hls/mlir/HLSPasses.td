@@ -58,4 +58,24 @@ def HLSQuantize : Pass<"torch-hls-quantize", "FuncOp"> {
   }];
 }
 
+def ConvertCopyToAffineLoops : Pass<"torch-hls-convert-copy-to-affine-loops", "FuncOp"> {
+  let summary = "Convert copy and assign to affine loops";
+  let description = [{
+      This convert-copy-to-affine-loops pass will first remove redundant copies
+                                              and lower assigns to copies, and then convert copies to affine loops.
+  }];
+
+  let constructor = "mlir::torch::HLS::createConvertCopyToAffineLoopsPass()";
+}
+
+//def SimplifyMemrefAccess : Pass<"simplify-memref-access", "FuncOp"> {
+//  let summary = "Remove redundant load and store operations";
+//  let description = [{
+//    This simplify-memref-access pass will eliminate the known redundant load and
+//    store operations for simplifying the memref access.
+//  }];
+//
+//  let constructor = "mlir::torch::HLS::createSimplifyMemrefAccessPass()";
+//}
+
 #endif

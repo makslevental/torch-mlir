@@ -4,17 +4,22 @@
 #include <inttypes.h>
 #include <math.h>
 
-#define N 11
-#define N2 121 // N*N
-#define M 6
-#define M2 36
+#define IN_BATCH XXX_IN_BATCH_XXX
+#define IN_CHANNEL XXX_IN_CHANNEL_XXX
+#define IN_HEIGHT XXX_IN_HEIGHT_XXX
+#define IN_WIDTH XXX_IN_WIDTH_XXX
+
+#define OUT_BATCH XXX_OUT_BATCH_XXX
+#define OUT_CHANNEL XXX_OUT_CHANNEL_XXX
+
 #define DWIDTH 512
 
-extern "C" void forward(float (&arg_2)[1][1][11][11], float (&arg_3)[1][2]);
+extern "C" void forward(float (&arg_2)[IN_BATCH][IN_CHANNEL][IN_HEIGHT][IN_WIDTH],
+                        float (&arg_3)[OUT_BATCH][OUT_CHANNEL]);
 
 typedef ap_axiu<DWIDTH, 0, 0, 0> axis_t;
 
-typedef float DataType;
+typedef XXX_DTYPE_XXX DataType;
 
 // bit width of data type (32)
 const int DataTypeSize = sizeof(DataType) * 8;
@@ -32,13 +37,13 @@ void wrapper(hls::stream<axis_t> &in, hls::stream<axis_t> &out) {
 #pragma HLS INTERFACE axis port = in
 #pragma HLS INTERFACE axis port = out
 
-  float l_A[1][1][11][11];
+  float l_A[IN_BATCH][IN_CHANNEL][IN_HEIGHT][IN_WIDTH];
 
   //#pragma HLS ARRAY_PARTITION variable = l_A factor = 16 dim = 1 cyclic
   //#pragma HLS ARRAY_PARTITION variable = l_C factor = 16 dim = 1 cyclic
 
   // how many stream reads it takes to get the entire matrix
-  int i_limit = ceil((float)(11 * 11) / (float)NUM_ITEMS);
+  int i_limit = ceil((float)(IN_BATCH * IN_CHANNEL * IN_HEIGHT * IN_WIDTH) / (float)NUM_ITEMS);
   converter_t converter;
 
 load_A:
@@ -54,12 +59,10 @@ load_A:
     }
   }
 
-  float l_C[1][2];
+  float l_C[OUT_BATCH][OUT_CHANNEL];
   forward(l_A, l_C);
 
-  // 36 / 16 = 2 but it should be 3
-  //  int k_limit = ceil((float)M2 / (float)NUM_ITEMS);
-  int k_limit = ceil((float)(1 * 2) / (float)NUM_ITEMS);
+  int k_limit = ceil((float)(OUT_BATCH * OUT_CHANNEL) / (float)NUM_ITEMS);
 writeC:
   for (int k = 0; k < k_limit; k++) {
     axis_t temp;

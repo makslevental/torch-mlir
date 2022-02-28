@@ -35,6 +35,12 @@ std::unique_ptr<OperationPass<FuncOp>> createHLSConvertTorchToLinalgPass();
 
 std::unique_ptr<OperationPass<FuncOp>> createHLSQuantizePass();
 
+std::unique_ptr<OperationPass<ModuleOp>> createHLSHLSQuantizeModulePass();
+
+std::unique_ptr<OperationPass<FuncOp>> createConvertCopyToAffineLoopsPass();
+
+//std::unique_ptr<OperationPass<FuncOp>> createSimplifyMemrefAccessPass();
+
 // std::unique_ptr<OperationPass<FuncOp>> createHLSReduceOpVariantsPass();
 
 // std::unique_ptr<OperationPass<FuncOp>> createHLSConvertOperatorsPass();

@@ -17,6 +17,7 @@
 #include "mlir-c/BuiltinAttributes.h"
 #include "mlir-c/BuiltinTypes.h"
 #include "mlir-c/Diagnostics.h"
+#include "torch/csrc/jit/passes/remove_exceptions.h"
 
 using namespace torch_mlir;
 
@@ -67,8 +68,10 @@ MlirOperation torch_mlir::importJitFunctionAsFuncOp(
                                  appendToBlock, loc, yieldedValues, resultTypes,
                                  /*userAllowsRefinement=*/false));
   };
+  auto graph = torch::jit::toGraphFunction(*function).graph();
+  torch::jit::EliminateExceptions(graph);
   MlirBlock block = importBlock(
-      context, torch::jit::toGraphFunction(*function).graph()->block(),
+      context, graph->block(),
       createTerminator, inputTypes);
   mlirRegionAppendOwnedBlock(bodyRegion, block);
   return func;

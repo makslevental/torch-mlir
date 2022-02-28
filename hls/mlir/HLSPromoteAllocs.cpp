@@ -193,8 +193,8 @@ class PromoteAllocsPass : public HLSPromoteAllocsBase<PromoteAllocsPass> {
   }
 
   void hoistLastStoreAlloc(FuncOp func) {
-    llvm::SmallVector<memref::StoreOp> stores;
-    func.walk([&](memref::StoreOp op) { stores.push_back(op); });
+    llvm::SmallVector<AffineStoreOp> stores;
+    func.walk([&](AffineStoreOp op) { stores.push_back(op); });
 
     if (stores.empty()) {
       func.emitError() << "no stores found";
