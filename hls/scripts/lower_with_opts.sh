@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 ROOT_DIR="${DIR}/../.."
@@ -11,16 +12,11 @@ $ROOT_BINDIR/mlir-opt -debug \
   $FN.affine.baseline.mlir \
   -affine-loop-invariant-code-motion \
   -affine-simplify-structures \
-  -affine-loop-invariant-code-motion \
   -affine-loop-normalize \
-  -affine-loop-invariant-code-motion \
   -affine-loop-fusion="fusion-maximal=true mode=greedy" \
-  -affine-loop-invariant-code-motion \
-  -affine-simplify-structures \
-  -affine-loop-invariant-code-motion \
-  -affine-loop-normalize \
-  -affine-loop-invariant-code-motion \
-  -affine-loop-unroll="unroll-full=true" > $FN.affine.mlir
+  -affine-loop-unroll="unroll-full=true" > $FN.affine.opt.mlir
+
+sed -i 's/alloc(/alloca(/g' $FN.affine.opt.mlir
 
 $ROOT_BINDIR/mlir-opt \
   -lower-affine \
@@ -28,7 +24,8 @@ $ROOT_BINDIR/mlir-opt \
   -convert-memref-to-llvm \
   -convert-arith-to-llvm \
   -convert-std-to-llvm='use-bare-ptr-memref-call-conv=1' \
-  -reconcile-unrealized-casts <$FN.affine.mlir > vitis_stuff/$FN.llvm.mlir
+  -reconcile-unrealized-casts \
+  < $FN.affine.opt.mlir > vitis_stuff/$FN.llvm.mlir
 
 $ROOT_BINDIR/mlir-translate \
   -mlir-to-llvmir <vitis_stuff/$FN.llvm.mlir > vitis_stuff/$FN.ll
@@ -42,7 +39,6 @@ ${ROOT_BINDIR}/opt "${src_file}" \
   -strip-attr \
   -memcpyopt \
   -mem2arr \
-  -memcpyopt \
   -strip-debug \
   -instcombine \
   -xlnmath \
