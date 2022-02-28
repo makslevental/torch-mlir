@@ -4,9 +4,8 @@ from torch_mlir.dialects.torch.importer.jit_ir import ClassAnnotator, ModuleBuil
 
 # noinspection PyUnresolvedReferences
 from torch_mlir_e2e_test.linalg_on_tensors_backends.refbackend import RefBackendInvoker
-from torch_mlir.dialects.torch.importer.jit_ir.torchscript_annotations import (
-    extract_annotations,
-)
+
+from eager.torch_dispatch import TorchMLIRTensor
 
 TORCH_MLIR_EXPORT_ATTR_NAME = "_torch_mlir_export"
 TORCH_MLIR_ARG_ANNOTATIONS_ATTR_NAME = "_torch_mlir_arg_annotations"
@@ -285,11 +284,11 @@ class MyBasicBlock(nn.Module):
             inplanes: int,
             planes: int,
             stride: int = 1,
-            downsample= None,
+            downsample=None,
             groups: int = 1,
             base_width: int = 64,
             dilation: int = 1,
-            norm_layer= None,
+            norm_layer=None,
     ) -> None:
         super().__init__()
         if norm_layer is None:
@@ -332,8 +331,6 @@ class MyBasicBlock(nn.Module):
         return out
 
 
-
-
 def make_layer(test_module, annotations):
     class_annotator = ClassAnnotator()
     recursivescriptmodule = torch.jit.script(test_module)
@@ -343,6 +340,7 @@ def make_layer(test_module, annotations):
         recursivescriptmodule._c._type(), ["forward"], annotations
     )
     # extract_annotations(test_module, recursivescriptmodule, class_annotator)
+    torch._C._jit_pass_inline(recursivescriptmodule.graph)
     return recursivescriptmodule._c, class_annotator
 
 # class Matmul(torch.nn.Module):

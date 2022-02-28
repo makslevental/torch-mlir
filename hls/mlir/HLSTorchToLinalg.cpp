@@ -504,8 +504,8 @@ public:
 
     Type elementType =
         input.getType().cast<RankedTensorType>().getElementType();
-    if (!elementType.isa<mlir::FloatType>())
-      return op.emitError("unimplemented: non-floating point type");
+//    if (!elementType.isa<mlir::FloatType>())
+//      return op.emitError("unimplemented: non-floating point type");
 
     Type intType = IntegerType::get(context, 64);
     auto castIndexToInt = [&](Value v) {
@@ -725,8 +725,8 @@ public:
     Value ceilMode = adaptor.ceil_mode();
 
     Type elementType = self.getType().cast<RankedTensorType>().getElementType();
-    if (!elementType.isa<mlir::FloatType>())
-      return op.emitError("unimplemented: non-floating point type");
+//    if (!elementType.isa<mlir::FloatType>())
+//      return op.emitError("unimplemented: non-floating point type");
 
     // Pattern match against the op's original operands, because otherwise we
     // will get the lowered version of the operands which is harder to pattern
@@ -826,8 +826,8 @@ public:
     Value out = adaptor.out();    /* in form of N*C*H*W */
     RankedTensorType inputType = input.getType().cast<RankedTensorType>();
     Type elementType = inputType.getElementType();
-    if (!elementType.isa<mlir::FloatType>())
-      return op.emitError("unimplemented: non-floating point type");
+//    if (!elementType.isa<mlir::FloatType>())
+//      return op.emitError("unimplemented: non-floating point type");
 
     auto inputRank = inputType.getRank();
     if (inputRank != 4)
@@ -1127,8 +1127,8 @@ public:
 
     Type elementType =
         input.getType().cast<RankedTensorType>().getElementType();
-    if (!elementType.isa<mlir::FloatType>())
-      return op.emitError("unimplemented: non-floating point type");
+//    if (!elementType.isa<mlir::FloatType>())
+//      return op.emitError("unimplemented: non-floating point type");
 
     Type intType = IntegerType::get(context, 64);
     auto castIndexToInt = [&](Value v) {
