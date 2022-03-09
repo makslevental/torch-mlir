@@ -5,8 +5,6 @@ from torch_mlir.dialects.torch.importer.jit_ir import ClassAnnotator, ModuleBuil
 # noinspection PyUnresolvedReferences
 from torch_mlir_e2e_test.linalg_on_tensors_backends.refbackend import RefBackendInvoker
 
-from eager.torch_dispatch import TorchMLIRTensor
-
 TORCH_MLIR_EXPORT_ATTR_NAME = "_torch_mlir_export"
 TORCH_MLIR_ARG_ANNOTATIONS_ATTR_NAME = "_torch_mlir_arg_annotations"
 
@@ -45,19 +43,8 @@ class Conv2dNoPaddingOut(torch.nn.Module):
         return torch._C._nn.thnn_conv2d(inp, self.weight, self.kernel_size, out=out)
 
 
-# class AddInplace(torch.nn.Module):
-#     def __init__(self, constant):  # TODO
-#         super().__init__()
-#         self.constant = constant
-#         self.train(False)
-#
-#     @export
-#     def forward(self, inp, out):
-#         return torch._C._nn.thnn_conv2d(inp, self.weight, self.kernel_size, out=out)
-
-
 def make_conv2d_no_bias_no_padding_no_stride_no_dilation_out(
-        batch_size, in_planes, out_planes, kernel_size, height, width
+    batch_size, in_planes, out_planes, kernel_size, height, width
 ) -> torch.nn.Module:
     c = annotate_forward(
         Conv2dNoPaddingOut,
@@ -106,7 +93,7 @@ class MaxPool2dOut(torch.nn.Module):
 
 
 def make_maxpool2d_no_padding_no_stride_no_dilation_out(
-        batch_size, channels, kernel_size, height, width
+    batch_size, channels, kernel_size, height, width
 ):
     out_dims = [
         batch_size,
@@ -166,10 +153,7 @@ class ReLUInplace(torch.nn.Module):
 def make_relu(batch_size, channels, height, width):
     r = annotate_forward(
         ReLUInplace,
-        [
-            None,
-            ([batch_size, channels, height, width], torch.float32, True),
-        ],
+        [None, ([batch_size, channels, height, width], torch.float32, True)],
     )
     return r()
 
@@ -262,7 +246,9 @@ class TestMod(torch.nn.Module):
         return x
 
 
-def conv3x3(in_planes: int, out_planes: int, stride: int = 1, groups: int = 1, dilation: int = 1) -> nn.Conv2d:
+def conv3x3(
+    in_planes: int, out_planes: int, stride: int = 1, groups: int = 1, dilation: int = 1
+) -> nn.Conv2d:
     """3x3 convolution with padding"""
     return nn.Conv2d(
         in_planes,
@@ -280,15 +266,15 @@ class MyBasicBlock(nn.Module):
     expansion: int = 1
 
     def __init__(
-            self,
-            inplanes: int,
-            planes: int,
-            stride: int = 1,
-            downsample=None,
-            groups: int = 1,
-            base_width: int = 64,
-            dilation: int = 1,
-            norm_layer=None,
+        self,
+        inplanes: int,
+        planes: int,
+        stride: int = 1,
+        downsample=None,
+        groups: int = 1,
+        base_width: int = 64,
+        dilation: int = 1,
+        norm_layer=None,
     ) -> None:
         super().__init__()
         if norm_layer is None:
@@ -342,6 +328,7 @@ def make_layer(test_module, annotations):
     # extract_annotations(test_module, recursivescriptmodule, class_annotator)
     torch._C._jit_pass_inline(recursivescriptmodule.graph)
     return recursivescriptmodule._c, class_annotator
+
 
 # class Matmul(torch.nn.Module):
 #     def __init__(self):
