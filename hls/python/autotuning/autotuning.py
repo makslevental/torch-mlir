@@ -150,8 +150,8 @@ def objective(trial):
         replace_me = open(BRAGGNN_FP).read().replace("alloc(", "alloca(")
         open(BRAGGNN_FP, "w").write(replace_me)
 
-        in_batch, in_channel, in_height, in_width, out_batch, out_channel = re.search(
-            r"func @forward\(%.*: memref<(\d+)x(\d+)x(\d+)x(\d+)x.*>, %.*: memref<(\d+)x(\d+)x.*>\)",
+        in_batch, in_channel, in_height, in_width, out_batch, out_channel, out_height, out_width = re.search(
+            r"func @forward\(%.*: memref<(\d+)x(\d+)x(\d+)x(\d+)x.*>, %.*: memref<(\d+)x(\d+)x(\d+)x(\d+)x.*>\)",
             replace_me,
         ).groups()
         replace_me = open(WRAPPER_CPP_FILE).read()
@@ -162,6 +162,8 @@ def objective(trial):
             "IN_WIDTH": in_width,
             "OUT_BATCH": out_batch,
             "OUT_CHANNEL": out_channel,
+            "OUT_HEIGHT": out_height,
+            "OUT_WIDTH": out_width,
             "DTYPE": "float",
         }
         for k, v in replacements.items():

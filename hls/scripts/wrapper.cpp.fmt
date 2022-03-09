@@ -11,11 +11,13 @@
 
 #define OUT_BATCH XXX_OUT_BATCH_XXX
 #define OUT_CHANNEL XXX_OUT_CHANNEL_XXX
+#define OUT_HEIGHT XXX_OUT_HEIGHT_XXX
+#define OUT_WIDTH XXX_OUT_WIDTH_XXX
 
 #define DWIDTH 512
 
 extern "C" void forward(float (&arg_2)[IN_BATCH][IN_CHANNEL][IN_HEIGHT][IN_WIDTH],
-                        float (&arg_3)[OUT_BATCH][OUT_CHANNEL]);
+                        float (&arg_3)[OUT_BATCH][OUT_CHANNEL][OUT_HEIGHT][OUT_WIDTH]);
 
 typedef ap_axiu<DWIDTH, 0, 0, 0> axis_t;
 
@@ -59,10 +61,10 @@ load_A:
     }
   }
 
-  float l_C[OUT_BATCH][OUT_CHANNEL];
+  float l_C[OUT_BATCH][OUT_CHANNEL][OUT_HEIGHT][OUT_HEIGHT];
   forward(l_A, l_C);
 
-  int k_limit = ceil((float)(OUT_BATCH * OUT_CHANNEL) / (float)NUM_ITEMS);
+  int k_limit = ceil((float)(OUT_BATCH * OUT_CHANNEL * OUT_HEIGHT * OUT_WIDTH) / (float)NUM_ITEMS);
 writeC:
   for (int k = 0; k < k_limit; k++) {
     axis_t temp;
@@ -70,7 +72,7 @@ writeC:
       int high = (j + 1) * DataTypeSize - 1;
       int low = j * DataTypeSize;
       int index = k * NUM_ITEMS + j;
-      converter.d = (&l_C[0][0])[index];
+      converter.d = (&l_C[0][0][0][0])[index];
       temp.data.range(high, low) = converter.i;
     }
 
