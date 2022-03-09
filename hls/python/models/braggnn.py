@@ -20,11 +20,6 @@ class NLB(torch.nn.Module):
             in_channels=self.inter_ch, out_channels=in_ch, kernel_size=1, padding=0
         )
 
-        for m in self.modules():
-            if hasattr(m, "weight"):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 1)
-
     def forward(self, x):
         theta = self.theta_layer(x)
         phi = self.phi_layer(x)
@@ -42,9 +37,7 @@ class NLB(torch.nn.Module):
 
 
 class Exp(torch.nn.Module):
-    def __init__(
-            self,
-    ):
+    def __init__(self,):
         super().__init__()
 
     # e^x = 1 + x + x^2/2!
@@ -53,22 +46,13 @@ class Exp(torch.nn.Module):
 
 
 class BraggNN(torch.nn.Module):
-    def __init__(
-            self,
-            imgsz=11,
-            # fcsz=(64, 32, 16, 8)
-            fcsz=(16, 8, 4, 2),
-    ):
+    def __init__(self, imgsz=11, fcsz=(64, 32, 16, 8)):
         super().__init__()
         self.cnn_ops = []
-        cnn_out_chs = (16, 8, 2)
-        # cnn_out_chs = (64, 32, 8)
+        cnn_out_chs = (64, 32, 8)
         cnn_in_chs = (1,) + cnn_out_chs[:-1]
         fsz = imgsz
-        for (
-                ic,
-                oc,
-        ) in zip(cnn_in_chs, cnn_out_chs):
+        for (ic, oc) in zip(cnn_in_chs, cnn_out_chs):
             self.cnn_ops += [
                 torch.nn.Conv2d(
                     in_channels=ic, out_channels=oc, kernel_size=3, stride=1, padding=0
@@ -87,28 +71,11 @@ class BraggNN(torch.nn.Module):
                 # Exp()
             ]
         # output layer
-        self.dense_ops += [
-            torch.nn.Linear(fcsz[-1], 2),
-        ]
-
-        for m in self.cnn_ops:
-            if hasattr(m, "weight"):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 1)
-
-        for m in self.dense_ops:
-            if hasattr(m, "weight"):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 1)
+        self.dense_ops += [torch.nn.Linear(fcsz[-1], 2)]
 
         self.cnn_layers_1 = self.cnn_ops[0]
         self.cnn_layers_2 = torch.nn.Sequential(*self.cnn_ops[1:])
         self.dense_layers = torch.nn.Sequential(*self.dense_ops)
-
-        for m in self.modules():
-            if hasattr(m, "weight"):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 1)
 
     def forward(self, x):
         _out = x

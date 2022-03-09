@@ -1,16 +1,18 @@
 # noinspection PyUnresolvedReferences
+
 import errno
+import glob
+import json
 import os
 import re
-import json
 import shutil
 import subprocess
-import sys
-from os import mkdir
 from pathlib import Path
 from subprocess import STDOUT, PIPE
 
+import matplotlib.pyplot as plt
 import optuna
+from bs4 import BeautifulSoup as bs
 
 from hls.python.autotuning.parse_csynth_report import parse_report
 
@@ -65,11 +67,13 @@ WRAPPER_CPP_FILE = "/home/mlevental/dev_projects/torch-mlir/hls/scripts/wrapper.
 WRAPPER_CPP_VITIS_FILE = (
     "/home/mlevental/dev_projects/torch-mlir/hls/scripts/vitis_stuff/wrapper.cpp"
 )
-VITIS_SH_FILE = "/home/mlevental/dev_projects/torch-mlir/hls/scripts/vitis_stuff/run_vitis.sh"
+VITIS_SH_FILE = (
+    "/home/mlevental/dev_projects/torch-mlir/hls/scripts/vitis_stuff/run_vitis.sh"
+)
 
 
 def call_bin_and_write(cmd, OUT_FP):
-    print(cmd, ">", OUT_FP, file=sys.stderr)
+    # print(cmd, ">", OUT_FP, file=sys.stderr)
     out = subprocess.run(cmd, capture_output=True, shell=True)
     out_decoded = out.stdout.decode()
     open(OUT_FP, "w").write(out_decoded)
@@ -146,7 +150,6 @@ def objective(trial):
         replace_me = open(BRAGGNN_FP).read().replace("alloc(", "alloca(")
         open(BRAGGNN_FP, "w").write(replace_me)
 
-
         in_batch, in_channel, in_height, in_width, out_batch, out_channel = re.search(
             r"func @forward\(%.*: memref<(\d+)x(\d+)x(\d+)x(\d+)x.*>, %.*: memref<(\d+)x(\d+)x.*>\)",
             replace_me,
@@ -159,7 +162,7 @@ def objective(trial):
             "IN_WIDTH": in_width,
             "OUT_BATCH": out_batch,
             "OUT_CHANNEL": out_channel,
-            "DTYPE": "int8_t",
+            "DTYPE": "float",
         }
         for k, v in replacements.items():
             replace_me = replace_me.replace(f"XXX_{k}_XXX", v)
@@ -314,15 +317,38 @@ def make_affine_pass_opts_cmd_lines(affine_pass_info_fp):
     make_pass_opts_cmd_line(affine_pass_info_json, "AffineVectorize")
 
 
+def plot():
+    lats = []
+    mss = []
+    for f in glob.glob(
+        "/home/mlevental/dev_projects/torch-mlir/hls/python/autotuning/logs/*/**/forward_csynth.xml"
+    ):
+        content = open(f, "r").read()
+        bs_content = bs(content, "lxml")
+        lat = int(bs_content.find("best-caselatency").text)
+        ms = float(bs_content.find("best-caserealtimelatency").text.split()[0])
+        lats.append(lat)
+        mss.append(ms)
+
+    lats.sort(reverse=True)
+    mss.sort(reverse=True)
+    print(mss[-1])
+
+    # plt.plot(lats, label="interval")
+    plt.plot(mss, label="latency")
+    # plt.yscale('log')
+    # plt.title('log')
+    plt.title("HPO")
+    plt.ylabel("latency (ms)")
+    plt.savefig("hpo.png")
+
+
 if __name__ == "__main__":
     #  llvm-tblgen --dump-json -I/home/mlevental/dev_projects/torch-mlir/external/llvm-project/mlir/include /home/mlevental/dev_projects/torch-mlir/external/llvm-project/mlir/include/mlir/Dialect/Affine/Passes.td > affine_passes.json
     # parse_affine_passes("affine_passes.json")
     # make_affine_pass_opts_cmd_lines("affine_pass_info.json")
     # replace = open("/home/mlevental/dev_projects/torch-mlir/hls/scripts/braggnn.affine.baseline.mlir").read()
     # in_batch, in_channels, in_height, in_width, out_batch, out_channels = re.search(r"func @forward\(%.*: memref<(\d+)x(\d+)x(\d+)x(\d+)xf32>, %.*: memref<(\d+)x(\d+)xf32>\)", replace).groups()
-    study = optuna.create_study(
-        direction="minimize",
-        storage="sqlite:///mydb.db",
-        load_if_exists=True,  # to skip creating a new study if it already exists.
-    )  # Create a new study.
+    study = optuna.create_study(direction="minimize")  # Create a new study.
     study.optimize(objective, n_trials=100, n_jobs=1)
+    plot()
