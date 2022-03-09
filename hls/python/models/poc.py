@@ -49,10 +49,20 @@ def set_weights(mod, typ=torch.float32, val=1, requires_grad=False):
 
 def make_conv():
     mod = torch.nn.Conv2d(
-        in_channels=1, out_channels=1, kernel_size=3, stride=1, padding=0
+        in_channels=3, out_channels=3, kernel_size=3, stride=1, padding=0, bias=False
     )
+    mod.eval()
     mod.apply(set_weights)
-    return make_layer(mod, [None, ([1, 1, 11, 11], torch.float32, True)])
+    return make_layer(mod, [None, ([1, 3, 32, 32], torch.float32, True)])
+
+
+def make_mm():
+    h = w = 10
+    with torch.no_grad():
+        mod = torch.nn.Linear(h, w, bias=False)
+        mod.eval()
+        # mod.apply(set_weights)
+        return make_layer(mod, [None, ([1, 1, 10, 10], torch.float32, True)])
 
 
 def make_braggnn():
@@ -192,7 +202,7 @@ PIPELINE = (
 
 if __name__ == "__main__":
     mb = ModuleBuilder()
-    mb.import_module(*make_braggnn())
+    mb.import_module(*make_conv())
     # Verify again with debug info present. Just checking that it makes it in there.
     with mb.module.context:
         pm = PassManager.parse(",".join(PIPELINE))
