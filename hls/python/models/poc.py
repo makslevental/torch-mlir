@@ -202,7 +202,7 @@ PIPELINE = (
 
 if __name__ == "__main__":
     mb = ModuleBuilder()
-    mb.import_module(*make_conv())
+    mb.import_module(*make_braggnn())
     # Verify again with debug info present. Just checking that it makes it in there.
     with mb.module.context:
         pm = PassManager.parse(",".join(PIPELINE))
@@ -215,6 +215,10 @@ if __name__ == "__main__":
     # hard coded here for vitis
     open(
         f"/home/mlevental/dev_projects/torch-mlir/hls/scripts/braggnn.affine.baseline.mlir",
+        "w",
+    ).write(out)
+    open(
+        f"/home/mlevental/dev_projects/torch-mlir/hls/scripts/braggnn.affine.mlir",
         "w",
     ).write(out)
     # hack_for_calyx(out)
