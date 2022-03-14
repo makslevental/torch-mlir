@@ -44,12 +44,13 @@ class Exp(torch.nn.Module):
     def forward(self, x):
         return 1 + x + x * x / 2
 
+SCALE = 4
 
 class BraggNN(torch.nn.Module):
-    def __init__(self, imgsz=11, fcsz=(64, 32, 16, 8)):
+    def __init__(self, imgsz=11, fcsz=(16*SCALE, 8*SCALE, 4*SCALE, 2*SCALE)):
         super().__init__()
         self.cnn_ops = []
-        cnn_out_chs = (64, 32, 8)
+        cnn_out_chs = (16*SCALE, 8*SCALE, 2*SCALE)
         cnn_in_chs = (1,) + cnn_out_chs[:-1]
         fsz = imgsz
         for (ic, oc) in zip(cnn_in_chs, cnn_out_chs):
