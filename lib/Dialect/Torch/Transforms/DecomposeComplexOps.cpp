@@ -680,6 +680,22 @@ public:
 };
 } // namespace
 
+// Decompose aten.convolution_backward_overrideable to aten.convolution_backward
+namespace {
+class DecomposeAtenConvolutionBackwardOverrideableOp : public OpRewritePattern<AtenConvolutionBackwardOverrideableOp> {
+public:
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(AtenConvolutionBackwardOverrideableOp op,
+                                PatternRewriter &rewriter) const override {
+    
+    Value none = rewriter.create<ConstantNoneOp>(op->getLoc());
+    rewriter.replaceOpWithNewOp<AtenConvolutionBackwardOp>(op, op.getResultTypes(), op.grad_output(), op.input(), op.weight(), none, op.stride(), op.padding(), op.dilation(), op.transposed(), op.output_padding(), op.groups(), op.output_mask());
+
+    return success();
+  }
+};
+} // namespace
+
 // Decompose aten.addmm into aten.mm and aten.add.Tensor op.
 namespace {
 class DecomposeAtenAddmmOp : public OpRewritePattern<AtenAddmmOp> {
@@ -1547,6 +1563,8 @@ class DecomposeComplexOpsPass
     target.addIllegalOp<AtenZerosLikeOp>();
     patterns.add<DecomposeAtenExpandOp>(context);
     target.addIllegalOp<AtenExpandOp>();
+    patterns.add<DecomposeAtenConvolutionBackwardOverrideableOp>(context);
+    target.addIllegalOp<AtenConvolutionBackwardOverrideableOp>();
     patterns.add<DecomposeAtenSizeOp>(context);
     target.addIllegalOp<AtenSizeOp>();
     patterns.add<DecomposeAtenReshapeOp>(context);

@@ -27,6 +27,7 @@ TORCH_TYPE_TO_ODS_TYPE = {
     "int": "Torch_IntType",
     "int[]": "TorchIntListType",
     "int?": "TorchOptionalIntType",
+    "int[]?": "TorchOptionalIntListType",
     "bool": "Torch_BoolType",
     "bool[]": "TorchBoolListType",
     "bool?": "TorchOptionalBoolType",
@@ -304,6 +305,8 @@ def emit_ops(emitter_td: TextEmitter, registry: Registry):
     emit("aten::mm : (Tensor, Tensor) -> (Tensor)")
     emit("aten::addmm : (Tensor, Tensor, Tensor, Scalar, Scalar) -> (Tensor)")
     emit("aten::matmul : (Tensor, Tensor) -> (Tensor)")
+    emit("aten::convolution_backward : (Tensor, Tensor, Tensor, int[]?, int[], int[], int[], bool, int[], int, bool[]) -> (Tensor, Tensor, Tensor)")
+    emit("aten::convolution_backward_overrideable : (Tensor, Tensor, Tensor, int[], int[], int[], bool, int[], int, bool[]) -> (Tensor, Tensor, Tensor)")
     emit(
         "aten::conv2d : (Tensor, Tensor, Tensor?, int[], int[], int[], int) -> (Tensor)"
     )
@@ -316,7 +319,7 @@ def emit_ops(emitter_td: TextEmitter, registry: Registry):
     emit(
         "aten::layer_norm : (Tensor, int[], Tensor?, Tensor?, float, bool) -> (Tensor)"
     )
-    emit(
+    emit (
         "aten::native_layer_norm : (Tensor, int[], Tensor?, Tensor?, float) -> (Tensor, Tensor, Tensor)"
     )
     emit(
@@ -348,7 +351,7 @@ def emit_ops(emitter_td: TextEmitter, registry: Registry):
     emit("aten::var : (Tensor, bool) -> (Tensor)")
     emit("aten::nll_loss_forward : (Tensor, Tensor, Tensor?, int, int) -> (Tensor, Tensor)")
     emit("aten::nll_loss_backward : (Tensor, Tensor, Tensor, Tensor?, int, int, Tensor) -> (Tensor)")
-    emit("aten::bincount : (Tensor, Tensor?, int) -> (Tensor)")
+    emit ("aten::bincount : (Tensor, Tensor?, int) -> (Tensor)")
 
     # Misc tensor ops.
     emit("aten::constant_pad_nd : (Tensor, int[], Scalar) -> (Tensor)")
