@@ -2265,6 +2265,18 @@ module {
     } : (!torch.int, !torch.bool, !torch.bool) -> !torch.bool
     return %1 : !torch.bool
   }
+  func @"__torch_mlir_shape_fn.aten.convolution_backward"(%arg0: !torch.list<int>, %arg1: !torch.list<int>, %arg2: !torch.list<int>, %arg3: !torch.optional<list<int>>, %arg4: !torch.list<int>, %arg5: !torch.list<int>, %arg6: !torch.list<int>, %arg7: !torch.bool, %arg8: !torch.list<int>, %arg9: !torch.int, %arg10: !torch.list<bool>) -> !torch.tuple<list<int>, list<int>, list<int>> {
+    %int1 = torch.constant.int 1
+    %none = torch.constant.none
+    %0 = torch.derefine %none : !torch.none to !torch.optional<list<int>>
+    %1 = call @__torch__.torch_mlir.dialects.torch.importer.jit_ir.build_tools.upstream_shape_helpers.conv_output_size(%arg1, %arg2, %0, %arg4, %arg5, %arg6, %arg9) : (!torch.list<int>, !torch.list<int>, !torch.optional<list<int>>, !torch.list<int>, !torch.list<int>, !torch.list<int>, !torch.int) -> !torch.list<int>
+    %2 = torch.derefine %none : !torch.none to !torch.optional<list<int>>
+    %3 = call @__torch__.torch_mlir.dialects.torch.importer.jit_ir.build_tools.upstream_shape_helpers.conv_output_size(%arg0, %arg1, %2, %arg4, %arg5, %arg6, %arg9) : (!torch.list<int>, !torch.list<int>, !torch.optional<list<int>>, !torch.list<int>, !torch.list<int>, !torch.list<int>, !torch.int) -> !torch.list<int>
+    %4 = torch.aten.__getitem__.t %arg0, %int1 : !torch.list<int>, !torch.int -> !torch.int
+    %5 = torch.prim.ListConstruct %4 : (!torch.int) -> !torch.list<int>
+    %6 = torch.prim.TupleConstruct %1, %3, %5 : !torch.list<int>, !torch.list<int>, !torch.list<int> -> !torch.tuple<list<int>, list<int>, list<int>>
+    return %6 : !torch.tuple<list<int>, list<int>, list<int>>
+  }
   func @"__torch_mlir_shape_fn.aten.batch_norm"(%arg0: !torch.list<int>, %arg1: !torch.optional<list<int>>, %arg2: !torch.optional<list<int>>, %arg3: !torch.optional<list<int>>, %arg4: !torch.optional<list<int>>, %arg5: !torch.bool, %arg6: !torch.float, %arg7: !torch.float, %arg8: !torch.bool) -> !torch.list<int> {
     return %arg0 : !torch.list<int>
   }

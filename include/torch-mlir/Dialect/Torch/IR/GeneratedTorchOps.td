@@ -2701,7 +2701,8 @@ def Torch_AtenMatmulOp : Torch_Op<"aten.matmul", [
 
 def Torch_AtenConvolutionBackwardOp : Torch_Op<"aten.convolution_backward", [
     AllowsTypeRefinement,
-    HasValueSemantics
+    HasValueSemantics,
+    ReadOnly
   ]> {
   let summary = "Generated op for `aten::convolution_backward : (Tensor, Tensor, Tensor, int[]?, int[], int[], int[], bool, int[], int, bool[]) -> (Tensor, Tensor, Tensor)`";
   let arguments = (ins
@@ -2727,7 +2728,8 @@ def Torch_AtenConvolutionBackwardOp : Torch_Op<"aten.convolution_backward", [
 
 def Torch_AtenConvolutionBackwardOverrideableOp : Torch_Op<"aten.convolution_backward_overrideable", [
     AllowsTypeRefinement,
-    HasValueSemantics
+    HasValueSemantics,
+    ReadOnly
   ]> {
   let summary = "Generated op for `aten::convolution_backward_overrideable : (Tensor, Tensor, Tensor, int[], int[], int[], bool, int[], int, bool[]) -> (Tensor, Tensor, Tensor)`";
   let arguments = (ins
