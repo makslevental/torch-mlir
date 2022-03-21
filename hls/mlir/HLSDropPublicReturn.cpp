@@ -9,11 +9,12 @@
 
 #include "HLSPassDetail.h"
 #include "HLSPasses.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 
 using namespace mlir;
+using namespace mlir::func;
 using namespace mlir::torch::HLS;
 
 namespace {
@@ -39,8 +40,8 @@ class DropPublicReturnPass
 
   void rewriteSignature(FuncOp func) {
     // Find the unique return op.
-    ReturnOp returnOp;
-    WalkResult walkResult = func.walk([&](ReturnOp op) {
+    func::ReturnOp returnOp;
+    WalkResult walkResult = func.walk([&](func::ReturnOp op) {
       if (returnOp)
         return WalkResult::interrupt();
       returnOp = op;

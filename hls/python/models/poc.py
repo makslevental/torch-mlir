@@ -25,10 +25,7 @@ from torch_mlir_e2e_test.linalg_on_tensors_backends.refbackend import RefBackend
 from torch_mlir_e2e_test.torchscript.annotations import annotate_args, export
 
 
-def make_mod():
-    mod = BasicBlock(2, 2)
-    mod.train(False)
-    return make_layer(mod, [None, ([1, 2, 8, 8], torch.float32, True)])
+from torch_mlir_e2e_test.utils import run_pipeline_with_repro_report
 
 
 def set_weights(mod, typ=torch.float32, val=1, requires_grad=False):
@@ -45,6 +42,21 @@ def set_weights(mod, typ=torch.float32, val=1, requires_grad=False):
             m.bias = torch.nn.Parameter(
                 m.bias.type(torch.float32), requires_grad=requires_grad
             )
+
+
+def make_resnet():
+    mod = ResNet18()
+    print(mod)
+    mod.eval()
+    mod.apply(set_weights)
+    return make_layer(mod, [None, ([1, 3, 8, 8], torch.float32, True)])
+
+
+def make_mod():
+    mod = BasicBlock(2, 2)
+    mod.eval()
+    mod.apply(set_weights)
+    return make_layer(mod, [None, ([1, 2, 8, 8], torch.float32, True)])
 
 
 def make_conv():
@@ -68,6 +80,8 @@ def make_mm():
 def make_braggnn():
     with torch.no_grad():
         mod = BraggNN()
+        mod.eval()
+        mod(torch.randn(1,1,11,11))
         mod.apply(set_weights)
         return make_layer(mod, [None, ([1, 1, 11, 11], torch.float32, True)])
 
@@ -169,44 +183,25 @@ LOWERING_PIPELINE = [
     # "builtin.func(convert-linalg-to-loops)",
     "builtin.func(convert-linalg-to-affine-loops)",
     "torch-hls-promote-allocs",
-    "builtin.func(torch-hls-convert-copy-to-affine-loops)",
+    # "builtin.func(torch-hls-convert-copy-to-affine-loops)",
     # "builtin.func(torch-hls-quantize)",
     # "torch-hls-quantize",
-    # "reconcile-unrealized-casts",
-    # "builtin.func(affine-data-copy-generate{generate-dma=false})",
-    # "builtin.func(affine-data-copy-generate)",
-    # "builtin.func(affine-loop-invariant-code-motion)",
-    # "builtin.func(affine-loop-fusion)",
-    # "builtin.func(affine-loop-coalescing)",
-    # "builtin.func(affine-loop-unroll{unroll-full})",
-    # "builtin.func(affine-loop-tile)",
-    # "builtin.func(affine-loop-unroll-jam)",
-    # "builtin.func(affine-pipeline-data-transfer)",
-    # "builtin.func(affine-super-vectorize)",
-    # "builtin.func(lower-affine)",
-    # "builtin.func(convert-scf-to-std)",
-    # "builtin.func(refback-expand-ops-for-llvm)",
-    # "builtin.func(arith-expand)",
-    # ## "builtin.func(quant-convert-const)",
-    # "builtin.func(convert-math-to-llvm)",
-    # "convert-memref-to-llvm{index-bitwidth=0 use-aligned-alloc=false}",
-    # ## "convert-std-to-llvm{data-layout= emit-c-wrappers=true index-bitwidth=0 use-bare-ptr-memref-call-conv=false}",
-    # "convert-std-to-llvm{data-layout= emit-c-wrappers=false index-bitwidth=0 use-bare-ptr-memref-call-conv=true}",
-    # "reconcile-unrealized-casts",
 ]
 
 PIPELINE = (
-    TORCH_PIPELINE + TO_LINALG_PIPELINE + BUFFERIZATION_PIPELINE + LOWERING_PIPELINE
+    ["torchscript-module-to-torch-backend-pipeline", "torch-backend-to-linalg-on-tensors-backend-pipeline"]+BUFFERIZATION_PIPELINE + LOWERING_PIPELINE
 )
 # print('torch-mlir-opt -debug --pass-pipeline"', ",".join(PIPELINE), '"')
 
 if __name__ == "__main__":
     mb = ModuleBuilder()
-    mb.import_module(*make_braggnn())
-    # Verify again with debug info present. Just checking that it makes it in there.
-    with mb.module.context:
-        pm = PassManager.parse(",".join(PIPELINE))
-        pm.run(mb.module)
+    recursivescriptmodule, class_annotator = make_braggnn()
+    mb.import_module(recursivescriptmodule._c, class_annotator)
+
+    print(",".join(PIPELINE))
+    run_pipeline_with_repro_report(mb.module,
+                                   ",".join(PIPELINE),
+                                   "")
 
     dialect = "scf"
     out = mb.module.operation.get_asm(
@@ -214,11 +209,7 @@ if __name__ == "__main__":
     )
     # hard coded here for vitis
     open(
-        f"/home/mlevental/dev_projects/torch-mlir/hls/scripts/braggnn.affine.baseline.mlir",
-        "w",
-    ).write(out)
-    open(
-        f"/home/mlevental/dev_projects/torch-mlir/hls/scripts/braggnn.affine.mlir",
+        f"/home/mlevental/dev_projects/torch-mlir/hls/scripts/{recursivescriptmodule.original_name}.affine.mlir",
         "w",
     ).write(out)
     # hack_for_calyx(out)
