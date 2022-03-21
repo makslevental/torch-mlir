@@ -27,19 +27,19 @@ using namespace mlir::torch::HLS;
 using namespace mlir::torch::torch_upstream; // For ScalarType and type
                                              // promotion related helpers.
 
-//static ScalarType getScalarTypeForType(Type type) {
-//  if (type.isa<Float32Type>())
-//    return ScalarType::Float;
-//  if (type.isa<Float64Type>())
-//    return ScalarType::Double;
-//  if (type.isSignedInteger(64))
-//    return ScalarType::Long;
-//  if (type.isSignedInteger(32))
-//    return ScalarType::Int;
-//  if (type.isUnsignedInteger(1))
-//    return ScalarType::Bool;
-//  llvm::report_fatal_error("unhandled type for getScalarTypeForType");
-//}
+// static ScalarType getScalarTypeForType(Type type) {
+//   if (type.isa<Float32Type>())
+//     return ScalarType::Float;
+//   if (type.isa<Float64Type>())
+//     return ScalarType::Double;
+//   if (type.isSignedInteger(64))
+//     return ScalarType::Long;
+//   if (type.isSignedInteger(32))
+//     return ScalarType::Int;
+//   if (type.isUnsignedInteger(1))
+//     return ScalarType::Bool;
+//   llvm::report_fatal_error("unhandled type for getScalarTypeForType");
+// }
 
 static Type getTypeForScalarType(MLIRContext *context, ScalarType dtypeInt) {
   switch (dtypeInt) {
@@ -279,37 +279,22 @@ public:
 
     if (auto mm = llvm::dyn_cast<AtenMmOp>(op)) {
       return visitAtenMmOp(mm, operands);
-    } else if (auto mmout = llvm::dyn_cast<AtenMmOutOp>(op)) {
-      return visitAtenMmOutOp(mmout, operands);
     } else if (auto addmm = llvm::dyn_cast<AtenAddmmOp>(op)) {
       return visitAtenAddmmOp(addmm, operands);
-    } else if (auto linearout = llvm::dyn_cast<AtenLinearOutOp>(op)) {
-      return visitAtenLinearOutOp(linearout, operands);
     } else if (auto linear = llvm::dyn_cast<AtenLinearOp>(op)) {
       return visitAtenLinearOp(linear, operands);
     } else if (auto conv2d = llvm::dyn_cast<AtenConv2dOp>(op)) {
       return visitAtenConv2dOp(conv2d, operands);
-//    } else if (auto convolution = llvm::dyn_cast<Aten_ConvolutionOp>(op)) {
-//      return visitAten_ConvolutionOp(convolution, operands);
-    } else if (auto conv2dout = llvm::dyn_cast<AtenTHNNConv2dOutOp>(op)) {
-      return visitAtenTHNNConv2dOutOp(conv2dout, operands);
     } else if (auto maxPool2d = llvm::dyn_cast<AtenMaxPool2dOp>(op)) {
       return visitAtenMaxPool2dOp(maxPool2d, operands);
-    } else if (auto maxPool2dWithIndicesOut =
-                   llvm::dyn_cast<AtenMaxPool2dWithIndicesOutOp>(op)) {
-      return visitAtenMaxPool2dWithIndicesOutOp(maxPool2dWithIndicesOut,
-                                                operands);
     } else if (auto avgPool2d = llvm::dyn_cast<AtenAdaptiveAvgPool2dOp>(op)) {
       return visitAtenAdaptiveAvgPool2dOp(avgPool2d, operands);
-    } else if (auto avgPool2dout =
-                   llvm::dyn_cast<AtenAdaptiveAvgPool2dOutOp>(op)) {
-      return visitAtenAdaptiveAvgPool2dOutOp(avgPool2dout, operands);
     } else if (isa<AtenAddScalarOp, AtenSubScalarOp, AtenMulScalarOp,
                    AtenDivScalarOp, AtenFmodScalarOp, AtenFloorDivideScalarOp,
                    AtenPowTensorScalarOp, AtenRsubScalarOp, AtenLeakyReluOp>(
                    op)) {
       return visitBinaryTensorScalarOp(op, operands);
-    } else if (isa<AtenAddTensorOp, AtenAddOutTensorOp, AtenSubTensorOp, AtenMulTensorOp,
+    } else if (isa<AtenAddTensorOp, AtenSubTensorOp, AtenMulTensorOp,
                    AtenDivTensorOp, Aten__And__TensorOp, AtenMinimumOp,
                    AtenMaximumOp, AtenBitwiseAndTensorOp>(op)) {
       return visitBinaryBroadcastingOp(op, operands);
@@ -447,8 +432,6 @@ public:
       return visitAtenEmbeddingOp(embedding, operands);
     } else if (auto bmm = dyn_cast<AtenBmmOp>(op)) {
       return visitAtenBmmOp(bmm, operands);
-    } else if (auto matmulout = dyn_cast<AtenMatmulOutOp>(op)) {
-      return visitAtenMatmulOutOp(matmulout, operands);
     } else if (auto matmul = dyn_cast<AtenMatmulOp>(op)) {
       return visitAtenMatmulOp(matmul, operands);
     } else if (auto mean = dyn_cast<AtenMeanOp>(op)) {
@@ -472,8 +455,6 @@ public:
       return visitAtenNllLossForwardOp(nllForwardOp, operands);
     } else if (auto nativeLayerNormOp = dyn_cast<AtenNativeLayerNormOp>(op)) {
       return visitAtenNativeLayerNormOp(nativeLayerNormOp, operands);
-    } else if (auto bnout = llvm::dyn_cast<AtenNativeBatchNormOutOp>(op)) {
-      return visitAtenNativeBatchNormOutOp(bnout, operands);
     }
 
     // Otherwise, this is an unknown operation. Just mark all results as
@@ -486,37 +467,19 @@ private:
   visitAtenMmOp(AtenMmOp op,
                 ArrayRef<LatticeElement<ValueKnowledge> *> operands);
   ChangeResult
-  visitAtenMmOutOp(AtenMmOutOp op,
-                   ArrayRef<LatticeElement<ValueKnowledge> *> operands);
-  ChangeResult
   visitAtenAddmmOp(AtenAddmmOp op,
                    ArrayRef<LatticeElement<ValueKnowledge> *> operands);
   ChangeResult
   visitAtenLinearOp(AtenLinearOp op,
                     ArrayRef<LatticeElement<ValueKnowledge> *> operands);
   ChangeResult
-  visitAtenLinearOutOp(AtenLinearOutOp op,
-                    ArrayRef<LatticeElement<ValueKnowledge> *> operands);
-//  ChangeResult
-//  visitAten_ConvolutionOp(Aten_ConvolutionOp op,
-//                    ArrayRef<LatticeElement<ValueKnowledge> *> operands);
-  ChangeResult
   visitAtenConv2dOp(AtenConv2dOp op,
                     ArrayRef<LatticeElement<ValueKnowledge> *> operands);
   ChangeResult
-  visitAtenTHNNConv2dOutOp(AtenTHNNConv2dOutOp op,
-                           ArrayRef<LatticeElement<ValueKnowledge> *> operands);
-  ChangeResult
   visitAtenMaxPool2dOp(AtenMaxPool2dOp op,
                        ArrayRef<LatticeElement<ValueKnowledge> *> operands);
-  ChangeResult visitAtenMaxPool2dWithIndicesOutOp(
-      AtenMaxPool2dWithIndicesOutOp op,
-      ArrayRef<LatticeElement<ValueKnowledge> *> operands);
   ChangeResult visitAtenAdaptiveAvgPool2dOp(
       AtenAdaptiveAvgPool2dOp op,
-      ArrayRef<LatticeElement<ValueKnowledge> *> operands);
-  ChangeResult visitAtenAdaptiveAvgPool2dOutOp(
-      AtenAdaptiveAvgPool2dOutOp op,
       ArrayRef<LatticeElement<ValueKnowledge> *> operands);
   ChangeResult visitBinaryTensorScalarOp(
       Operation *op, ArrayRef<LatticeElement<ValueKnowledge> *> operands);
@@ -615,9 +578,6 @@ private:
   ChangeResult
   visitAtenMatmulOp(AtenMatmulOp op,
                     ArrayRef<LatticeElement<ValueKnowledge> *> operands);
-  ChangeResult
-  visitAtenMatmulOutOp(AtenMatmulOutOp op,
-                       ArrayRef<LatticeElement<ValueKnowledge> *> operands);
 
   template <typename OpTy>
   ChangeResult
@@ -637,9 +597,6 @@ private:
       ArrayRef<LatticeElement<ValueKnowledge> *> operands);
   ChangeResult visitAtenNativeLayerNormOp(
       AtenNativeLayerNormOp op,
-      ArrayRef<LatticeElement<ValueKnowledge> *> operands);
-  ChangeResult visitAtenNativeBatchNormOutOp(
-      AtenNativeBatchNormOutOp op,
       ArrayRef<LatticeElement<ValueKnowledge> *> operands);
 };
 } // namespace
@@ -797,21 +754,6 @@ ChangeResult TypeAnalyzer::visitAtenMmOp(
   return getLatticeElement(op->getResult(0)).join(knowledge);
 }
 
-ChangeResult TypeAnalyzer::visitAtenMmOutOp(
-    AtenMmOutOp op, ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
-  auto &lhs = operands[0]->getValue();
-  auto &rhs = operands[1]->getValue();
-  auto knowledge =
-      ValueKnowledge::getNotNonePessimisticValueState(op->getContext());
-  auto m = lhs.sizes[0];
-  auto k = rhs.sizes[1];
-  knowledge.hasSizes = true;
-  knowledge.sizes = {m, k};
-  knowledge.dtype =
-      getPromotedResultTypeAssumingNonZeroRank(op->getContext(), {&lhs, &rhs});
-  return getLatticeElement(op->getResult(0)).join(knowledge);
-}
-
 ChangeResult TypeAnalyzer::visitAtenAddmmOp(
     AtenAddmmOp op, ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
   auto &input = operands[0]->getValue();
@@ -851,61 +793,8 @@ ChangeResult TypeAnalyzer::visitAtenLinearOp(
   return getLatticeElement(op->getResult(0)).join(knowledge);
 }
 
-ChangeResult TypeAnalyzer::visitAtenLinearOutOp(
-    AtenLinearOutOp op, ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
-  // The output shape is the input shape with the last dimension changed
-  // to the weight's output dimension.
-  auto knowledge = operands[0]->getValue();
-  auto weight = operands[1]->getValue();
-  auto bias = operands[2]->getValue();
-  auto out = operands[3]->getValue();
-  if (knowledge.hasSizes && knowledge.sizes.size() > 0)
-    knowledge.sizes[knowledge.sizes.size() - 1] = kUnknownSize;
-  switch (bias.optional) {
-  case ValueKnowledge::OptionalKnowledge::isNone:
-    knowledge.dtype = getPromotedResultTypeAssumingNonZeroRank(
-        op->getContext(), {&knowledge, &weight});
-    break;
-  case ValueKnowledge::OptionalKnowledge::notNone:
-    knowledge.dtype = getPromotedResultTypeAssumingNonZeroRank(
-        op->getContext(), {&knowledge, &weight, &bias});
-    break;
-  case ValueKnowledge::OptionalKnowledge::unKnown:
-    // When it's unknown, type promotion can't be decided at compile time.
-    break;
-  }
-  return getLatticeElement(op->getResult(0)).join(knowledge);
-}
-
 ChangeResult TypeAnalyzer::visitAtenConv2dOp(
     AtenConv2dOp op, ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
-  auto knowledge =
-      ValueKnowledge::getNotNonePessimisticValueState(op->getContext());
-  knowledge.hasSizes = true;
-  knowledge.sizes.resize(4, kUnknownSize);
-  // Running some experiments in PyTorch, the bias doesn't seem to
-  // contribute to the final element type.
-  knowledge.dtype = getPromotedResultTypeAssumingNonZeroRank(
-      op->getContext(), {&operands[0]->getValue(), &operands[1]->getValue()});
-  return getLatticeElement(op->getResult(0)).join(knowledge);
-}
-
-//ChangeResult TypeAnalyzer::visitAten_ConvolutionOp(
-//    Aten_ConvolutionOp op, ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
-//  auto knowledge =
-//      ValueKnowledge::getNotNonePessimisticValueState(op->getContext());
-//  knowledge.hasSizes = true;
-//  knowledge.sizes.resize(4, kUnknownSize);
-//  // Running some experiments in PyTorch, the bias doesn't seem to
-//  // contribute to the final element type.
-//  knowledge.dtype = getPromotedResultTypeAssumingNonZeroRank(
-//      op->getContext(), {&operands[0]->getValue(), &operands[1]->getValue()});
-//  return getLatticeElement(op->getResult(0)).join(knowledge);
-//}
-
-ChangeResult TypeAnalyzer::visitAtenTHNNConv2dOutOp(
-    AtenTHNNConv2dOutOp op,
-    ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
   auto knowledge =
       ValueKnowledge::getNotNonePessimisticValueState(op->getContext());
   knowledge.hasSizes = true;
@@ -927,82 +816,8 @@ ChangeResult TypeAnalyzer::visitAtenMaxPool2dOp(
   return getLatticeElement(op->getResult(0)).join(knowledge);
 }
 
-ChangeResult TypeAnalyzer::visitAtenMaxPool2dWithIndicesOutOp(
-    AtenMaxPool2dWithIndicesOutOp op,
-    ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
-  auto self = operands[0]->getValue();
-  auto outputKnowledge =
-      ValueKnowledge::getNotNonePessimisticValueState(op.getContext());
-  // Contains Knowledge of shape and dtype for the 1st result.
-  outputKnowledge.dtype = self.dtype;
-  // Contains Knowledge of shape and dtype for the 2nd result.
-  auto totalWeightKnowledge =
-      ValueKnowledge::getNotNonePessimisticValueState(op.getContext());
-  totalWeightKnowledge.dtype = self.dtype;
-  totalWeightKnowledge.sizes.resize(4, kUnknownSize);
-  totalWeightKnowledge.hasSizes = true;
-
-  outputKnowledge.sizes.resize(4, kUnknownSize);
-  outputKnowledge.hasSizes = true;
-  auto resultLattice = getLatticeElement(op.getResult(0)).join(outputKnowledge);
-  resultLattice |=
-      getLatticeElement(op.getResult(1)).join(totalWeightKnowledge);
-  return resultLattice;
-}
-
-ChangeResult TypeAnalyzer::visitAtenNativeBatchNormOutOp(
-    AtenNativeBatchNormOutOp op,
-    ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
-
-  auto input = operands[0]->getValue();
-  auto runningMean = operands[3]->getValue();
-  auto runningVar = operands[4]->getValue();
-  auto outputKnowledge =
-      ValueKnowledge::getNotNonePessimisticValueState(op.getContext());
-  auto saveMeanKnowledge =
-      ValueKnowledge::getNotNonePessimisticValueState(op.getContext());
-  auto saveInvstdKnowledge =
-      ValueKnowledge::getNotNonePessimisticValueState(op.getContext());
-
-  outputKnowledge.dtype = input.dtype;
-  runningMean.dtype = input.dtype;
-  runningVar.dtype = input.dtype;
-  saveInvstdKnowledge.dtype = input.dtype;
-  saveMeanKnowledge.dtype = input.dtype;
-
-  outputKnowledge.sizes = input.sizes;
-  runningMean.sizes.resize(4, kUnknownSize);
-  runningVar.sizes.resize(4, kUnknownSize);
-  saveMeanKnowledge.sizes.resize(4, kUnknownSize);
-  saveInvstdKnowledge.sizes.resize(4, kUnknownSize);
-
-  outputKnowledge.hasSizes = true;
-  runningMean.hasSizes = true;
-  runningVar.hasSizes = true;
-  saveMeanKnowledge.hasSizes = true;
-  saveInvstdKnowledge.hasSizes = true;
-
-  return getLatticeElement(op->getResult(0)).join(outputKnowledge) |
-         getLatticeElement(op->getResult(1)).join(saveMeanKnowledge) |
-         getLatticeElement(op->getResult(2)).join(saveInvstdKnowledge);
-}
-
 ChangeResult TypeAnalyzer::visitAtenAdaptiveAvgPool2dOp(
     AtenAdaptiveAvgPool2dOp op,
-    ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
-  auto input = operands[0]->getValue();
-  auto knowledge =
-      ValueKnowledge::getNotNonePessimisticValueState(op->getContext());
-  if (input.hasSizes) {
-    knowledge.hasSizes = true;
-    knowledge.sizes.resize(input.sizes.size(), kUnknownSize);
-  }
-  knowledge.dtype = input.dtype;
-  return getLatticeElement(op->getResult(0)).join(knowledge);
-}
-
-ChangeResult TypeAnalyzer::visitAtenAdaptiveAvgPool2dOutOp(
-    AtenAdaptiveAvgPool2dOutOp op,
     ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
   auto input = operands[0]->getValue();
   auto knowledge =
@@ -1755,28 +1570,6 @@ ChangeResult TypeAnalyzer::visitAtenBmmOp(
 
 ChangeResult TypeAnalyzer::visitAtenMatmulOp(
     AtenMatmulOp op, ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
-  auto knowledge =
-      ValueKnowledge::getNotNonePessimisticValueState(op->getContext());
-  auto self = operands[0]->getValue();
-  auto other = operands[1]->getValue();
-  if (!self.hasSizes || !other.hasSizes)
-    return getLatticeElement(op->getResult(0)).join(knowledge);
-  unsigned maxRank = self.sizes.size() > other.sizes.size()
-                         ? self.sizes.size()
-                         : other.sizes.size();
-  unsigned lhsDim = self.sizes.size() > 2 ? 2 : self.sizes.size();
-  unsigned rhsDim = other.sizes.size() > 2 ? 2 : other.sizes.size();
-  unsigned batchDim = maxRank > 2 ? maxRank - 2 : 0;
-  unsigned matDim = (lhsDim - 1) + (rhsDim - 1);
-  unsigned resultRank = batchDim + matDim;
-  knowledge.sizes.resize(resultRank, kUnknownSize);
-  knowledge.dtype = joinElementTypes(self.dtype, other.dtype);
-  knowledge.hasSizes = true;
-  return getLatticeElement(op->getResult(0)).join(knowledge);
-}
-
-ChangeResult TypeAnalyzer::visitAtenMatmulOutOp(
-    AtenMatmulOutOp op, ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
   auto knowledge =
       ValueKnowledge::getNotNonePessimisticValueState(op->getContext());
   auto self = operands[0]->getValue();
