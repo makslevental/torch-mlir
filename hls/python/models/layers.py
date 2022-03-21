@@ -320,14 +320,15 @@ class MyBasicBlock(nn.Module):
 def make_layer(test_module, annotations):
     class_annotator = ClassAnnotator()
     recursivescriptmodule = torch.jit.script(test_module)
-    class_annotator.exportNone(recursivescriptmodule._c._type())
-    class_annotator.exportPath(recursivescriptmodule._c._type(), ["forward"])
+    frozen_recursivescriptmodule = torch.jit.freeze(recursivescriptmodule)
+    class_annotator.exportNone(frozen_recursivescriptmodule._c._type())
+    class_annotator.exportPath(frozen_recursivescriptmodule._c._type(), ["forward"])
     class_annotator.annotateArgs(
-        recursivescriptmodule._c._type(), ["forward"], annotations
+        frozen_recursivescriptmodule._c._type(), ["forward"], annotations
     )
-    # extract_annotations(test_module, recursivescriptmodule, class_annotator)
-    torch._C._jit_pass_inline(recursivescriptmodule.graph)
-    return recursivescriptmodule._c, class_annotator
+    # extract_annotations(test_module, frozen_recursivescriptmodule, class_annotator)
+    # torch._C._jit_pass_inline(frozen_recursivescriptmodule.graph)
+    return frozen_recursivescriptmodule, class_annotator
 
 
 # class Matmul(torch.nn.Module):

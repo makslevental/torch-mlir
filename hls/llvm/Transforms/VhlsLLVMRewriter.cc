@@ -408,7 +408,7 @@ static std::string interpretArgumentType(Type *type) {
     return "float";
   if (type->isPointerTy()) {
     auto pointerTy = dyn_cast<PointerType>(type);
-    auto elementTy = pointerTy->getElementType();
+    auto elementTy = pointerTy->getPointerElementType();
     // A plain pointer
     if (!elementTy->isArrayTy())
       return interpretArgumentType(elementTy) + "*";

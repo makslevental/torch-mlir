@@ -151,8 +151,8 @@ public:
       return rewriter.notifyMatchFailure(op,
                                          "operand must be of a tensor type");
 
-    rewriter.create<FillOp>(op.getLoc(), adaptor.value(), adaptor.output());
-    rewriter.replaceOp(op, adaptor.output());
+    rewriter.create<FillOp>(op.getLoc(), adaptor.inputs(), adaptor.outputs());
+    rewriter.replaceOp(op, adaptor.outputs());
 
     return success();
   }
@@ -337,7 +337,7 @@ struct HLSLinalgBufferizePass
 
     // Mark all Standard operations legal.
     target.addLegalDialect<arith::ArithmeticDialect, AffineDialect,
-                           memref::MemRefDialect, StandardOpsDialect,
+                           memref::MemRefDialect,
                            tensor::TensorDialect>();
     target.addIllegalOp<memref::CopyOp>();
 
