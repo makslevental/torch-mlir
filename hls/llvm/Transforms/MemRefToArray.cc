@@ -230,7 +230,7 @@ public:
     BitCastInst *bitCastInst = new BitCastInst(
         ptr, restoredType, Twine(""), cast<Instruction>(offset)->getNextNode());
     LoadInst *load = new LoadInst(
-        cast<PointerType>(restoredType)->getElementType(), bitCastInst,
+        cast<PointerType>(restoredType)->getPointerElementType(), bitCastInst,
         Twine(""), cast<Instruction>(bitCastInst->getNextNode()));
 
     SmallVector<Value *> gepInds;
@@ -1124,7 +1124,7 @@ static void convertMemRefToArray(Module &M, bool ranked = false) {
               indices.push_back(val);
             // Construct the new GEP.
             GetElementPtrInst *newGEP = GetElementPtrInst::Create(
-                cast<PointerType>(newArg->getType())->getElementType(), newArg,
+                cast<PointerType>(newArg->getType())->getPointerElementType(), newArg,
                 indices, Twine(""),
                 cast<Instruction>(bitCastInst->getNextNode()));
 
