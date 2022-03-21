@@ -5,19 +5,19 @@ ROOT_LIBDIR="${ROOT_DIR}/cmake-build-debug/lib"
 
 FN=$1
 $ROOT_BINDIR/mlir-opt \
+  -promote-buffers-to-stack \
   -lower-affine \
   -convert-scf-to-cf \
   -convert-memref-to-llvm \
+  -convert-math-to-llvm \
   -convert-arith-to-llvm \
   -convert-std-to-llvm='use-bare-ptr-memref-call-conv=1' \
-  -reconcile-unrealized-casts < $FN.affine.mlir > vitis_stuff/$FN.llvm.mlir
+  -reconcile-unrealized-casts < $FN > $FN.llvm
 
 $ROOT_BINDIR/mlir-translate \
-  -mlir-to-llvmir < /home/mlevental/dev_projects/torch-mlir/hls/scripts/vitis_stuff/$FN.llvm.mlir > /home/mlevental/dev_projects/torch-mlir/hls/scripts/vitis_stuff/$FN.ll
+  -mlir-to-llvmir < $FN.llvm > $FN.ll
 
-src_file=/home/mlevental/dev_projects/torch-mlir/hls/scripts/vitis_stuff/$FN.ll
-dst_file=/home/mlevental/dev_projects/torch-mlir/hls/scripts/vitis_stuff/$FN.opt.vitis.ll
-${ROOT_BINDIR}/opt "${src_file}" \
+${ROOT_BINDIR}/opt $FN.ll \
   -S \
   -enable-new-pm=0 \
   -load "${ROOT_LIBDIR}/VhlsLLVMRewriter.so" \
@@ -30,15 +30,15 @@ ${ROOT_BINDIR}/opt "${src_file}" \
   -xlnmath \
   -xlnname \
   -verify \
-  > "${dst_file}"
-
-#sed -i 's/immarg//g' $dst_file
-#sed -i 's/noundef//g' $dst_file
+  > braggnn.opt.vitis.ll
 #
-#${ROOT_BINDIR}/opt "${dst_file}" > test.ll
+##sed -i 's/immarg//g' $dst_file
+##sed -i 's/noundef//g' $dst_file
+##
+##${ROOT_BINDIR}/opt "${dst_file}" > test.ll
+##
+###cp wrapper.cpp vitis_stuff/wrapper.cpp
+###cp run_hls.tcl vitis_stuff/run_hls.tcl
 #
-##cp wrapper.cpp vitis_stuff/wrapper.cpp
-##cp run_hls.tcl vitis_stuff/run_hls.tcl
-
-#  -xlnunroll \
-#  -xlnarraypartition \
+##  -xlnunroll \
+##  -xlnarraypartition \

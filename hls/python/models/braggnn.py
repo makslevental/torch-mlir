@@ -19,6 +19,7 @@ class NLB(torch.nn.Module):
         self.out_cnn = torch.nn.Conv2d(
             in_channels=self.inter_ch, out_channels=in_ch, kernel_size=1, padding=0
         )
+        self.soft = nn.Softmax(dim=-1)
 
     def forward(self, x):
         theta = self.theta_layer(x)
@@ -26,8 +27,7 @@ class NLB(torch.nn.Module):
         g = self.g_layer(x)
 
         theta_phi = theta * phi
-        # theta_phi = theta_phi.exp() / theta_phi.exp().sum((-2, -1), keepdim=True)
-        # theta_phi = torch.ops.aten._softmax(theta_phi, -1, False)
+        theta_phi = self.soft(theta_phi)
         theta_phi_g = theta_phi * g
 
         _out_tmp = self.out_cnn(theta_phi_g)
@@ -69,7 +69,6 @@ class BraggNN(torch.nn.Module):
             self.dense_ops += [
                 torch.nn.Linear(ic, oc),
                 torch.nn.LeakyReLU(negative_slope=0.01),
-                # Exp()
             ]
         # output layer
         self.dense_ops += [torch.nn.Linear(fcsz[-1], 2)]
