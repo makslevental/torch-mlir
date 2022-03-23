@@ -221,6 +221,8 @@ def try_torch_mlir_eager(op, args, kwargs, backend):
     else:
         raise RuntimeError(f"op {op} has no name")
 
+    print(op_name)
+
     if "detach" in op_name:
         # We don't handle detach as it only pertains to autograd graph construction, which is handled by pytorch.
         raise UnsupportedByTorchMlirEagerMode("detaching")
