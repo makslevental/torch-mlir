@@ -17,6 +17,7 @@ from torch_mlir._mlir_libs._mlir.passmanager import PassManager
 from torch_mlir.dialects import torch as torch_dialect
 from torch_mlir._mlir_libs._jit_ir_importer import get_registered_ops # pytype: disable=import-error
 from torch_mlir.eager_mode.ir_building import build_module, TorchTensorType
+from torch_mlir_e2e_test.utils import run_pipeline_with_repro_report, slugify
 
 OP_REGISTRY = {op["name"]: op for op in get_registered_ops()}
 SUPPORTED_OPS = frozenset(
@@ -118,7 +119,7 @@ def build_script_function(
     else:
         graph.registerOutput(node.output())
 
-    fn_name = str(node).strip()
+    fn_name = slugify(str(node).strip())
     fn = torch._C._create_function_from_graph(fn_name, graph)
     return fn
 
@@ -221,25 +222,29 @@ def try_torch_mlir_eager(op, args, kwargs, backend):
     else:
         raise RuntimeError(f"op {op} has no name")
 
-    print(op_name)
-
+    print("\n", "*"*10, op_name, "*"*10)
     if "detach" in op_name:
         # We don't handle detach as it only pertains to autograd graph construction, which is handled by pytorch.
         raise UnsupportedByTorchMlirEagerMode("detaching")
 
     if not hasattr(op, "_schema"):
         raise RuntimeError(f"op {op} has no schema.")
-
+    print("*"*10, op._schema, "*"*10, "\n")
     new_args, new_kwargs = normalize_args_kwargs(op.overloadpacket, args, kwargs)
 
     if "layout" in new_kwargs and new_kwargs["layout"] not in {0, None}:
         raise UnsupportedByTorchMlirEagerMode(
             f"{new_kwargs['layout']} layout not supported."
         )
+    new_kwargs["layout"] = None
     if "memory_format" in new_kwargs and new_kwargs["memory_format"] not in {0, None}:
-        raise UnsupportedByTorchMlirEagerMode(
-            f"{new_kwargs['memory_format']} memory format not supported."
-        )
+        if (new_kwargs["memory_format"] == 1 and all(n.is_contiguous() for n in new_args)):
+            pass
+        else:
+            raise UnsupportedByTorchMlirEagerMode(
+                f"{new_kwargs['memory_format']} memory format not supported."
+            )
+    new_kwargs["memory_format"] = None
 
     script_fun = build_script_function(op._schema, new_args, new_kwargs)
     annotations, np_tensor_args, np_tensor_kwargs_flat = annotate_args_kwargs(
@@ -247,11 +252,12 @@ def try_torch_mlir_eager(op, args, kwargs, backend):
     )
 
     eager_module = build_module(script_fun, annotations)
-    with eager_module.context:
-        pm = PassManager.parse(
-            "torch-function-to-torch-backend-pipeline,torch-backend-to-linalg-on-tensors-backend-pipeline"
-        )
-        pm.run(eager_module)
+    # with eager_module.context:
+    #     pm = PassManager.parse(
+    #         "torch-function-to-torch-backend-pipeline,torch-backend-to-linalg-on-tensors-backend-pipeline"
+    #     )
+    #     pm.run(eager_module)
+    run_pipeline_with_repro_report(eager_module, "torch-function-to-torch-backend-pipeline,torch-backend-to-linalg-on-tensors-backend-pipeline", "")
     compiled_module = backend.compile(eager_module)
     loaded_module = backend.load(compiled_module)
     op_mlir_backend_callable = getattr(loaded_module, script_fun.name)

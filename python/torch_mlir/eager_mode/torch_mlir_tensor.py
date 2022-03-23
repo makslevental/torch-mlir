@@ -102,7 +102,7 @@ class TorchMLIRTensor(torch.Tensor):
                 )
             else:
                 warnings.warn(
-                    f"Couldn't use TorchMLIR eager because of error: *{str(e)}*; "
-                    f"running through PyTorch eager. Please file an issue at https://github.com/llvm/torch-mlir/issues"
+                    f"Couldn't use TorchMLIR eager because of error: \n*{str(e)}*\n"
+                    f"Running through PyTorch eager. Please file an issue at https://github.com/llvm/torch-mlir/issues"
                 )
             return tree_map(wrap, func(*unwrapped_args, **unwrapped_kwargs))

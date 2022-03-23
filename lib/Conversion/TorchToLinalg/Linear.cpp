@@ -448,160 +448,231 @@ public:
 };
 } // namespace
 
-// namespace {
-// Value flipTo(ConversionPatternRewriter &rewriter, Location &loc, Value tensor, uint64_t fromDim, uint64_t toDim) {
-//   RankedTensorType tType = tensor.getType().cast<RankedTensorType>();
-//   SmallVector<Value> tSizes = getTensorSizes(rewriter, loc, tensor);
+namespace {
+Value flipTo(ConversionPatternRewriter &rewriter, Location &loc, Value tensor,
+             uint64_t fromDim, uint64_t toDim) {
+  RankedTensorType tType = tensor.getType().cast<RankedTensorType>();
+  SmallVector<Value> tSizes = getTensorSizes(rewriter, loc, tensor);
 
-//   Value one = rewriter.create<arith::ConstantOp>(loc, rewriter.getIndexAttr(1));
-//   SmallVector<Value> flip;
-//   for(size_t i = 0; i < tSizes.size(); i++)
-//     flip.push_back(rewriter.create<arith::SubIOp>(loc, tSizes[i], one));
+  Value one = rewriter.create<arith::ConstantOp>(loc, rewriter.getIndexAttr(1));
+  SmallVector<Value> flip;
+  for (size_t i = 0; i < tSizes.size(); i++)
+    flip.push_back(rewriter.create<arith::SubIOp>(loc, tSizes[i], one));
 
-//   SmallVector<StringRef> iteratorTypes(tSizes.size(), "parallel");
-//   SmallVector<AffineExpr> exprs;
-//   for(size_t i = 0; i < tSizes.size(); i++)
-//     exprs.push_back(rewriter.getAffineDimExpr(i));
-//   SmallVector<AffineMap> indexingMaps = AffineMap::inferFromExprList({exprs, exprs});
-//   Value outTensor = rewriter.create<linalg::InitTensorOp>(loc, tSizes, tType.getElementType());
+  SmallVector<StringRef> iteratorTypes(tSizes.size(), "parallel");
+  SmallVector<AffineExpr> exprs;
+  for (size_t i = 0; i < tSizes.size(); i++)
+    exprs.push_back(rewriter.getAffineDimExpr(i));
+  SmallVector<AffineMap> indexingMaps =
+      AffineMap::inferFromExprList({exprs, exprs});
+  Value outTensor = rewriter.create<linalg::InitTensorOp>(
+      loc, tSizes, tType.getElementType());
 
-//   return rewriter.create<linalg::GenericOp>(
-//     loc, tType, tensor, outTensor,
-//     indexingMaps, iteratorTypes,
-//     [&](OpBuilder &b, Location loc, ValueRange args) {
-//       SmallVector<Value> indices;
-//       for(size_t i = 0; i < tSizes.size(); i++) {
-//         if(i >= fromDim && i < toDim) {
-//           Value index = b.create<linalg::IndexOp>(loc, i);
-//           indices.push_back(b.create<arith::SubIOp>(loc, flip[i], index));
-//           continue;
-//         }
-//         indices.push_back(b.create<linalg::IndexOp>(loc, i));
-//       }
-//       std::swap(indices[0], indices[1]);
-//       b.create<linalg::YieldOp>(loc, rewriter.create<tensor::ExtractOp>(loc, tType.getElementType(), tensor, indices).getResult());
-//     }).getResult(0);
-// }
-// class ConvertAtenConvolutionBackwardOp : public OpConversionPattern<AtenConvolutionBackwardOp> {
-// public:
-//   using OpConversionPattern::OpConversionPattern;
-//   LogicalResult
-//   matchAndRewrite(AtenConvolutionBackwardOp op, OpAdaptor adaptor,
-//                   ConversionPatternRewriter &rewriter) const override {
-    
-//     Location loc = op->getLoc();
-//     MLIRContext *context = op->getContext();
+  // cast here using tType.getShape()
+  Value refinedShapeOutTensor = rewriter.create<tensor::CastOp>(loc, tType, outTensor);
 
-//     Value grad = adaptor.grad_output();
-//     Value input = adaptor.input();
-//     Value weight = adaptor.weight();
-//     //Value bias_sizes= adaptor.bias_sizes();
-//     //Value padding = adaptor.padding();
-//     //Value transposed = adaptor.transposed();
-//     //Value output_padding = adaptor.output_padding();
-//     //Value groups = adaptor.groups();
-//     //Value output_mask = adaptor.output_mask();
+  return rewriter
+      .create<linalg::GenericOp>(
+          loc, tType, tensor, outTensor, indexingMaps, iteratorTypes,
+          [&](OpBuilder &b, Location loc, ValueRange args) {
+            SmallVector<Value> indices;
+            for (size_t i = 0; i < tSizes.size(); i++) {
+              if (i >= fromDim && i < toDim) {
+                Value index = b.create<linalg::IndexOp>(loc, i);
+                indices.push_back(b.create<arith::SubIOp>(loc, flip[i], index));
+                continue;
+              }
+              indices.push_back(b.create<linalg::IndexOp>(loc, i));
+            }
+            std::swap(indices[0], indices[1]);
+            b.create<linalg::YieldOp>(
+                loc, rewriter
+                         .create<tensor::ExtractOp>(loc, tType.getElementType(),
+                                                    tensor, indices)
+                         .getResult());
+          })
+      .getResult(0);
+}
 
-//     Type intType = IntegerType::get(context, 64);
-//     auto castIndexToInt = [&](Value v) {
-//       return rewriter.create<arith::IndexCastOp>(loc, intType, v);
-//     };
-//     Type eType = input.getType().cast<RankedTensorType>().getElementType();
-//     Value zero = rewriter.create<arith::ConstantOp>(loc, FloatAttr::get(eType, 0.0));
+Value rotate(ConversionPatternRewriter &rewriter, Location &loc, Value tensor) {
+  RankedTensorType tType = tensor.getType().cast<RankedTensorType>();
+  SmallVector<Value> tSizes = getTensorSizes(rewriter, loc, tensor);
 
-//     SmallVector<Value> gradSizes = getTensorSizes(rewriter, loc, grad);
-//     size_t gradRank = gradSizes.size();
-//     SmallVector<Value> inputSizes = getTensorSizes(rewriter, loc, input);
-//     size_t inputRank = inputSizes.size();
-//     SmallVector<Value> weightSizes = getTensorSizes(rewriter, loc, weight);
-//     size_t weightRank = weightSizes.size();
-    
-//     SmallVector<int64_t> stride;
-//     if(!matchPattern(adaptor.stride(), m_TorchConstantIntList(stride)))
-//       return rewriter.notifyMatchFailure(op, "only constant strides supported");
-//     SmallVector<int64_t> dilation;
-//     if(!matchPattern(adaptor.dilation(), m_TorchConstantIntList(dilation)))
-//       return rewriter.notifyMatchFailure(op, "only constant dilation supported");
-//     SmallVector<Value> output_mask_val;
-//     if(!getListConstructElements(adaptor.output_mask(), output_mask_val))
-//       return rewriter.notifyMatchFailure(op, "only constant output mask supported");
-//     SmallVector<bool> output_mask;
-//     for(Value out: output_mask_val) {
-//       bool mask_val;
-//       if(!matchPattern(out, m_TorchConstantBool(&mask_val)))
-//         return rewriter.notifyMatchFailure(op, "only constant boolean output mask values supported");
-//       output_mask.push_back(mask_val);
-//     }
-//     SmallVector<int64_t> padding;
-//     if(!matchPattern(adaptor.padding(), m_TorchConstantIntList(padding)))
-//       return rewriter.notifyMatchFailure(op, "only constant padding supported");
-//     SmallVector<Value> paddingVals;
-//     for(auto p: padding)
-//       paddingVals.push_back(rewriter.create<arith::ConstantOp>(loc, IntegerAttr::get(intType, p)));
-//     SmallVector<Value> dilationVals;
-//     for(auto d: dilation)
-//       dilationVals.push_back(rewriter.create<arith::ConstantOp>(loc, IntegerAttr::get(intType, d)));
-//     SmallVector<Value> strideVals;
-//     for(auto s: stride)
-//       strideVals.push_back(rewriter.create<arith::ConstantOp>(loc, IntegerAttr::get(intType, s)));
+  SmallVector<StringRef> iteratorTypes(tSizes.size(), "parallel");
+  SmallVector<AffineExpr> inExpr{rewriter.getAffineDimExpr(0),
+                                 rewriter.getAffineDimExpr(1)};
+  SmallVector<AffineExpr> outExpr{rewriter.getAffineDimExpr(1),
+                                  rewriter.getAffineDimExpr(0)};
+  for (size_t i = 2; i < tSizes.size(); i++) {
+    inExpr.push_back(rewriter.getAffineDimExpr(i));
+    outExpr.push_back(rewriter.getAffineDimExpr(i));
+  }
+  SmallVector<AffineMap> indexingMaps =
+      AffineMap::inferFromExprList({inExpr, outExpr});
+  Value outTensor = rewriter.create<linalg::InitTensorOp>(
+      loc, tSizes, tType.getElementType());
 
-//     auto strideAttr = rewriter.getI64VectorAttr(stride);
-//     auto dilationAttr = rewriter.getI64VectorAttr(dilation);
+//   cast here using tType.getShape()
+  Value refinedShapeOutTensor = rewriter.create<tensor::CastOp>(loc, tType, outTensor);
 
-//     // Ensure static info is correct (i.e rank of inputs, types, etc)
-//     if(gradRank != inputRank)
-//       return rewriter.notifyMatchFailure(op, "invalid input - grad_output and input must have the same rank");
-    
-//     SmallVector<Value> kernelSizes;
-//     for(auto i = weightSizes.begin()+2; i != weightSizes.end(); i++)
-//       kernelSizes.push_back(*i);
+  return rewriter
+      .create<linalg::GenericOp>(
+          loc, tType, tensor, refinedShapeOutTensor, indexingMaps, iteratorTypes,
+          [&](OpBuilder &b, Location loc, ValueRange args) {
+            b.create<linalg::YieldOp>(loc, args[0]);
+          })
+      .getResult(0);
+}
 
-//     // Add asserts for dynamic info (matching sizes + strides, etc)
-//     //TODO
+class ConvertAtenConvolutionBackwardOp
+    : public OpConversionPattern<AtenConvolutionBackwardOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(AtenConvolutionBackwardOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
 
-//     Value kernel = flipTo(rewriter, loc, weight, 2, weightRank);
-//     Value gradFlip = rotate(rewriter, loc, grad);
-//     SmallVector<Value> gradFlipSizes = getTensorSizes(rewriter, loc, gradFlip);
+    Location loc = op->getLoc();
+    MLIRContext *context = op->getContext();
 
-//     // Pad input
-//     SmallVector<Value> resInputSizes{inputSizes[0], inputSizes[1]};
-//     SmallVector<Value> resWeightSizes{weightSizes[0], weightSizes[1]};
-//     for(size_t i = 2; i < weightRank; i++) {
-//       resInputSizes.push_back(torch_to_linalg::getOutputDimForConvOps(rewriter, loc, inputSizes[i], paddingVals[i-2], dilationVals[i-2], castIndexToInt(weightSizes[i]), strideVals[i-2]));
-//       resWeightSizes.push_back(torch_to_linalg::getOutputDimForConvOps(rewriter, loc, gradSizes[i], paddingVals[i-2], dilationVals[i-2], castIndexToInt(inputSizes[i]), strideVals[i-2]));
-//     }
+    Value grad = adaptor.grad_output();
+    Value input = adaptor.input();
+    Value weight = adaptor.weight();
+    // Value bias_sizes= adaptor.bias_sizes();
+    // Value padding = adaptor.padding();
+    // Value transposed = adaptor.transposed();
+    // Value output_padding = adaptor.output_padding();
+    // Value groups = adaptor.groups();
+    // Value output_mask = adaptor.output_mask();
 
-//     Value resInputTensor = rewriter.create<linalg::InitTensorOp>(loc, resInputSizes, eType);
-//     resInputTensor = rewriter.create<linalg::FillOp>(loc, zero, resInputTensor).getResult(0);
-//     Value resWeightTensor = rewriter.create<linalg::InitTensorOp>(loc, resWeightSizes, eType);
-//     resWeightTensor = rewriter.create<linalg::FillOp>(loc, zero, resWeightTensor).getResult(0);
+    Type intType = IntegerType::get(context, 64);
+    auto castIndexToInt = [&](Value v) {
+      return rewriter.create<arith::IndexCastOp>(loc, intType, v);
+    };
+    Type eType = input.getType().cast<RankedTensorType>().getElementType();
+    Value zero =
+        rewriter.create<arith::ConstantOp>(loc, FloatAttr::get(eType, 0.0));
 
-//     if(gradRank == 4) { // 2d convolution
- 
-//       resInputTensor = rewriter.create<linalg::Conv2DNchwFchwOp>(loc, resInputTensor.getType(), ValueRange{grad, kernel}, ValueRange{resInputTensor}, strideAttr, dilationAttr).getResult(0);
-//       resWeightTensor = rewriter.create<linalg::Conv2DNchwFchwOp>(loc, resWeightTensor.getType(), ValueRange{gradFlip, rotate(rewriter, loc, input)}, ValueRange{resWeightTensor}, strideAttr, dilationAttr).getResult(0);
-//     } else {
-//       return rewriter.notifyMatchFailure(op, "invalid input: only 2D convolutions are supported");
-//     }
+    SmallVector<Value> gradSizes = getTensorSizes(rewriter, loc, grad);
+    size_t gradRank = gradSizes.size();
+    SmallVector<Value> inputSizes = getTensorSizes(rewriter, loc, input);
+    size_t inputRank = inputSizes.size();
+    SmallVector<Value> weightSizes = getTensorSizes(rewriter, loc, weight);
+    size_t weightRank = weightSizes.size();
 
-//     // Sum up grad output (the bias gradient)
-//     DenseSet<int64_t> dimSet;
-//     for (size_t i = 1; i < gradRank; i++)
-//       dimSet.insert(i);
-//     Value resBias = torch_to_linalg::createReductionLinalgGeneric(
-//       rewriter, loc, gradFlip, dimSet, false, zero,
-//       [&](OpBuilder &b, Location loc, ValueRange payloadArgs) {
-//         Value result = rewriter.create<arith::AddFOp>(loc, payloadArgs[0], payloadArgs[1]);
-//         b.create<linalg::YieldOp>(loc, result);
-//       }
-//     );
+    SmallVector<int64_t> stride;
+    if (!matchPattern(adaptor.stride(), m_TorchConstantIntList(stride)))
+      return rewriter.notifyMatchFailure(op, "only constant strides supported");
+    SmallVector<int64_t> dilation;
+    if (!matchPattern(adaptor.dilation(), m_TorchConstantIntList(dilation)))
+      return rewriter.notifyMatchFailure(op,
+                                         "only constant dilation supported");
+    SmallVector<Value> output_mask_val;
+    if (!getListConstructElements(adaptor.output_mask(), output_mask_val))
+      return rewriter.notifyMatchFailure(op,
+                                         "only constant output mask supported");
+    SmallVector<bool> output_mask;
+    for (Value out : output_mask_val) {
+      bool mask_val;
+      if (!matchPattern(out, m_TorchConstantBool(&mask_val)))
+        return rewriter.notifyMatchFailure(
+            op, "only constant boolean output mask values supported");
+      output_mask.push_back(mask_val);
+    }
+    SmallVector<int64_t> padding;
+    if (!matchPattern(adaptor.padding(), m_TorchConstantIntList(padding)))
+      return rewriter.notifyMatchFailure(op, "only constant padding supported");
+    SmallVector<Value> paddingVals;
+    for (auto p : padding)
+      paddingVals.push_back(rewriter.create<arith::ConstantOp>(
+          loc, IntegerAttr::get(intType, p)));
+    SmallVector<Value> dilationVals;
+    for (auto d : dilation)
+      dilationVals.push_back(rewriter.create<arith::ConstantOp>(
+          loc, IntegerAttr::get(intType, d)));
+    SmallVector<Value> strideVals;
+    for (auto s : stride)
+      strideVals.push_back(rewriter.create<arith::ConstantOp>(
+          loc, IntegerAttr::get(intType, s)));
 
-//     rewriter.replaceOp(op, {resInputTensor, resWeightTensor, resBias});
+    auto strideAttr = rewriter.getI64VectorAttr(stride);
+    auto dilationAttr = rewriter.getI64VectorAttr(dilation);
 
-//     return success();
-//   }
-// };
-// } // namespace
+    // Ensure static info is correct (i.e rank of inputs, types, etc)
+    if (gradRank != inputRank)
+      return rewriter.notifyMatchFailure(
+          op, "invalid input - grad_output and input must have the same rank");
+
+    SmallVector<Value> kernelSizes;
+    for (auto i = weightSizes.begin() + 2; i != weightSizes.end(); i++)
+      kernelSizes.push_back(*i);
+
+    // Add asserts for dynamic info (matching sizes + strides, etc)
+    // TODO
+
+    Value kernel = flipTo(rewriter, loc, weight, 2, weightRank);
+    Value gradFlip = rotate(rewriter, loc, grad);
+    SmallVector<Value> gradFlipSizes = getTensorSizes(rewriter, loc, gradFlip);
+
+    // Pad input
+    SmallVector<Value> resInputSizes{inputSizes[0], inputSizes[1]};
+    SmallVector<Value> resWeightSizes{weightSizes[0], weightSizes[1]};
+    for (size_t i = 2; i < weightRank; i++) {
+      resInputSizes.push_back(torch_to_linalg::getOutputDimForConvOps(
+          rewriter, loc, inputSizes[i], paddingVals[i - 2], dilationVals[i - 2],
+          castIndexToInt(weightSizes[i]), strideVals[i - 2]));
+      resWeightSizes.push_back(torch_to_linalg::getOutputDimForConvOps(
+          rewriter, loc, gradSizes[i], paddingVals[i - 2], dilationVals[i - 2],
+          castIndexToInt(inputSizes[i]), strideVals[i - 2]));
+    }
+
+    Value resInputTensor =
+        rewriter.create<linalg::InitTensorOp>(loc, resInputSizes, eType);
+    resInputTensor =
+        rewriter.create<linalg::FillOp>(loc, zero, resInputTensor).getResult(0);
+    Value resWeightTensor =
+        rewriter.create<linalg::InitTensorOp>(loc, resWeightSizes, eType);
+    resWeightTensor =
+        rewriter.create<linalg::FillOp>(loc, zero, resWeightTensor)
+            .getResult(0);
+
+    if (gradRank == 4) { // 2d convolution
+      resInputTensor =
+          rewriter
+              .create<linalg::Conv2DNchwFchwOp>(
+                  loc, resInputTensor.getType(), ValueRange{grad, kernel},
+                  ValueRange{resInputTensor}, strideAttr, dilationAttr)
+              .getResult(0);
+      resWeightTensor =
+          rewriter
+              .create<linalg::Conv2DNchwFchwOp>(
+                  loc, resWeightTensor.getType(),
+                  ValueRange{gradFlip, rotate(rewriter, loc, input)},
+                  ValueRange{resWeightTensor}, strideAttr, dilationAttr)
+              .getResult(0);
+    } else {
+      return rewriter.notifyMatchFailure(
+          op, "invalid input: only 2D convolutions are supported");
+    }
+
+    // Sum up grad output (the bias gradient)
+    DenseSet<int64_t> dimSet;
+    for (size_t i = 1; i < gradRank; i++)
+      dimSet.insert(i);
+    Value resBias = torch_to_linalg::createReductionLinalgGeneric(
+        rewriter, loc, gradFlip, dimSet, false, zero,
+        [&](OpBuilder &b, Location loc, ValueRange payloadArgs) {
+          Value result = rewriter.create<arith::AddFOp>(loc, payloadArgs[0],
+                                                        payloadArgs[1]);
+          b.create<linalg::YieldOp>(loc, result);
+        });
+
+    rewriter.replaceOp(op, {resInputTensor, resWeightTensor, resBias});
+
+    return success();
+  }
+};
+} // namespace
 
 namespace {
 class ConvertAtenConvolutionOp : public OpConversionPattern<AtenConvolutionOp> {
@@ -622,7 +693,7 @@ public:
       return op.emitError("unimplemented: non-floating point type");
     SmallVector<Value> inSizes = getTensorSizes(rewriter, loc, input);
     size_t inRank = inSizes.size();
-    if(inRank != 3)
+    if(inRank != 4)
       return rewriter.notifyMatchFailure(op, "only 2D convolution currently supported");
 
     Type intType = IntegerType::get(context, 64);
@@ -883,8 +954,8 @@ void mlir::torch::torch_to_linalg::populateLinearPatternsAndLegality(
   patterns.add<ConvertAtenLinearOp>(typeConverter, context);
   target.addIllegalOp<AtenConv2dOp>();
   patterns.add<ConvertAtenConv2dOp>(typeConverter, context);
-  // target.addIllegalOp<AtenConvolutionBackwardOp>();
-  // patterns.add<ConvertAtenConvolutionBackwardOp>(typeConverter, context);
+   target.addIllegalOp<AtenConvolutionBackwardOp>();
+   patterns.add<ConvertAtenConvolutionBackwardOp>(typeConverter, context);
   target.addIllegalOp<AtenConvolutionOp>();
   patterns.add<ConvertAtenConvolutionOp>(typeConverter, context);
 }

@@ -7,6 +7,7 @@ from io import StringIO
 import os
 import sys
 import tempfile
+
 from torch_mlir.passmanager import PassManager
 from torch_mlir.ir import StringAttr
 
@@ -19,11 +20,30 @@ def get_module_name_for_debug_dump(module):
         return "UnnammedModule"
     return StringAttr(module.operation.attributes["torch.debug_module_name"]).value
 
+import unicodedata
+import re
+
+def slugify(value, allow_unicode=False):
+    """
+    Taken from https://github.com/django/django/blob/master/django/utils/text.py
+    Convert to ASCII if 'allow_unicode' is False. Convert spaces or repeated
+    dashes to single dashes. Remove characters that aren't alphanumerics,
+    underscores, or hyphens. Convert to lowercase. Also strip leading and
+    trailing whitespace, dashes, and underscores.
+    """
+    value = str(value)
+    if allow_unicode:
+        value = unicodedata.normalize('NFKC', value)
+    else:
+        value = unicodedata.normalize('NFKD', value).encode('ascii', 'ignore').decode('ascii')
+    value = re.sub(r'[^\w\s-]', '', value.lower())
+    return re.sub(r'[-\s]+', '-', value).strip('-_')
+
 def run_pipeline_with_repro_report(module,
                                    pipeline: str,
                                    description: str):
     """Runs `pipeline` on `module`, with a nice repro report if it fails."""
-    module_name = get_module_name_for_debug_dump(module)
+    module_name = slugify(get_module_name_for_debug_dump(module))
     try:
         original_stderr = sys.stderr 
         sys.stderr = StringIO()
@@ -42,7 +62,8 @@ def run_pipeline_with_repro_report(module,
         #   up /tmp)
         # - if we do have have colliding filenames, writes should at least
         #   avoid being racy.
-        filename = os.path.join(tempfile.gettempdir(), module_name + ".mlir")
+        os.makedirs(os.path.join(tempfile.gettempdir(), "torch_mlir"), exist_ok=True)
+        filename = os.path.join(tempfile.gettempdir(), "torch_mlir", module_name + ".mlir")
         with open(filename, 'w') as f:
             f.write(asm_for_error_report)
         debug_options="-print-ir-after-all -mlir-disable-threading"
@@ -51,8 +72,7 @@ def run_pipeline_with_repro_report(module,
 {sys.stderr.getvalue()}
 
 Error can be reproduced with:
-$ torch-mlir-opt -pass-pipeline='{pipeline}' {filename}
-Add '{debug_options}' to get the IR dump for debugging purpose.
+$ torch-mlir-opt -debug -print-ir-after-all -pass-pipeline='{pm}' {filename}
 """) from None
     finally:
         sys.stderr = original_stderr
