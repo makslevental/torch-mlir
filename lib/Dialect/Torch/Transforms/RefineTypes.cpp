@@ -512,7 +512,7 @@ ChangeResult TypeAnalyzer::visitOperation(
           AtenHardswishOp, AtenErfOp, AtenSiluOp, AtenHardtanhOp,
           AtenMaskedSelectOp, AtenMaxPool2dOp, AtenAdaptiveAvgPool2dOp,
           AtenFlattenUsingIntsOp, AtenSqueezeOp, AtenSqueezeDimOp,
-          AtenUnsqueezeOp, AtenViewOp, Aten_UnsafeViewOp, AtenReshapeOp,
+          AtenUnsqueezeOp, AtenViewOp, Aten_UnsafeViewOp, AtenReshapeOp, Aten_ReshapeAliasOp,
           AtenResize_Op, AtenTransposeIntOp, AtenTOp, AtenPermuteOp,
           AtenIndexSelectOp, AtenSelectIntOp, AtenSliceTensorOp, AtenGatherOp,
           AtenExpandOp, AtenExpandAsOp, AtenBroadcastToOp, AtenRepeatOp,
