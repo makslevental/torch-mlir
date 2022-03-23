@@ -194,6 +194,7 @@ def get_func_op_with_name(module: ir.Module, name: str) -> Optional[FuncOp]:
         name_attr = ir.StringAttr.get(name)
     for op in module.body.operations:
         if isinstance(op, FuncOp) and op.name == name_attr:
+            module.operation.attributes["torch.debug_module_name"] = name_attr
             return op
 
     return None

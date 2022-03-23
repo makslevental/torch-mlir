@@ -41,7 +41,8 @@ class TorchMLIRTensor(torch.Tensor):
             dtype=elem.dtype,
             layout=elem.layout,
             device=elem.device,
-            requires_grad=kwargs.get("requires_grad", False) or elem.requires_grad,
+            requires_grad=elem.dtype in {torch.float, torch.float32, torch.float64}
+            and (kwargs.get("requires_grad", False) or elem.requires_grad),
         )
         r.elem = elem.detach() if r.requires_grad else elem
         return r
