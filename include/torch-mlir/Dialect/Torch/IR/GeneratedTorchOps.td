@@ -2752,6 +2752,29 @@ def Torch_AtenConvolutionBackwardOverrideableOp : Torch_Op<"aten.convolution_bac
   let assemblyFormat = "$grad_output `,` $input `,` $weight `,` $stride `,` $padding `,` $dilation `,` $transposed `,` $output_padding `,` $groups `,` $output_mask attr-dict `:` qualified(type($grad_output)) `,` qualified(type($input)) `,` qualified(type($weight)) `,` qualified(type($stride)) `,` qualified(type($padding)) `,` qualified(type($dilation)) `,` qualified(type($transposed)) `,` qualified(type($output_padding)) `,` qualified(type($groups)) `,` qualified(type($output_mask)) `->` qualified(type($grad_input)) `,` qualified(type($grad_weight)) `,` qualified(type($grad_bias))";
 }
 
+def Torch_AtenConvolutionOp : Torch_Op<"aten.convolution", [
+    AllowsTypeRefinement,
+    HasValueSemantics,
+    ReadOnly
+  ]> {
+  let summary = "Generated op for `aten::convolution : (Tensor, Tensor, Tensor?, int[], int[], int[], bool, int[], int) -> (Tensor)`";
+  let arguments = (ins
+    AnyTorchTensorType:$input,
+    AnyTorchTensorType:$weight,
+    AnyTorchOptionalTensorType:$bias,
+    TorchIntListType:$stride,
+    TorchIntListType:$padding,
+    TorchIntListType:$dilation,
+    Torch_BoolType:$transposed,
+    TorchIntListType:$output_padding,
+    Torch_IntType:$groups
+  );
+  let results = (outs
+    AnyTorchTensorType:$result
+  );
+  let assemblyFormat = "$input `,` $weight `,` $bias `,` $stride `,` $padding `,` $dilation `,` $transposed `,` $output_padding `,` $groups attr-dict `:` qualified(type($input)) `,` qualified(type($weight)) `,` qualified(type($bias)) `,` qualified(type($stride)) `,` qualified(type($padding)) `,` qualified(type($dilation)) `,` qualified(type($transposed)) `,` qualified(type($output_padding)) `,` qualified(type($groups)) `->` qualified(type($result))";
+}
+
 def Torch_AtenConv2dOp : Torch_Op<"aten.conv2d", [
     AllowsTypeRefinement,
     HasValueSemantics,
