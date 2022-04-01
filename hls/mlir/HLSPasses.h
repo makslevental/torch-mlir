@@ -60,6 +60,8 @@ void registerHLSConversionPasses();
 
 void registerHLSPasses();
 
+void registerDirtyPass();
+
 } // namespace HLS
 } // namespace torch
 } // namespace mlir

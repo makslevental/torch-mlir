@@ -17,7 +17,10 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/Support/Debug.h"
 #include <iostream>
+
+#define DEBUG_TYPE "hls-promote-allocs"
 
 using namespace mlir;
 using namespace mlir::torch::HLS;
@@ -192,19 +195,24 @@ class PromoteAllocsPass : public HLSPromoteAllocsBase<PromoteAllocsPass> {
   }
 
   void hoistLastStoreAlloc(FuncOp func) {
-    llvm::SmallVector<AffineStoreOp> stores;
-    func.walk([&](AffineStoreOp op) { stores.push_back(op); });
+    llvm::SmallVector<memref::StoreOp> stores;
+    func.walk<WalkOrder::PreOrder>([&](Operation* op) {
+      if (auto storeop = llvm::dyn_cast<memref::StoreOp>(op)) {
+        storeop->dump();
+        stores.push_back(storeop);
+      }
+    });
 
     if (stores.empty()) {
-      func.emitError() << "no stores found";
-      return signalPassFailure();
+      LLVM_DEBUG(llvm::dbgs() << " \n no stores found");
+      return;
     }
 
     auto last_store = stores.back();
     func.insertArgument(func.getNumArguments(), last_store.getMemRefType(), {},
                         func->getLoc());
     BlockArgument arg = func.getArgument(func.getNumArguments() - 1);
-    auto memref_alloc = last_store.getMemRef().getDefiningOp<memref::AllocOp>();
+    auto memref_alloc = last_store.getMemRef().getDefiningOp<memref::AllocaOp>();
     memref_alloc.replaceAllUsesWith(arg);
   }
 

@@ -59,14 +59,49 @@ def make_mod():
     return make_layer(mod, [None, ([1, 2, 8, 8], torch.float32, True)])
 
 
-def make_conv():
-    with torch.no_grad():
-        mod = torch.nn.Conv2d(
-            in_channels=3, out_channels=3, kernel_size=3, stride=1, padding=0, bias=False
+class SmallBraggNN(nn.Module):
+    def __init__(self, img_size=11):
+        super().__init__()
+        self.conv = torch.nn.Conv2d(
+            in_channels=1, out_channels=1, kernel_size=3, bias=False
         )
+        self.dense = torch.nn.Linear(in_features=(img_size - 2) ** 2, out_features=2)
+
+    def forward(self, x):
+        out = self.conv(x)
+        out = out.flatten(start_dim=1)
+        out = self.dense(out)
+        return out
+
+
+def make_small_braggnn(in_channels=1, hw=11):
+    with torch.no_grad():
+        mod = SmallBraggNN(img_size=hw)
         mod.eval()
         mod.apply(set_weights)
-        return make_layer(mod, [None, ([1, 3, 32, 32], torch.float32, True)])
+
+        t = torch.randn((1, in_channels, hw, hw))
+        y = mod(t)
+        print(y.shape)
+
+        return make_layer(mod, [None, ([1, in_channels, hw, hw], torch.float32, True)])
+
+
+def make_conv(
+    hw=5, in_channels=1, out_channels=1, kernel_size=3, stride=1, padding=0, bias=False
+):
+    with torch.no_grad():
+        mod = torch.nn.Conv2d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            padding=padding,
+            bias=bias,
+        )
+        mod.eval()
+        # mod.apply(set_weights)
+        return make_layer(mod, [None, ([1, in_channels, hw, hw], torch.float32, True)])
 
 
 def make_mm():
@@ -78,13 +113,13 @@ def make_mm():
         return make_layer(mod, [None, ([1, 1, 10, 10], torch.float32, True)])
 
 
-def make_braggnn():
+def make_braggnn(scale=4, imgsz=11):
     with torch.no_grad():
-        mod = BraggNN()
+        mod = BraggNN(imgsz=imgsz, scale=scale)
         mod.eval()
-        mod(torch.randn(1,1,11,11))
+        mod(torch.randn(1, 1, imgsz, imgsz))
         mod.apply(set_weights)
-        return make_layer(mod, [None, ([1, 1, 11, 11], torch.float32, True)])
+        return make_layer(mod, [None, ([1, 1, imgsz, imgsz], torch.float32, True)])
 
 
 def make_resnet18():
@@ -124,44 +159,6 @@ def hack_for_calyx(out):
     )
 
 
-TORCH_PIPELINE = [
-    "symbol-dce",
-    "torch-prepare-for-globalize-object-graph",
-    "torch-globalize-object-graph",
-    "symbol-dce",
-    "inline",
-    "torch-adjust-calling-conventions",
-    "builtin.func(canonicalize{  max-iterations=10 region-simplify=true top-down=true})",
-    "torch-inline-global-slots",
-    "builtin.func(torch-reduce-op-variants)",
-    "builtin.func(canonicalize{  max-iterations=10 region-simplify=true top-down=true})",
-    "symbol-dce",
-    ## "builtin.func(torch-hls-refine-types)",
-    "builtin.func(torch-refine-types)",
-    "torch-refine-public-return",
-    "builtin.func(canonicalize{  max-iterations=10 region-simplify=true top-down=true})",
-    "builtin.func(torch-maximize-value-semantics)",
-    "builtin.func(canonicalize{  max-iterations=10 region-simplify=true top-down=true})",
-    "builtin.func(torch-decompose-complex-ops)",
-    "torch-verify-invariants-before-backend-lowering",
-    "builtin.module(symbol-dce)",
-]
-
-TO_LINALG_PIPELINE = [
-    ## "builtin.func(convert-torch-hls-to-linalg)",
-    "builtin.func(convert-torch-to-linalg)",
-    "builtin.func(convert-torch-to-std)",
-    "builtin.func(convert-torch-to-scf)",
-    "builtin.func(linalg-strategy-tile-and-fuse-pass)",
-    # "builtin.func(std-expand)",
-    "builtin.func(canonicalize{  max-iterations=10 region-simplify=true top-down=true})",
-    "builtin.func(resolve-shaped-type-result-dims)",
-    "builtin.func(cse)",
-    "torch-func-backend-type-conversion",
-    "builtin.func(torch-finalizing-backend-type-conversion)",
-    "torch-verify-linalg-on-tensors-backend-contract",
-]
-
 BUFFERIZATION_PIPELINE = [
     # "tensor-constant-bufferize{alignment=0}",
     "builtin.func(torch-hls-linalg-bufferize)",
@@ -181,29 +178,31 @@ LOWERING_PIPELINE = [
     "builtin.func(cse)",
     "torch-hls-drop-public-return",
     "builtin.func(cse)",
-    # "builtin.func(convert-linalg-to-loops)",
-    "builtin.func(convert-linalg-to-affine-loops)",
-    "torch-hls-promote-allocs",
-    # "builtin.func(torch-hls-convert-copy-to-affine-loops)",
-    # "builtin.func(torch-hls-quantize)",
-    # "torch-hls-quantize",
+    "builtin.func(convert-linalg-to-loops)",
+    # "builtin.func(convert-linalg-to-affine-loops)",
+    "builtin.func(convert-linalg-to-parallel-loops)",
+    "builtin.func(promote-buffers-to-stack{max-alloc-size-in-bytes=1000000000 max-rank-of-allocated-memref=10})",
+    "cse",
 ]
 
 PIPELINE = (
-    ["torchscript-module-to-torch-backend-pipeline", "torch-backend-to-linalg-on-tensors-backend-pipeline"]+BUFFERIZATION_PIPELINE + LOWERING_PIPELINE
+    [
+        "torchscript-module-to-torch-backend-pipeline",
+        "torch-backend-to-linalg-on-tensors-backend-pipeline",
+    ]
+    + BUFFERIZATION_PIPELINE
+    + LOWERING_PIPELINE
 )
 # print('torch-mlir-opt -debug --pass-pipeline"', ",".join(PIPELINE), '"')
 
 if __name__ == "__main__":
     mb = ModuleBuilder()
-    recursivescriptmodule, class_annotator = make_conv()
+    recursivescriptmodule, class_annotator = make_small_braggnn()
     print(recursivescriptmodule.graph)
     mb.import_module(recursivescriptmodule._c, class_annotator)
 
     print(",".join(PIPELINE))
-    run_pipeline_with_repro_report(mb.module,
-                                   ",".join(PIPELINE),
-                                   "")
+    run_pipeline_with_repro_report(mb.module, ",".join(PIPELINE), "")
 
     dialect = "scf"
     out = mb.module.operation.get_asm(
@@ -211,7 +210,7 @@ if __name__ == "__main__":
     )
     # hard coded here for vitis
     open(
-        f"/home/mlevental/dev_projects/torch-mlir/hls/scripts/{recursivescriptmodule.original_name}.affine.mlir",
+        f"/home/mlevental/dev_projects/torch-mlir/hls/scripts/{recursivescriptmodule.original_name}.mlir",
         "w",
     ).write(out)
     # hack_for_calyx(out)
