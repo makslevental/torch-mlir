@@ -37,6 +37,8 @@ void mlir::torch::HLS::registerHLSTorchPasses() {
   mlir::PassPipelineRegistration<>(
       "torch-function-to-torch-hls-backend-pipeline", "",
       mlir::torch::HLS::createTorchScriptFunctionToTorchHLSBackendPipeline);
+
+  registerDirtyPass();
 }
 
 void mlir::torch::HLS::createTorchScriptModuleToTorchHLSBackendPipeline(
