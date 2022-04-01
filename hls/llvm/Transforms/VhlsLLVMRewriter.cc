@@ -40,8 +40,8 @@ renameBasicBlocksAndValues(Module &M,
   for (Function &F : M) {
     // Rename arguments
     if (F.getName() == getXlnTop()) {
-      LLVM_DEBUG(dbgs() << "F:\n");
-      LLVM_DEBUG(F.dump());
+//      LLVM_DEBUG(dbgs() << "F:\n");
+//      LLVM_DEBUG(F.dump());
 
       for (size_t i = 0; i < ParamNames.size(); i++) {
         LLVM_DEBUG(dbgs() << "Setting #" << i << " to " << ParamNames[i]
