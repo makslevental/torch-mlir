@@ -148,7 +148,7 @@ public:
       dbgs() << "Processing offset for target pointer: \n";
       ptr->dump();
       dbgs() << " within function:\n";
-      F.dump();
+//      F.dump();
     });
 
     SmallVector<Value *> offsets;
@@ -427,7 +427,7 @@ findInsertExractValueSequences(Function &F,
           seq.replaceExtractValueUses();
           seqs.push_back(seq);
 
-          LLVM_DEBUG(dbgs() << " Function after update:\n" << (F) << '\n');
+//          LLVM_DEBUG(dbgs() << " Function after update:\n" << (F) << '\n');
         }
       }
     }
@@ -977,7 +977,7 @@ static void convertMemRefToArray(Module &M, bool ranked = false) {
   for (Function *F : Funcs) {
     LLVM_DEBUG({
       dbgs() << "\nTransforming function:  \n\n";
-      F->dump();
+//      F->dump();
     });
     ValueToValueMapTy RankedArrVMap;
     auto &Seqs = FuncToSeqs[F];
@@ -988,7 +988,7 @@ static void convertMemRefToArray(Module &M, bool ranked = false) {
         duplicateFunctionsWithRankedArrays(F, Seqs, RankedArrVMap);
     LLVM_DEBUG({
       dbgs() << "\nDuplicated function:  \n\n";
-      NewFunc->dump();
+//      NewFunc->dump();
     });
 
     // -----------------------------------------------------------------
@@ -1004,9 +1004,10 @@ static void convertMemRefToArray(Module &M, bool ranked = false) {
     for (Instruction *I : GEPList) {
       // Simplify the address calculation expressions to make Vitis happy.
       // It is easier to work on the original GEP.
-      SmallVector<Value *> indices =
-          getGepIndices(cast<GetElementPtrInst>(I),
-                        RankedArrVMap[I->getOperand(0)]->getType());
+//      SmallVector<Value *> indices =
+//          getGepIndices(cast<GetElementPtrInst>(I),
+//                        RankedArrVMap[I->getOperand(0)]->getType());
+      SmallVector<Value *> indices = {};
 
       Instruction *NewGEP;
       if (indices.empty()) {
@@ -1044,7 +1045,7 @@ static void convertMemRefToArray(Module &M, bool ranked = false) {
 
     LLVM_DEBUG({
       dbgs() << "\nGEP updated function: \n\n";
-      NewFunc->dump();
+//      NewFunc->dump();
     });
 
     // -----------------------------------------------------------------
