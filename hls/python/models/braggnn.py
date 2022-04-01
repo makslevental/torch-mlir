@@ -1,6 +1,5 @@
 import torch
 from torch import nn
-from torch_mlir_e2e_test.torchscript.annotations import annotate_args, export
 
 
 class NLB(torch.nn.Module):
@@ -44,13 +43,16 @@ class Exp(torch.nn.Module):
     def forward(self, x):
         return 1 + x + x * x / 2
 
+
 SCALE = 4
 
+
 class BraggNN(torch.nn.Module):
-    def __init__(self, imgsz=11, fcsz=(16*SCALE, 8*SCALE, 4*SCALE, 2*SCALE)):
+    def __init__(self, imgsz=11, scale=SCALE):
         super().__init__()
+        fcsz = tuple(map(int, (16 * scale, 8 * scale, 4 * scale, 2 * scale)))
         self.cnn_ops = []
-        cnn_out_chs = (16*SCALE, 8*SCALE, 2*SCALE)
+        cnn_out_chs = tuple(map(int, (16 * scale, 8 * scale, 2 * scale)))
         cnn_in_chs = (1,) + cnn_out_chs[:-1]
         fsz = imgsz
         for (ic, oc) in zip(cnn_in_chs, cnn_out_chs):
