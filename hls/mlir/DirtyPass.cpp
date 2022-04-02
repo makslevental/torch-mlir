@@ -465,7 +465,7 @@ void DirtyPass::runOnOperation() {
   llvm::SmallDenseMap<int64_t, Value> constants;
 
   if (this->csts) {
-    for (int i = 0; i < 300; ++i) {
+    for (int i = 0; i < 3000; ++i) {
       auto val = builder.create<arith::ConstantIndexOp>(funcOp->getLoc(), i)
                      .getResult();
       constants.insert(std::make_pair(i, val));
