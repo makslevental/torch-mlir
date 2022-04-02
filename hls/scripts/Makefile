@@ -67,13 +67,10 @@ $(FILENAME).dirty.llvm.unrollparfor.llvm.cse.ll.vitis: $(FILENAME).dirty.llvm.un
 		-strip-attr \
 		-time-passes \
 		-stats \
-		-mem2reg \
 		-mem2arr \
-		-mem2reg \
 		-strip-debug \
 		-xlnmath \
 		-xlnname \
-		-mem2reg \
 		-o $(FILENAME).dirty.llvm.unrollparfor.llvm.cse.ll.vitis
 	python read_large_file.py $(FILENAME).dirty.llvm.unrollparfor.llvm.cse.ll.vitis
 
