@@ -1,3 +1,4 @@
+import queue
 import re
 import struct
 import sys
@@ -188,8 +189,9 @@ def simplify_adds_mults(fp):
                             op = f"llvm.mlir.constant({val} : index) : i64"
                             csts[ident] = op, str(val)
                         else:
-                            all_sig_lines.append(line)
-                            # uses[ident].append((i, lhs, rhs))
+                            all_sig_lines.append(
+                                line
+                            )  # uses[ident].append((i, lhs, rhs))
 
                     elif "llvm.add " in line:
                         ident, op = map(lambda x: x.strip(), line.split("="))
@@ -343,8 +345,9 @@ def stores_loads(fp):
             # print("last store", k, stores[k][-1])
             # print("all loads", k, v)
             pass
-    
+
     # # TODO: find pairs of stores and loads
+    # fifo queue -> each store is a push, each load is a pop
     # for store_assign, (i, val) in stores.items():
     #     # find next load
     #     load_assign, line = next(loads[store_assign])
@@ -397,6 +400,74 @@ def drop_init_tensors(fp):
         infile.write(sub2)
 
 
+def stores_loads2(fp):
+    """
+      loading from and storing to an arg:
+
+      %val_12 = alloca float, i64 ptrtoint (float* getelementptr (float, float* null, i64 8) to i64), align 4
+
+      %val_19 = getelementptr inbounds [1 x [4 x [2 x [2 x float]]]], [1 x [4 x [2 x [2 x float]]]]* %arg_3, i64 0, i64 0, i64 0, i64 0, i64 0
+      %val_20 = load float, float* %val_19, align 4
+
+      ...
+
+      %val_248 = fmul float %val_20, %val_245
+      %val_249 = fadd float %val_247, %val_248
+
+      ...
+
+      %val_246 = getelementptr float, float* %val_12, i64 4
+      store float %val_249, float* %val_246, align 4
+
+    """
+
+    load_to_ssa = {}
+    stores = defaultdict(queue.Queue)
+    all_sig_lines = []
+    elementptrs_to_args = set()
+
+    with open(fp) as infile:
+        for i, line in enumerate(infile):
+            idents = re.findall(r"(%[\d|a-z|_]*)", line)
+
+            # allow stores to inout params
+            if "define void @forward" in line:
+                args = set(idents)
+            if "= getelementptr" in line and "@__constant" not in line:
+                gep, ssa = idents
+                if ssa in args:
+                    elementptrs_to_args.add(gep)
+
+            # collect stores that go to canonical ptrs (they're canonical after store_load previous pass
+            # assign is a ptr (or address or whatever)
+            if "store" in line and "float*" in line:
+                val, gep = idents
+                # make sure you're still storing to inout args
+                if gep not in elementptrs_to_args:
+                    stores[gep].put(val)
+                    continue
+            # find loads that aren't gep loads but load from pointers
+            # (e.g., %val_8225 = load float, float* getelementptr inbounds... since those come from constants?)
+            # in order to tie them back to the source (i.e., the most recent gep that should've been stored to)
+            elif "load" in line and "getelementptr" not in line:
+                assign, gep = idents
+                if gep in stores and not stores[gep].empty():
+                    load_to_ssa[assign] = stores[gep].get()
+                    continue
+
+            all_sig_lines.append(line)
+
+    with open(fp, "w") as test_file:
+        for i, line in enumerate(all_sig_lines):
+            idents = re.findall(r"(%[\d|a-z|_]*)", line)
+            for ident in idents:
+                if ident in load_to_ssa:
+                    canonical_ssa = load_to_ssa[ident]
+                    line = re.sub(fr"{ident}\b", f"{canonical_ssa}", line)
+
+            test_file.write(line)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process some integers.")
     parser.add_argument("fp")
@@ -418,3 +489,4 @@ if __name__ == "__main__":
             collapse_ariths_llvm(fp)
             collapse_gep(fp)
             stores_loads(fp)
+            stores_loads2(fp)

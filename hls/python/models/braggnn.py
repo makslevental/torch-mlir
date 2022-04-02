@@ -15,6 +15,7 @@ class NLB(torch.nn.Module):
         self.g_layer = torch.nn.Conv2d(
             in_channels=in_ch, out_channels=self.inter_ch, kernel_size=1, padding=0
         )
+
         self.out_cnn = torch.nn.Conv2d(
             in_channels=self.inter_ch, out_channels=in_ch, kernel_size=1, padding=0
         )
@@ -35,16 +36,8 @@ class NLB(torch.nn.Module):
         return _out_tmp
 
 
-class Exp(torch.nn.Module):
-    def __init__(self,):
-        super().__init__()
-
-    # e^x = 1 + x + x^2/2!
-    def forward(self, x):
-        return 1 + x + x * x / 2
-
-
 SCALE = 4
+
 
 class BraggNN(torch.nn.Module):
     def __init__(self, imgsz=11, scale=SCALE):
@@ -113,6 +106,7 @@ class cnn_layers_1(torch.nn.Module):
 
         return _out
 
+
 class nlb(torch.nn.Module):
     def __init__(self, imgsz=11, scale=SCALE):
         super().__init__()
@@ -124,6 +118,42 @@ class nlb(torch.nn.Module):
         _out = x
         _out = self.nlb(_out)
 
+        return _out
+
+
+class theta_phi_g(torch.nn.Module):
+    def __init__(self, imgsz=11, scale=SCALE):
+        super().__init__()
+        cnn_out_chs = tuple(map(int, (16 * scale, 8 * scale, 2 * scale)))
+        in_ch = cnn_out_chs[0]
+        self.inter_ch = in_ch // 2
+        self.conv = torch.nn.Conv2d(
+            in_channels=in_ch, out_channels=self.inter_ch, kernel_size=1, padding=0
+        )
+
+    def forward(self, x):
+        _out = x
+        _out = self.conv(_out)
+        return _out
+
+
+class theta_phi_g_combine(torch.nn.Module):
+    def __init__(self, imgsz=11, scale=SCALE):
+        super().__init__()
+        cnn_out_chs = tuple(map(int, (16 * scale, 8 * scale, 2 * scale)))
+        in_ch = cnn_out_chs[0]
+        self.inter_ch = in_ch // 2
+        self.soft = nn.Softmax(dim=-1)
+        self.out_cnn = torch.nn.Conv2d(
+            in_channels=self.inter_ch, out_channels=in_ch, kernel_size=1, padding=0
+        )
+
+    def forward(self, x, theta, phi, g):
+        _out = theta * phi
+        _out = self.soft(_out)
+        _out = _out * g
+        _out = self.out_cnn(_out)
+        _out = _out + x
         return _out
 
 
