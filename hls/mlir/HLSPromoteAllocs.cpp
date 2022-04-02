@@ -195,25 +195,65 @@ class PromoteAllocsPass : public HLSPromoteAllocsBase<PromoteAllocsPass> {
   }
 
   void hoistLastStoreAlloc(FuncOp func) {
-    llvm::SmallVector<memref::StoreOp> stores;
-    func.walk<WalkOrder::PreOrder>([&](Operation* op) {
-      if (auto storeop = llvm::dyn_cast<memref::StoreOp>(op)) {
-        storeop->dump();
-        stores.push_back(storeop);
+    if (hoistGlobals) {
+      func.walk<WalkOrder::PreOrder>([&](memref::GetGlobalOp op) {
+        func.insertArgument(func.getNumArguments(), op.getType(), {},
+                            func->getLoc());
+        BlockArgument arg = func.getArgument(func.getNumArguments() - 1);
+        op.replaceAllUsesWith(arg);
+      });
+    }
+
+    llvm::SmallVector<memref::StoreOp> memref_stores;
+    llvm::SmallVector<AffineStoreOp> affine_stores;
+    func.walk<WalkOrder::PreOrder>([&](Operation *op) {
+      if (hoistAffine) {
+        if (auto storeop = llvm::dyn_cast<AffineStoreOp>(op)) {
+          storeop->dump();
+          affine_stores.push_back(storeop);
+        }
+      } else {
+        if (auto storeop = llvm::dyn_cast<memref::StoreOp>(op)) {
+          storeop->dump();
+          memref_stores.push_back(storeop);
+        }
+
       }
     });
 
-    if (stores.empty()) {
+    if (affine_stores.empty() && memref_stores.empty()) {
       LLVM_DEBUG(llvm::dbgs() << " \n no stores found");
       return;
     }
 
-    auto last_store = stores.back();
-    func.insertArgument(func.getNumArguments(), last_store.getMemRefType(), {},
-                        func->getLoc());
-    BlockArgument arg = func.getArgument(func.getNumArguments() - 1);
-    auto memref_alloc = last_store.getMemRef().getDefiningOp<memref::AllocaOp>();
-    memref_alloc.replaceAllUsesWith(arg);
+    if (hoistAffine) {
+      auto last_store = affine_stores.back();
+      auto memref_alloc =
+          last_store.getMemRef().getDefiningOp<memref::AllocaOp>();
+
+      func.insertArgument(func.getNumArguments(), last_store.getMemRefType(), {},
+                          func->getLoc());
+      BlockArgument arg = func.getArgument(func.getNumArguments() - 1);
+      memref_alloc.replaceAllUsesWith(arg);
+    } else {
+      auto last_store = memref_stores.back();
+      auto memref_alloc =
+          last_store.getMemRef().getDefiningOp<memref::AllocaOp>();
+
+      func.insertArgument(func.getNumArguments(), last_store.getMemRefType(), {},
+                          func->getLoc());
+      BlockArgument arg = func.getArgument(func.getNumArguments() - 1);
+      memref_alloc.replaceAllUsesWith(arg);
+    }
+
+    if (hoistAll) {
+      func.walk<WalkOrder::PreOrder>([&](memref::AllocaOp op) {
+        func.insertArgument(func.getNumArguments(), op.getType(), {},
+                            func->getLoc());
+        BlockArgument arg = func.getArgument(func.getNumArguments() - 1);
+        op.replaceAllUsesWith(arg);
+      });
+    }
   }
 
   void dropAsserts(FuncOp func) {

@@ -1,33 +1,27 @@
-import re
 import os
+import re
 import shutil
-import subprocess
 import stat
+import subprocess
 
 import torch
-
 # noinspection PyUnresolvedReferences
 from torch import nn
 from torchvision.models.resnet import BasicBlock
 
 from braggnn import BraggNN, cnn_layers_1, nlb, cnn_layers_2, dense_layers
-from gpt import GPT, GPTConfig, GPT1Config
-
+from gpt import GPT, GPTConfig
+from layers import make_layer
 # from eager.torch_dispatch import TorchMLIRTensor
 from resnet18 import ResNet18
-from layers import make_layer
 from torch_mlir.dialects.torch.importer.jit_ir import ModuleBuilder
-
 # noinspection PyUnresolvedReferences
 from torch_mlir.passmanager import PassManager
-
 # i have no idea why but if you don't import this then linalg passes aren't registered
 # noinspection PyUnresolvedReferences
 from torch_mlir_e2e_test.linalg_on_tensors_backends.refbackend import RefBackendInvoker
-
 # noinspection PyUnresolvedReferences
 from torch_mlir_e2e_test.torchscript.annotations import annotate_args, export
-
 from torch_mlir_e2e_test.utils import run_pipeline_with_repro_report
 
 
@@ -95,7 +89,7 @@ def make_small_braggnn(in_channels=1, hw=11):
 
 
 def make_conv(
-    hw=5, in_channels=1, out_channels=1, kernel_size=3, stride=1, padding=0, bias=False
+        hw=5, in_channels=1, out_channels=1, kernel_size=3, stride=1, padding=0, bias=False
 ):
     with torch.no_grad():
         mod = torch.nn.Conv2d(
@@ -120,7 +114,7 @@ def make_mm():
         return make_layer(mod, [None, ([1, 1, 10, 10], torch.float32, True)])
 
 
-def make_braggnn(scale=4, imgsz=11):
+def make_braggnn_mod(scale=4, imgsz=11):
     with torch.no_grad():
         mod = BraggNN(imgsz=imgsz, scale=scale)
         mod.eval()
@@ -150,8 +144,8 @@ def make_gpt():
 def hack_for_calyx(out):
     out = (
         out.replace("f32", "i32")
-        .replace("2.000000e+00", "2")
-        .replace("1.000000e+00", "1")
+            .replace("2.000000e+00", "2")
+            .replace("1.000000e+00", "1")
     )
     open(f"../scripts/braggnn.affine.mlir", "w").write(out)
     out = subprocess.run(
@@ -205,12 +199,12 @@ LOWERING_PIPELINE = [
 ]
 
 PIPELINE = (
-    [
-        "torchscript-module-to-torch-backend-pipeline",
-        "torch-backend-to-linalg-on-tensors-backend-pipeline",
-    ]
-    + BUFFERIZATION_PIPELINE
-    + LOWERING_PIPELINE
+        [
+            "torchscript-module-to-torch-backend-pipeline",
+            "torch-backend-to-linalg-on-tensors-backend-pipeline",
+        ]
+        + BUFFERIZATION_PIPELINE
+        + LOWERING_PIPELINE
 )
 # print('torch-mlir-opt -debug --pass-pipeline"', ",".join(PIPELINE), '"')
 
@@ -244,6 +238,60 @@ def make_wrapper(wrapper_str, in_shape, out_shape):
     wrapper_str = wrapper_str.replace("XXX_REF_L_C_XXX", XXX_REF_L_C_XXX)
 
     return wrapper_str
+
+
+def put_script_files(out, mod_name, in_shape, out_shape, out_suffix=""):
+    out = out.replace('cf.assert %true, "expect groups to be 1"', "")
+
+    out_dir = f"/home/mlevental/dev_projects/torch-mlir/hls/scripts/individual_layers/{mod_name}"
+    os.makedirs(f"{out_dir}", exist_ok=True)
+    open(f"{out_dir}/forward{out_suffix}.mlir", "w").write(out)
+
+    wrapper_str = open(
+        "/home/mlevental/dev_projects/torch-mlir/hls/scripts/wrapper.cpp.fmt",
+        "r",
+    ).read()
+    wrapper_str = make_wrapper(wrapper_str, in_shape, out_shape)
+    open(f"{out_dir}/wrapper.cpp", "w").write(wrapper_str)
+
+    run_hls = open(
+        "/home/mlevental/dev_projects/torch-mlir/hls/scripts/run_hls.tcl", "r"
+    ).read()
+    run_hls = run_hls.replace("XXX_DIR_XXX", out_dir)
+    run_hls = run_hls.replace(
+        "XXX_LL_FILE_XXX",
+        "forward.mlir.dirty.llvm.unrollparfor.llvm.cse.ll.vitis",
+    )
+    open(f"{out_dir}/run_hls.tcl", "w").write(run_hls)
+
+    hls_hooks = open(
+        "/home/mlevental/dev_projects/torch-mlir/hls/scripts/hls_hooks.tcl", "r"
+    ).read()
+    hls_hooks = hls_hooks.replace("XXX_DIR_XXX", out_dir)
+    hls_hooks = hls_hooks.replace(
+        "XXX_LL_FILE_XXX",
+        "forward.mlir.dirty.llvm.unrollparfor.llvm.cse.ll.vitis",
+    )
+    open(f"{out_dir}/hls_hooks.tcl", "w").write(hls_hooks)
+    # open(
+    #     f"/home/mlevental/dev_projects/Xilinx/Vitis_HLS/2021.2/common/scripts/hls_hooks.tcl",
+    #     "w",
+    # ).write(hls_hooks)
+
+    shutil.copyfile(
+        "/home/mlevental/dev_projects/torch-mlir/hls/scripts/Makefile",
+        f"{out_dir}/Makefile",
+    )
+    shutil.copyfile(
+        "/home/mlevental/dev_projects/torch-mlir/hls/scripts/read_large_file.py",
+        f"{out_dir}/read_large_file.py",
+    )
+    shutil.copyfile(
+        "/home/mlevental/dev_projects/torch-mlir/hls/scripts/run_vitis.sh",
+        f"{out_dir}/run_vitis.sh",
+    )
+    st = os.stat(f"{out_dir}/run_vitis.sh")
+    os.chmod(f"{out_dir}/run_vitis.sh", st.st_mode | stat.S_IEXEC)
 
 
 def make_split_braggnn(scale=4, imgsz=11):
@@ -281,82 +329,38 @@ def make_split_braggnn(scale=4, imgsz=11):
             run_pipeline_with_repro_report(mb.module, ",".join(PIPELINE), "")
             # run_pipeline_with_repro_report(mb.module, "torchscript-module-to-torch-backend-pipeline,torch-backend-to-linalg-on-tensors-backend-pipeline", "")
 
-
             out = mb.module.operation.get_asm(
                 large_elements_limit=100000, enable_debug_info=False
             )
-            out = out.replace('cf.assert %true, "expect groups to be 1"', "")
+            put_script_files(out, recursivescriptmodule.original_name, prev_outp_shape, outp_shape, out_suffix="affine")
 
-            out_dir = f"/home/mlevental/dev_projects/torch-mlir/hls/scripts/individual_layers/{recursivescriptmodule.original_name}"
-            os.makedirs(f"{out_dir}", exist_ok=True)
-            open(f"{out_dir}/forward.mlir", "w").write(out)
 
-            wrapper_str = open(
-                "/home/mlevental/dev_projects/torch-mlir/hls/scripts/wrapper.cpp.fmt",
-                "r",
-            ).read()
-            wrapper_str = make_wrapper(wrapper_str, prev_outp_shape, outp_shape)
-            open(f"{out_dir}/wrapper.cpp", "w").write(wrapper_str)
+def make_whole_braggnn(scale=4, imgsz=11):
+    mb = ModuleBuilder()
+    with torch.no_grad():
+        mod = BraggNN(imgsz=imgsz, scale=scale)
+        mod.eval()
+        t = torch.randn((1, 1, imgsz, imgsz))
+        y = mod(t)
+        mod.apply(set_weights)
+        recursivescriptmodule, class_annotator = make_layer(mod, [None, ([1, 1, imgsz, imgsz], torch.float32, True)])
 
-            run_hls = open(
-                "/home/mlevental/dev_projects/torch-mlir/hls/scripts/run_hls.tcl", "r"
-            ).read()
-            run_hls = run_hls.replace("XXX_DIR_XXX", out_dir)
-            run_hls = run_hls.replace(
-                "XXX_LL_FILE_XXX",
-                "forward.mlir.dirty.llvm.unrollparfor.llvm.cse.ll.vitis",
-            )
-            open(f"{out_dir}/run_hls.tcl", "w").write(run_hls)
+    mb.import_module(recursivescriptmodule._c, class_annotator)
 
-            hls_hooks = open(
-                "/home/mlevental/dev_projects/torch-mlir/hls/scripts/hls_hooks.tcl", "r"
-            ).read()
-            hls_hooks = hls_hooks.replace("XXX_DIR_XXX", out_dir)
-            hls_hooks = hls_hooks.replace(
-                "XXX_LL_FILE_XXX",
-                "forward.mlir.dirty.llvm.unrollparfor.llvm.cse.ll.vitis",
-            )
-            open(f"{out_dir}/hls_hooks.tcl", "w").write(hls_hooks)
-            # open(
-            #     f"/home/mlevental/dev_projects/Xilinx/Vitis_HLS/2021.2/common/scripts/hls_hooks.tcl",
-            #     "w",
-            # ).write(hls_hooks)
+    run_pipeline_with_repro_report(mb.module, ",".join(PIPELINE), "")
 
-            shutil.copyfile(
-                "/home/mlevental/dev_projects/torch-mlir/hls/scripts/Makefile",
-                f"{out_dir}/Makefile",
-            )
-            shutil.copyfile(
-                "/home/mlevental/dev_projects/torch-mlir/hls/scripts/read_large_file.py",
-                f"{out_dir}/read_large_file.py",
-            )
-            shutil.copyfile(
-                "/home/mlevental/dev_projects/torch-mlir/hls/scripts/run_vitis.sh",
-                f"{out_dir}/run_vitis.sh",
-            )
-            st = os.stat(f"{out_dir}/run_vitis.sh")
-            os.chmod(f"{out_dir}/run_vitis.sh", st.st_mode | stat.S_IEXEC)
+    out = mb.module.operation.get_asm(
+        large_elements_limit=100000, enable_debug_info=False
+    )
+
+    put_script_files(out, recursivescriptmodule.original_name, tuple(t.shape), tuple(y.shape))
 
 
 if __name__ == "__main__":
     make_split_braggnn(scale=4, imgsz=11)
-#     mb = ModuleBuilder()
-#     recursivescriptmodule, class_annotator = make_braggnn()
-#     mb.import_module(recursivescriptmodule._c, class_annotator)
-
-#     print(",".join(PIPELINE))
-#     run_pipeline_with_repro_report(mb.module, ",".join(PIPELINE), "")
-
-#     dialect = "scf"
-#     out = mb.module.operation.get_asm(
-#         large_elements_limit=100000, enable_debug_info=False
-#     )
-#     # hard coded here for vitis
-#     open(
-#         f"/home/mlevental/dev_projects/torch-mlir/hls/scripts/{recursivescriptmodule.original_name}.mlir",
-#         "w",
-#     ).write(out)
-#     # hack_for_calyx(out)
+    make_whole_braggnn(scale=4, imgsz=11)
+    # throwaway()
+    # hack_for_calyx(out)
 
 # # kintex7 kintex7l artix7 artix7l aartix7 zynq azynq spartan7 aspartan7 virtexuplus virtexuplusHBM kintexuplus artixuplusb zynquplus azynquplus kintexu
 # # set_directive_pipeline

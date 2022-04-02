@@ -1,6 +1,6 @@
 open_project -reset proj
 add_files wrapper.cpp
-set_top wrapper
+set_top forward
 
 open_solution -reset solution1
 #set_part "xcvu35p-fsvh2104-3-e"
