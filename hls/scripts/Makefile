@@ -1,5 +1,4 @@
-
-REAL_ROOT_DIR := $(realpath $(ROOT_DIR))
+REAL_ROOT_DIR := $(realpath $(TORCH_MLIR_ROOT))
 ROOT_BINDIR := $(REAL_ROOT_DIR)/cmake-build-debug/bin
 ROOT_LIBDIR := $(REAL_ROOT_DIR)/cmake-build-debug/lib
 FILENAME := $(FN)
@@ -35,27 +34,27 @@ $(FILENAME).dirty.llvm.unrollparfor: $(FILENAME).dirty.llvm
 # lower to llvm dialect
 $(FILENAME).dirty.llvm.unrollparfor.llvm: $(FILENAME).dirty.llvm.unrollparfor
 	$(ROOT_BINDIR)/mlir-opt $(FILENAME).dirty.llvm.unrollparfor \
-	  -convert-memref-to-llvm \
-	  -convert-math-to-llvm \
 	  -convert-arith-to-llvm \
+	  -convert-math-to-llvm \
 	  -convert-func-to-llvm='use-bare-ptr-memref-call-conv=1' \
 	  -reconcile-unrealized-casts \
 	  -o $(FILENAME).dirty.llvm.unrollparfor.llvm
 
 # hoist constants and constant propagate
-$(FILENAME).dirty.llvm.unrollparfor.llvm.cse.cse: $(FILENAME).dirty.llvm.unrollparfor.llvm
-	python read_large_file.py $(FILENAME).dirty.llvm.unrollparfor.llvm
+$(FILENAME).dirty.llvm.unrollparfor.llvm.cse: $(FILENAME).dirty.llvm.unrollparfor.llvm
+	cp $(FILENAME).dirty.llvm.unrollparfor.llvm $(FILENAME).dirty.llvm.unrollparfor.llvm.cse
+	python read_large_file.py $(FILENAME).dirty.llvm.unrollparfor.llvm.cse
 
 # translate to llvm ir
-$(FILENAME).dirty.llvm.unrollparfor.llvm.cse.cse.ll: $(FILENAME).dirty.llvm.unrollparfor.llvm.cse.cse
+$(FILENAME).dirty.llvm.unrollparfor.llvm.cse.ll: $(FILENAME).dirty.llvm.unrollparfor.llvm.cse
 	$(ROOT_BINDIR)/mlir-translate \
-		$(FILENAME).dirty.llvm.unrollparfor.llvm.cse.cse \
+		$(FILENAME).dirty.llvm.unrollparfor.llvm.cse \
 		-mlir-to-llvmir \
-		-o $(FILENAME).dirty.llvm.unrollparfor.llvm.cse.cse.ll
+		-o $(FILENAME).dirty.llvm.unrollparfor.llvm.cse.ll
 
 # llvm ir opts
-$(FILENAME).dirty.llvm.unrollparfor.llvm.cse.cse.ll.vitis: $(FILENAME).dirty.llvm.unrollparfor.llvm.cse.cse.ll
-	${ROOT_BINDIR}/opt $(FILENAME).dirty.llvm.unrollparfor.llvm.cse.cse.ll \
+$(FILENAME).dirty.llvm.unrollparfor.llvm.cse.ll.vitis: $(FILENAME).dirty.llvm.unrollparfor.llvm.cse.ll
+	${ROOT_BINDIR}/opt $(FILENAME).dirty.llvm.unrollparfor.llvm.cse.ll \
 		-debug \
 		-S \
 		-enable-new-pm=0 \
@@ -67,11 +66,15 @@ $(FILENAME).dirty.llvm.unrollparfor.llvm.cse.cse.ll.vitis: $(FILENAME).dirty.llv
 		-strip-debug \
 		-xlnmath \
 		-xlnname \
-		-o $(FILENAME).dirty.llvm.unrollparfor.llvm.cse.cse.ll.vitis
+		-o $(FILENAME).dirty.llvm.unrollparfor.llvm.cse.ll.vitis
+	python read_large_file.py $(FILENAME).dirty.llvm.unrollparfor.llvm.cse.ll.vitis
 
+
+clean:
+	rm forward.mlir.*
 
 .PHONY : all
-all : $(FILENAME).dirty.llvm.unrollparfor.llvm.cse.cse.ll.vitis
+all : $(FILENAME).dirty.llvm.unrollparfor.llvm.cse.ll.vitis
 
 .DEFAULT_GOAL := all
 

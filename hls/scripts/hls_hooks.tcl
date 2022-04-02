@@ -17,10 +17,10 @@ namespace eval ::HLS_HOOKS {
     return $result
   }
 
-  ### opt (post-link) 
+  ### opt (post-link)
   proc opt_required {} {
     # return true/false to indicate if opt should be called within csynth_design
-    
+
     ### Exmple of version check
     if { 0 } {
       set version [version -short]
@@ -48,7 +48,7 @@ namespace eval ::HLS_HOOKS {
       set output $::LLVM_CUSTOM_OUTPUT
     }
 
-    # set local (not global ::) LLVM_CUSTOM_* variables to be referenced in LLVM_CUSTOM_CMD 
+    # set local (not global ::) LLVM_CUSTOM_* variables to be referenced in LLVM_CUSTOM_CMD
     set LLVM_CUSTOM_OPT $opt
     set LLVM_CUSTOM_INPUT $input
     set LLVM_CUSTOM_OUTPUT $output
@@ -56,11 +56,11 @@ namespace eval ::HLS_HOOKS {
     # run LLVM_CUSTOM_CMD
     puts "INFO: \[HLS_HOOKS::opt\] Using ::LLVM_CUSTOM_CMD: $::LLVM_CUSTOM_CMD"
     puts "INFO: \[HLS_HOOKS::opt\] Running ::LLVM_CUSTOM_CMD: [eval concat $::LLVM_CUSTOM_CMD]"
-    exec -ignorestderr /home/mlevental/dev_projects/Xilinx_vitis/Vitis_HLS/2021.1/lnx64/tools/clang-3.9-csynth/bin/opt /home/mlevental/dev_projects/torch-mlir/hls/scripts/vitis_stuff/braggnn.opt.vitis.ll -o /home/mlevental/dev_projects/torch-mlir/hls/scripts/vitis_stuff/proj/solution1/.autopilot/db/a.g.ld.5.5.user.bc
-    run_link_or_opt -out /home/mlevental/dev_projects/torch-mlir/hls/scripts/vitis_stuff/proj/solution1/.autopilot/db/a.g.ld.5.6.user.bc -args "/home/mlevental/dev_projects/torch-mlir/hls/scripts/vitis_stuff/proj/solution1/.autopilot/db/a.g.ld.4.m2.bc /home/mlevental/dev_projects/torch-mlir/hls/scripts/vitis_stuff/proj/solution1/.autopilot/db/a.g.ld.5.5.user.bc"
-    run_link_or_opt -opt -out /home/mlevental/dev_projects/torch-mlir/hls/scripts/vitis_stuff/proj/solution1/.autopilot/db/a.g.ld.6.user.bc -args "/home/mlevental/dev_projects/torch-mlir/hls/scripts/vitis_stuff/proj/solution1/.autopilot/db/a.g.ld.5.6.user.bc -hls-top-function-name=wrapper -internalize-public-api-list=forward"
-    #eval exec -ignorestderr $::LLVM_CUSTOM_CMD
 
+    exec -ignorestderr /home/mlevental/dev_projects/Xilinx/Vitis_HLS/2021.2/lnx64/tools/clang-3.9-csynth/bin/opt XXX_LL_FILE_XXX -o XXX_DIR_XXX/proj/solution1/.autopilot/db/a.g.ld.5.5.user.bc
+    run_link_or_opt -out XXX_DIR_XXX/proj/solution1/.autopilot/db/a.g.ld.5.6.user.bc -args "XXX_DIR_XXX/proj/solution1/.autopilot/db/a.g.ld.4.m2.bc XXX_DIR_XXX/proj/solution1/.autopilot/db/a.g.ld.5.5.user.bc"
+    run_link_or_opt -opt -out XXX_DIR_XXX/proj/solution1/.autopilot/db/a.g.ld.6.user.bc -args "XXX_DIR_XXX/proj/solution1/.autopilot/db/a.g.ld.5.6.user.bc -hls-top-function-name=wrapper -internalize-public-api-list=forward"
+    #eval exec -ignorestderr $::LLVM_CUSTOM_CMD
 
     # return output file name, if blank opt results will not be used
     return $LLVM_CUSTOM_OUTPUT
@@ -84,7 +84,7 @@ namespace eval ::HLS_HOOKS {
     if { 0 && $reset } {
       set directory [get_project -directory]
       foreach solution [get_project -solutions] {
-        file delete -force [file join $directory $solution my_custom_files] 
+        file delete -force [file join $directory $solution my_custom_files]
       }
     }
   }

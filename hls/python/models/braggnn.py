@@ -46,7 +46,6 @@ class Exp(torch.nn.Module):
 
 SCALE = 4
 
-
 class BraggNN(torch.nn.Module):
     def __init__(self, imgsz=11, scale=SCALE):
         super().__init__()
@@ -84,6 +83,99 @@ class BraggNN(torch.nn.Module):
         _out = self.cnn_layers_1(_out)
         _out = self.nlb(_out)
         _out = self.cnn_layers_2(_out)
+        _out = _out.flatten(start_dim=1)
+        _out = self.dense_layers(_out)
+
+        return _out
+
+
+class cnn_layers_1(torch.nn.Module):
+    def __init__(self, imgsz=11, scale=SCALE):
+        super().__init__()
+        self.cnn_ops = []
+        cnn_out_chs = tuple(map(int, (16 * scale, 8 * scale, 2 * scale)))
+        cnn_in_chs = (1,) + cnn_out_chs[:-1]
+        fsz = imgsz
+        for (ic, oc) in zip(cnn_in_chs, cnn_out_chs):
+            self.cnn_ops += [
+                torch.nn.Conv2d(
+                    in_channels=ic, out_channels=oc, kernel_size=3, stride=1, padding=0
+                ),
+                torch.nn.LeakyReLU(negative_slope=0.01),
+            ]
+            fsz -= 2
+
+        self.cnn_layers_1 = self.cnn_ops[0]
+
+    def forward(self, x):
+        _out = x
+        _out = self.cnn_layers_1(_out)
+
+        return _out
+
+class nlb(torch.nn.Module):
+    def __init__(self, imgsz=11, scale=SCALE):
+        super().__init__()
+        self.cnn_ops = []
+        cnn_out_chs = tuple(map(int, (16 * scale, 8 * scale, 2 * scale)))
+        self.nlb = NLB(in_ch=cnn_out_chs[0])
+
+    def forward(self, x):
+        _out = x
+        _out = self.nlb(_out)
+
+        return _out
+
+
+class cnn_layers_2(torch.nn.Module):
+    def __init__(self, imgsz=11, scale=SCALE):
+        super().__init__()
+        self.cnn_ops = []
+        cnn_out_chs = tuple(map(int, (16 * scale, 8 * scale, 2 * scale)))
+        cnn_in_chs = (1,) + cnn_out_chs[:-1]
+        fsz = imgsz
+        for (ic, oc) in zip(cnn_in_chs, cnn_out_chs):
+            self.cnn_ops += [
+                torch.nn.Conv2d(
+                    in_channels=ic, out_channels=oc, kernel_size=3, stride=1, padding=0
+                ),
+                torch.nn.LeakyReLU(negative_slope=0.01),
+                # Exp()
+            ]
+            fsz -= 2
+
+        self.cnn_layers_2 = torch.nn.Sequential(*self.cnn_ops[1:])
+
+    def forward(self, x):
+        _out = x
+        _out = self.cnn_layers_2(_out)
+
+        return _out
+
+
+class dense_layers(torch.nn.Module):
+    def __init__(self, imgsz=11, scale=SCALE):
+        super().__init__()
+        fcsz = tuple(map(int, (16 * scale, 8 * scale, 4 * scale, 2 * scale)))
+        self.cnn_ops = []
+        cnn_out_chs = tuple(map(int, (16 * scale, 8 * scale, 2 * scale)))
+        cnn_in_chs = (1,) + cnn_out_chs[:-1]
+        fsz = imgsz
+        for (ic, oc) in zip(cnn_in_chs, cnn_out_chs):
+            fsz -= 2
+        self.dense_ops = []
+        dense_in_chs = (fsz * fsz * cnn_out_chs[-1],) + fcsz[:-1]
+        for ic, oc in zip(dense_in_chs, fcsz):
+            self.dense_ops += [
+                torch.nn.Linear(ic, oc),
+                torch.nn.LeakyReLU(negative_slope=0.01),
+            ]
+        # output layer
+        self.dense_ops += [torch.nn.Linear(fcsz[-1], 2)]
+        self.dense_layers = torch.nn.Sequential(*self.dense_ops)
+
+    def forward(self, x):
+        _out = x
         _out = _out.flatten(start_dim=1)
         _out = self.dense_layers(_out)
 
