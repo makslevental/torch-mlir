@@ -1,3 +1,4 @@
+import inspect
 import os
 import re
 import shutil
@@ -9,7 +10,14 @@ import torch
 from torch import nn
 from torchvision.models.resnet import BasicBlock
 
-from braggnn import BraggNN, cnn_layers_1, nlb, cnn_layers_2, dense_layers
+from braggnn import (
+    BraggNN,
+    cnn_layers_1,
+    cnn_layers_2,
+    dense_layers,
+    theta_phi_g,
+    theta_phi_g_combine,
+)
 from gpt import GPT, GPTConfig
 from layers import make_layer
 # from eager.torch_dispatch import TorchMLIRTensor
@@ -248,8 +256,7 @@ def put_script_files(out, mod_name, in_shape, out_shape, out_suffix=""):
     open(f"{out_dir}/forward{out_suffix}.mlir", "w").write(out)
 
     wrapper_str = open(
-        "/home/mlevental/dev_projects/torch-mlir/hls/scripts/wrapper.cpp.fmt",
-        "r",
+        "/home/mlevental/dev_projects/torch-mlir/hls/scripts/wrapper.cpp.fmt", "r"
     ).read()
     wrapper_str = make_wrapper(wrapper_str, in_shape, out_shape)
     open(f"{out_dir}/wrapper.cpp", "w").write(wrapper_str)
@@ -259,8 +266,7 @@ def put_script_files(out, mod_name, in_shape, out_shape, out_suffix=""):
     ).read()
     run_hls = run_hls.replace("XXX_DIR_XXX", out_dir)
     run_hls = run_hls.replace(
-        "XXX_LL_FILE_XXX",
-        "forward.mlir.dirty.llvm.unrollparfor.llvm.cse.ll.vitis",
+        "XXX_LL_FILE_XXX", "forward.mlir.dirty.llvm.unrollparfor.llvm.cse.ll.vitis"
     )
     open(f"{out_dir}/run_hls.tcl", "w").write(run_hls)
 
@@ -269,14 +275,9 @@ def put_script_files(out, mod_name, in_shape, out_shape, out_suffix=""):
     ).read()
     hls_hooks = hls_hooks.replace("XXX_DIR_XXX", out_dir)
     hls_hooks = hls_hooks.replace(
-        "XXX_LL_FILE_XXX",
-        "forward.mlir.dirty.llvm.unrollparfor.llvm.cse.ll.vitis",
+        "XXX_LL_FILE_XXX", "forward.mlir.dirty.llvm.unrollparfor.llvm.cse.ll.vitis"
     )
     open(f"{out_dir}/hls_hooks.tcl", "w").write(hls_hooks)
-    # open(
-    #     f"/home/mlevental/dev_projects/Xilinx/Vitis_HLS/2021.2/common/scripts/hls_hooks.tcl",
-    #     "w",
-    # ).write(hls_hooks)
 
     shutil.copyfile(
         "/home/mlevental/dev_projects/torch-mlir/hls/scripts/Makefile",
@@ -294,45 +295,60 @@ def put_script_files(out, mod_name, in_shape, out_shape, out_suffix=""):
     os.chmod(f"{out_dir}/run_vitis.sh", st.st_mode | stat.S_IEXEC)
 
 
-def make_split_braggnn(scale=4, imgsz=11):
-    mods = [cnn_layers_1, nlb, cnn_layers_2, dense_layers]
+def make_sub_layer(mod, in_shapes, out_shape):
+    recursivescriptmodule, class_annotator = make_layer(
+        mod, [None] + [(in_shape, torch.float32, True) for in_shape in in_shapes]
+    )
 
-    # t = torch.randn((1, 1, 11, 11))
-    # t = cnn_layers_1(imgsz=imgsz, scale=scale)(t)
-    # print(t.shape)
-    # t = nlb(imgsz=imgsz, scale=scale)(t)
-    # print(t.shape)
-    # t = cnn_layers_2(imgsz=imgsz, scale=scale)(t)
-    # print(t.shape)
-    # t = dense_layers(imgsz=imgsz, scale=scale)(t)
-    # print(t.shape)
+    mb = ModuleBuilder()
+    mb.import_module(recursivescriptmodule._c, class_annotator)
+    run_pipeline_with_repro_report(mb.module, ",".join(PIPELINE), "")
+
+    out = mb.module.operation.get_asm(
+        large_elements_limit=100000, enable_debug_info=False
+    )
+    put_script_files(out, recursivescriptmodule.original_name, in_shapes[0], out_shape)
+
+
+def make_split_braggnn(scale=4, imgsz=11):
+    class mods:
+        cnn_layers_1 = cnn_layers_1(scale=scale, imgsz=imgsz)
+        theta = theta_phi_g(scale=scale, imgsz=imgsz)
+        theta_phi_g_combine = theta_phi_g_combine(scale=scale, imgsz=imgsz)
+        cnn_layers_2 = cnn_layers_2(scale=scale, imgsz=imgsz)
+        dense_layers = dense_layers(scale=scale, imgsz=imgsz)
+
+    attributes = inspect.getmembers(mods, lambda a: not (inspect.isroutine(a)))
+    for attr in [
+        attr for attr_name, attr in attributes if isinstance(attr, torch.nn.Module)
+    ]:
+        attr.eval()
+        attr.apply(set_weights)
 
     with torch.no_grad():
-        outp = torch.randn(1, 1, imgsz, imgsz)
-        for Mod in mods:
-            mod = Mod(imgsz=imgsz, scale=scale)
-            mod.eval()
-            mod.apply(set_weights)
+        x1 = torch.randn(1, 1, imgsz, imgsz)
+        cnn1 = mods.cnn_layers_1(x1)
+        make_sub_layer(mods.cnn_layers_1, [x1.shape], cnn1.shape)
 
-            prev_outp_shape = tuple(outp.shape)
-            outp = mod(torch.randn(prev_outp_shape))
-            outp_shape = tuple(outp.shape)
-            print(mod._get_name(), prev_outp_shape, outp_shape)
+        # nlb
+        theta = mods.theta(cnn1)
+        make_sub_layer(mods.theta, [cnn1.shape], theta.shape)
+        phi = mods.theta(cnn1)
+        g = mods.theta(cnn1)
+        nlb = mods.theta_phi_g_combine(cnn1, theta, phi, g)
+        make_sub_layer(
+            mods.theta_phi_g_combine,
+            [cnn1.shape, theta.shape, phi.shape, g.shape],
+            nlb.shape,
+        )
 
-            recursivescriptmodule, class_annotator = make_layer(
-                mod, [None, (prev_outp_shape, torch.float32, True)]
-            )
+        # cnn2
+        cnn2 = mods.cnn_layers_2(nlb)
+        make_sub_layer(mods.cnn_layers_2, [nlb.shape], cnn2.shape)
 
-            mb = ModuleBuilder()
-            mb.import_module(recursivescriptmodule._c, class_annotator)
-            # print(",".join(PIPELINE))
-            run_pipeline_with_repro_report(mb.module, ",".join(PIPELINE), "")
-            # run_pipeline_with_repro_report(mb.module, "torchscript-module-to-torch-backend-pipeline,torch-backend-to-linalg-on-tensors-backend-pipeline", "")
-
-            out = mb.module.operation.get_asm(
-                large_elements_limit=100000, enable_debug_info=False
-            )
-            put_script_files(out, recursivescriptmodule.original_name, prev_outp_shape, outp_shape, out_suffix="affine")
+        # dense layers
+        dense = mods.dense_layers(cnn2)
+        make_sub_layer(mods.dense_layers, [cnn2.shape], dense.shape)
 
 
 def make_whole_braggnn(scale=4, imgsz=11):
@@ -343,7 +359,9 @@ def make_whole_braggnn(scale=4, imgsz=11):
         t = torch.randn((1, 1, imgsz, imgsz))
         y = mod(t)
         mod.apply(set_weights)
-        recursivescriptmodule, class_annotator = make_layer(mod, [None, ([1, 1, imgsz, imgsz], torch.float32, True)])
+        recursivescriptmodule, class_annotator = make_layer(
+            mod, [None, ([1, 1, imgsz, imgsz], torch.float32, True)]
+        )
 
     mb.import_module(recursivescriptmodule._c, class_annotator)
 
@@ -353,16 +371,11 @@ def make_whole_braggnn(scale=4, imgsz=11):
         large_elements_limit=100000, enable_debug_info=False
     )
 
-    put_script_files(out, recursivescriptmodule.original_name, tuple(t.shape), tuple(y.shape))
+    put_script_files(
+        out, recursivescriptmodule.original_name, tuple(t.shape), tuple(y.shape)
+    )
 
 
 if __name__ == "__main__":
     make_split_braggnn(scale=4, imgsz=11)
-    make_whole_braggnn(scale=4, imgsz=11)
-    # throwaway()
-    # hack_for_calyx(out)
-
-# # kintex7 kintex7l artix7 artix7l aartix7 zynq azynq spartan7 aspartan7 virtexuplus virtexuplusHBM kintexuplus artixuplusb zynquplus azynquplus kintexu
-# # set_directive_pipeline
-# # set_directive_top
-# # set_directive_unroll
+    # make_whole_braggnn(scale=4, imgsz=11)
