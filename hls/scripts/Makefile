@@ -6,10 +6,15 @@ FILENAME := $(FN)
 test:
 	$(info $$var is [${REAL_ROOT_DIR}])
 
+$(FILENAME).drop:
+	cp $(FILENAME) $(FILENAME).drop
+	python read_large_file.py $(FILENAME).drop --drop_init_tensors
+
 # promote allocs
-$(FILENAME).promoted:
-	$(ROOT_BINDIR)/torch-mlir-opt $(FILENAME) \
- 		-torch-hls-promote-allocs \
+$(FILENAME).promoted: $(FILENAME).drop
+	$(ROOT_BINDIR)/torch-mlir-opt $(FILENAME).drop \
+ 		-torch-hls-promote-allocs="hoist-globals" \
+ 		-cse -symbol-dce \
  		-o $(FILENAME).promoted
 
 # unroll reduction loops
@@ -62,16 +67,19 @@ $(FILENAME).dirty.llvm.unrollparfor.llvm.cse.ll.vitis: $(FILENAME).dirty.llvm.un
 		-strip-attr \
 		-time-passes \
 		-stats \
+		-mem2reg \
 		-mem2arr \
+		-mem2reg \
 		-strip-debug \
 		-xlnmath \
 		-xlnname \
+		-mem2reg \
 		-o $(FILENAME).dirty.llvm.unrollparfor.llvm.cse.ll.vitis
 	python read_large_file.py $(FILENAME).dirty.llvm.unrollparfor.llvm.cse.ll.vitis
 
 
 clean:
-	rm forward.mlir.*
+	rm $(FILENAME).*
 
 .PHONY : all
 all : $(FILENAME).dirty.llvm.unrollparfor.llvm.cse.ll.vitis

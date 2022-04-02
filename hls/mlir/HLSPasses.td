@@ -44,6 +44,12 @@ def HLSPromoteAllocs : Pass<"torch-hls-promote-allocs", "ModuleOp"> {
   let constructor = "mlir::torch::HLS::createHLSPromoteAllocsPass()";
     let description = [{
     }];
+
+  let options = [
+    Option<"hoistAll", "hoist-all", "bool",/*default=*/"false", "">,
+    Option<"hoistGlobals", "hoist-globals", "bool",/*default=*/"false", "">,
+    Option<"hoistAffine", "hoist-affine", "bool",/*default=*/"false", "">,
+    ];
 }
 
 def HLSHLSQuantizeModule : Pass<"torch-hls-quantize-module", "ModuleOp"> {
