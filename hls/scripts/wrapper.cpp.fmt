@@ -1,97 +1,99 @@
-#include "ap_axi_sdata.h"
-#include "ap_int.h"
-#include "hls_stream.h"
-#include <inttypes.h>
-#include <math.h>
-
-//#define IN_BATCH XXX_IN_BATCH_XXX
-//#define IN_CHANNEL XXX_IN_CHANNEL_XXX
-//#define IN_HEIGHT XXX_IN_HEIGHT_XXX
-//#define IN_WIDTH XXX_IN_WIDTH_XXX
+//#include "ap_axi_sdata.h"
+//#include "ap_int.h"
+//#include "hls_stream.h"
+//#include <inttypes.h>
+//#include <math.h>
 //
-//#define OUT_BATCH XXX_OUT_BATCH_XXX
-//#define OUT_CHANNEL XXX_OUT_CHANNEL_XXX
-//#define OUT_HEIGHT XXX_OUT_HEIGHT_XXX
-//#define OUT_WIDTH XXX_OUT_WIDTH_XXX
+////#define IN_BATCH XXX_IN_BATCH_XXX
+////#define IN_CHANNEL XXX_IN_CHANNEL_XXX
+////#define IN_HEIGHT XXX_IN_HEIGHT_XXX
+////#define IN_WIDTH XXX_IN_WIDTH_XXX
+////
+////#define OUT_BATCH XXX_OUT_BATCH_XXX
+////#define OUT_CHANNEL XXX_OUT_CHANNEL_XXX
+////#define OUT_HEIGHT XXX_OUT_HEIGHT_XXX
+////#define OUT_WIDTH XXX_OUT_WIDTH_XXX
+//
+//#define DWIDTH 512
+//
+//// extern "C" void forward(float (&arg_2)[IN_BATCH][IN_CHANNEL][IN_HEIGHT][IN_WIDTH],
+////                        float (&arg_3)[OUT_BATCH][OUT_CHANNEL][OUT_HEIGHT][OUT_WIDTH]);
+//
+//XXX_EXTERN_C_XXX
+//
+//typedef ap_axiu<DWIDTH, 0, 0, 0> axis_t;
+//
+//// typedef XXX_DTYPE_XXX DataType;
+//typedef float DataType;
+//
+//// bit width of data type (32)
+//const int DataTypeSize = sizeof(DataType) * 8;
+//// number of floats that fit into the stream (16)
+//const int NUM_ITEMS = DWIDTH / DataTypeSize;
+//
+//typedef ap_uint<DataTypeSize> DataTypeInt;
+//typedef union converter {
+//  DataType d;
+//  uint32_t i;
+//} converter_t;
+//
+//extern "C" {
+//void wrapper(hls::stream<axis_t> &in, hls::stream<axis_t> &out) {
+//#pragma HLS INTERFACE axis port = in
+//#pragma HLS INTERFACE axis port = out
+//
+//  // float l_A[IN_BATCH][IN_CHANNEL][IN_HEIGHT][IN_WIDTH];
+//  XXX_L_A_XXX
+//
+//  //#pragma HLS ARRAY_PARTITION variable = l_A factor = 16 dim = 1 cyclic
+//  //#pragma HLS ARRAY_PARTITION variable = l_C factor = 16 dim = 1 cyclic
+//
+//  // how many stream reads it takes to get the entire matrix
+//  // int i_limit = ceil((float)(IN_BATCH * IN_CHANNEL * IN_HEIGHT * IN_WIDTH) / (float)NUM_ITEMS);
+//  XXX_I_LIMIT_XXX
+//  converter_t converter;
+//
+//load_A:
+//  for (int i = 0; i < i_limit; i++) {
+//    axis_t temp = in.read();
+//    for (int j = 0; j < NUM_ITEMS; j++) {
+//      int high = (j + 1) * DataTypeSize - 1;
+//      int low = j * DataTypeSize;
+//      int index = i * NUM_ITEMS + j;
+//
+//      converter.i = temp.data.range(high, low);
+//      // (&l_A[0][0][0][0])[index] = converter.d;
+//      XXX_REF_L_A_XXX
+//    }
+//  }
+//
+//  // float l_C[OUT_BATCH][OUT_CHANNEL][OUT_HEIGHT][OUT_HEIGHT];
+//  XXX_L_C_XXX
+//  forward(l_A, l_C);
+//
+//  // int k_limit = ceil((float)(OUT_BATCH * OUT_CHANNEL * OUT_HEIGHT * OUT_WIDTH) / (float)NUM_ITEMS);
+//  XXX_K_LIMIT_XXX
+//writeC:
+//  for (int k = 0; k < k_limit; k++) {
+//    axis_t temp;
+//    for (int j = 0; j < NUM_ITEMS; j++) {
+//      int high = (j + 1) * DataTypeSize - 1;
+//      int low = j * DataTypeSize;
+//      int index = k * NUM_ITEMS + j;
+//      // converter.d = (&l_C[0][0][0][0])[index];
+//      XXX_REF_L_C_XXX
+//      temp.data.range(high, low) = converter.i;
+//    }
+//
+//    ap_uint<1> last = 0;
+//    if (k == k_limit - 1) {
+//      last = 1;
+//    }
+//    temp.last = last;
+//    temp.keep = -1; // enabling all bytes
+//    out.write(temp);
+//  }
+//}
+//}
 
-#define DWIDTH 512
-
-// extern "C" void forward(float (&arg_2)[IN_BATCH][IN_CHANNEL][IN_HEIGHT][IN_WIDTH],
-//                        float (&arg_3)[OUT_BATCH][OUT_CHANNEL][OUT_HEIGHT][OUT_WIDTH]);
-
-XXX_EXTERN_C_XXX
-
-typedef ap_axiu<DWIDTH, 0, 0, 0> axis_t;
-
-// typedef XXX_DTYPE_XXX DataType;
-typedef float DataType;
-
-// bit width of data type (32)
-const int DataTypeSize = sizeof(DataType) * 8;
-// number of floats that fit into the stream (16)
-const int NUM_ITEMS = DWIDTH / DataTypeSize;
-
-typedef ap_uint<DataTypeSize> DataTypeInt;
-typedef union converter {
-  DataType d;
-  uint32_t i;
-} converter_t;
-
-extern "C" {
-void wrapper(hls::stream<axis_t> &in, hls::stream<axis_t> &out) {
-#pragma HLS INTERFACE axis port = in
-#pragma HLS INTERFACE axis port = out
-
-  // float l_A[IN_BATCH][IN_CHANNEL][IN_HEIGHT][IN_WIDTH];
-  XXX_L_A_XXX
-
-  //#pragma HLS ARRAY_PARTITION variable = l_A factor = 16 dim = 1 cyclic
-  //#pragma HLS ARRAY_PARTITION variable = l_C factor = 16 dim = 1 cyclic
-
-  // how many stream reads it takes to get the entire matrix
-  // int i_limit = ceil((float)(IN_BATCH * IN_CHANNEL * IN_HEIGHT * IN_WIDTH) / (float)NUM_ITEMS);
-  XXX_I_LIMIT_XXX
-  converter_t converter;
-
-load_A:
-  for (int i = 0; i < i_limit; i++) {
-    axis_t temp = in.read();
-    for (int j = 0; j < NUM_ITEMS; j++) {
-      int high = (j + 1) * DataTypeSize - 1;
-      int low = j * DataTypeSize;
-      int index = i * NUM_ITEMS + j;
-
-      converter.i = temp.data.range(high, low);
-      // (&l_A[0][0][0][0])[index] = converter.d;
-      XXX_REF_L_A_XXX
-    }
-  }
-
-  // float l_C[OUT_BATCH][OUT_CHANNEL][OUT_HEIGHT][OUT_HEIGHT];
-  XXX_L_C_XXX
-  forward(l_A, l_C);
-
-  // int k_limit = ceil((float)(OUT_BATCH * OUT_CHANNEL * OUT_HEIGHT * OUT_WIDTH) / (float)NUM_ITEMS);
-  XXX_K_LIMIT_XXX
-writeC:
-  for (int k = 0; k < k_limit; k++) {
-    axis_t temp;
-    for (int j = 0; j < NUM_ITEMS; j++) {
-      int high = (j + 1) * DataTypeSize - 1;
-      int low = j * DataTypeSize;
-      int index = k * NUM_ITEMS + j;
-      // converter.d = (&l_C[0][0][0][0])[index];
-      XXX_REF_L_C_XXX
-      temp.data.range(high, low) = converter.i;
-    }
-
-    ap_uint<1> last = 0;
-    if (k == k_limit - 1) {
-      last = 1;
-    }
-    temp.last = last;
-    temp.keep = -1; // enabling all bytes
-    out.write(temp);
-  }
-}
-}
+void forward() {};
