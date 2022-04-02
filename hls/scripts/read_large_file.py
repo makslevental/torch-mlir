@@ -1,6 +1,10 @@
 import re
 import struct
 import sys
+from collections import defaultdict
+import argparse
+
+import numpy as np
 
 
 def collapse_ariths_llvm(fp):
@@ -265,9 +269,6 @@ def embed_csts(fp):
                             line = re.sub(fr"\b{ident[1:]}\b", f"{val}", line)
 
 
-import numpy as np
-
-
 def double_to_hex(f):
     return hex(struct.unpack("<I", struct.pack("<f", f))[0])
 
@@ -294,16 +295,126 @@ def change_floats(fp):
         test_file.writelines(all_sig_lines)
 
 
-if __name__ == "__main__":
-    fp = sys.argv[1]
-    if "vitis" not in fp:
-        remove_dbg(fp)
-        hoist_constants(fp)
-        for i in range(5):
-            simplify_adds_mults(fp)
-        hoist_constants(fp)
-        collapse_ariths_llvm(fp)
-    else:
-        collapse_ariths_llvm(fp)
-        collapse_gep(fp)
+def stores_loads(fp):
+    """
+      store float %val_248435, float* %val_248436, align 4
+      %val_248438 = load float, float* %val_248340, align 4
+    """
 
+    loads = defaultdict(list)
+    stores = defaultdict(list)
+    all_sig_lines = []
+
+    last_alloca_line = -1
+    with open(fp) as infile:
+
+        for i, line in enumerate(infile):
+            if "alloca" in line:
+                last_alloca_line = max(i, last_alloca_line)
+
+            if ("load" in line and "getelementptr" not in line) or "store" in line:
+                idents = re.findall(r"(%[\d|a-z|_]*)", line)
+
+                if "load" in line:
+                    assign, source = idents
+                    loads[source].append((assign, line))
+                elif "store" in line and "float*" in line:
+                    try:
+                        val, assign = idents
+                        stores[assign].append((i, val))
+                    except Exception as e:
+                        print(e)
+                        print("line ", i)
+                        print(line)
+            all_sig_lines.append(line)
+
+    redundant_loads = set()
+    canonical_loads_map = {}
+
+    for source, assigns_lines in loads.items():
+        if source not in stores:
+            if len(assigns_lines) > 1:
+                # print("no stores and multiple loads", k, v)
+                canonical_assign, _canonical_line = assigns_lines[0]
+                for assign, line in assigns_lines[1:]:
+                    redundant_loads.add(line.strip())
+                    canonical_loads_map[assign] = canonical_assign
+        else:
+            # print("last store", k, stores[k][-1])
+            # print("all loads", k, v)
+            pass
+    
+    # # TODO: find pairs of stores and loads
+    # for store_assign, (i, val) in stores.items():
+    #     # find next load
+    #     load_assign, line = next(loads[store_assign])
+
+    with open(fp, "w") as test_file:
+        for i, line in enumerate(all_sig_lines):
+            if line.strip() in redundant_loads:
+                continue
+
+            idents = re.findall(r"(%[\d|a-z|_]*)", line)
+            for ident in idents:
+                if ident in canonical_loads_map:
+                    canonical_assign = canonical_loads_map[ident]
+                    line = re.sub(fr"{ident}\b", f"{canonical_assign}", line)
+
+            test_file.write(line)
+
+
+def drop_init_tensors(fp):
+    pat1 = r"""scf\.parallel .*
+      %\d+ = memref\.load .*
+      memref\.store .*
+      scf\.yield
+    }
+    """
+    pat2 = r"""scf.parallel .*
+      memref.store %c.*
+      scf.yield
+    }
+    """
+    # pat1 = r"""    (%\d+ = memref\.alloca\(\) .*)
+    # scf\.parallel .*
+    #   %\d+ = memref\.load .*
+    #   memref\.store .*
+    #   scf\.yield
+    # }
+    # """
+    # pat2 = r"""    (%\d+ = memref\.alloca\(\) .*)
+    # scf.parallel .*
+    #   memref.store %c.*
+    #   scf.yield
+    # }
+    # """
+    with open(fp) as infile:
+        str = infile.read()
+
+    sub1 = re.sub(pat1, "\n    ", str, re.MULTILINE)
+    sub2 = re.sub(pat2, "\n    ", sub1, re.MULTILINE)
+    with open(fp, "w") as infile:
+        infile.write(sub2)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Process some integers.")
+    parser.add_argument("fp")
+    parser.add_argument("--drop_init_tensors", action="store_true")
+
+    args = parser.parse_args()
+    fp = args.fp
+    if args.drop_init_tensors:
+        drop_init_tensors(fp)
+    else:
+        if "vitis" not in fp:
+            remove_dbg(fp)
+            hoist_constants(fp)
+            for i in range(5):
+                simplify_adds_mults(fp)
+            hoist_constants(fp)
+            collapse_ariths_llvm(fp)
+        else:
+            collapse_ariths_llvm(fp)
+            collapse_gep(fp)
+            stores_loads(fp)

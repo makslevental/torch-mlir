@@ -57,10 +57,10 @@ namespace eval ::HLS_HOOKS {
     puts "INFO: \[HLS_HOOKS::opt\] Using ::LLVM_CUSTOM_CMD: $::LLVM_CUSTOM_CMD"
     puts "INFO: \[HLS_HOOKS::opt\] Running ::LLVM_CUSTOM_CMD: [eval concat $::LLVM_CUSTOM_CMD]"
 
-    exec -ignorestderr /home/mlevental/dev_projects/Xilinx/Vitis_HLS/2021.2/lnx64/tools/clang-3.9-csynth/bin/opt XXX_LL_FILE_XXX -o XXX_DIR_XXX/proj/solution1/.autopilot/db/a.g.ld.5.5.user.bc
-    run_link_or_opt -out XXX_DIR_XXX/proj/solution1/.autopilot/db/a.g.ld.5.6.user.bc -args "XXX_DIR_XXX/proj/solution1/.autopilot/db/a.g.ld.4.m2.bc XXX_DIR_XXX/proj/solution1/.autopilot/db/a.g.ld.5.5.user.bc"
-    run_link_or_opt -opt -out XXX_DIR_XXX/proj/solution1/.autopilot/db/a.g.ld.6.user.bc -args "XXX_DIR_XXX/proj/solution1/.autopilot/db/a.g.ld.5.6.user.bc -hls-top-function-name=wrapper -internalize-public-api-list=forward"
-    #eval exec -ignorestderr $::LLVM_CUSTOM_CMD
+    #exec -ignorestderr /home/mlevental/dev_projects/Xilinx/Vitis_HLS/2021.2/lnx64/tools/clang-3.9-csynth/bin/opt XXX_LL_FILE_XXX -o XXX_DIR_XXX/proj/solution1/.autopilot/db/a.g.ld.5.5.user.bc
+    #run_link_or_opt -out XXX_DIR_XXX/proj/solution1/.autopilot/db/a.g.ld.5.6.user.bc -args "XXX_DIR_XXX/proj/solution1/.autopilot/db/a.g.ld.4.m2.bc XXX_DIR_XXX/proj/solution1/.autopilot/db/a.g.ld.5.5.user.bc"
+    #run_link_or_opt -opt -out XXX_DIR_XXX/proj/solution1/.autopilot/db/a.g.ld.6.user.bc -args "XXX_DIR_XXX/proj/solution1/.autopilot/db/a.g.ld.5.6.user.bc -hls-top-function-name=wrapper -internalize-public-api-list=forward"
+    eval exec -ignorestderr $::LLVM_CUSTOM_CMD
 
     # return output file name, if blank opt results will not be used
     return $LLVM_CUSTOM_OUTPUT
