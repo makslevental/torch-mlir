@@ -1,14 +1,16 @@
 open_project -reset proj
-add_files /home/mlevental/dev_projects/torch-mlir/hls/scripts/vitis_stuff/wrapper.cpp
+add_files wrapper.cpp
 set_top wrapper
 
 open_solution -reset solution1
 #set_part "xcvu35p-fsvh2104-3-e"
-set_part "xc7a200tfbg484-3"
-create_clock -period "400MHz"
-config_export -format ip_catalog -rtl verilog
+#set_part "xc7a200tfbg484-3"
+#set_part "xcvu19p-fsvb3824-3-e"
+set_part "xcvu57p_CIV-fsvk2892-3-e"
+create_clock -period "680MHz"
 
-set ::LLVM_CUSTOM_CMD {$LLVM_CUSTOM_OPT /home/mlevental/dev_projects/torch-mlir/hls/scripts/vitis_stuff/braggnn.opt.vitis.ll -o $LLVM_CUSTOM_OUTPUT}
+
+set ::LLVM_CUSTOM_CMD {$LLVM_CUSTOM_OPT XXX_DIR_XXX/XXX_LL_FILE_XXX -o $LLVM_CUSTOM_OUTPUT}
 
 proc print {args} {
     set cmd [lindex $args 0]
@@ -22,5 +24,5 @@ proc print {args} {
 
 csynth_design
 
-export_design -rtl verilog -format ip_catalog
+#export_design -rtl verilog -format ip_catalog
 
