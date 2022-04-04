@@ -7,11 +7,13 @@ import warnings
 import torch
 from torch.utils._pytree import tree_map
 
+from python.torch_mlir.eager_mode.iree_backend import IREELinalgOnTensorsBackend
 from torch_mlir.eager_mode.torch_mlir_dispatch import (
     try_torch_mlir_eager,
     UnsupportedByTorchMlirEagerMode,
 )
 from torch_mlir_e2e_test.linalg_on_tensors_backends import refbackend
+
 
 
 class TorchMLIRTensor(torch.Tensor):
@@ -42,7 +44,7 @@ class TorchMLIRTensor(torch.Tensor):
             storage_offset=elem.storage_offset(),
             dtype=elem.dtype,
             layout=elem.layout,
-            device=elem.device,
+            device=kwargs.get("device", False) or elem.device,
             # Only float tensors can have gradients.
             requires_grad=elem.dtype in {torch.float, torch.float32, torch.float64}
             and (kwargs.get("requires_grad", False) or elem.requires_grad),
@@ -59,11 +61,14 @@ class TorchMLIRTensor(torch.Tensor):
     @classmethod
     def __torch_dispatch__(cls, func, _types, args=(), kwargs=None):
         requires_grad = False
+        device = None
 
         def check_grad(e):
-            nonlocal requires_grad
+            nonlocal requires_grad, device
             if isinstance(e, TorchMLIRTensor):
                 requires_grad |= e.requires_grad
+                if device is None:
+                    device = str(e.device)
 
         tree_map(check_grad, args)
         tree_map(check_grad, kwargs)
@@ -76,9 +81,9 @@ class TorchMLIRTensor(torch.Tensor):
             return e
 
         def wrap(e):
-            nonlocal requires_grad
+            nonlocal requires_grad, device
             return (
-                TorchMLIRTensor(e, requires_grad=requires_grad)
+                TorchMLIRTensor(e, requires_grad=requires_grad, device=device)
                 if isinstance(e, torch.Tensor)
                 else e
             )
@@ -91,7 +96,8 @@ class TorchMLIRTensor(torch.Tensor):
                 func,
                 unwrapped_args,
                 unwrapped_kwargs,
-                backend=refbackend.RefBackendLinalgOnTensorsBackend(),
+                # backend=refbackend.RefBackendLinalgOnTensorsBackend(),
+                backend=IREELinalgOnTensorsBackend(device)
             )
             if isinstance(out, tuple):
                 out = [torch.from_numpy(o) for o in out]

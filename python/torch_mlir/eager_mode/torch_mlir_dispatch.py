@@ -2,7 +2,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 # Also available under a BSD-style license. See LICENSE.
-
+import re
 from typing import Any, Callable, Tuple, Union
 from typing import List, Dict
 
@@ -15,7 +15,9 @@ from torch.utils._pytree import tree_map
 from torch_mlir._mlir_libs._mlir.passmanager import PassManager
 
 from torch_mlir.dialects import torch as torch_dialect
-from torch_mlir._mlir_libs._jit_ir_importer import get_registered_ops # pytype: disable=import-error
+from torch_mlir._mlir_libs._jit_ir_importer import (
+    get_registered_ops,
+)  # pytype: disable=import-error
 from torch_mlir.eager_mode.ir_building import build_module, TorchTensorType
 
 OP_REGISTRY = {op["name"]: op for op in get_registered_ops()}
@@ -66,6 +68,10 @@ def normalize_args_kwargs(target: Callable, args: Tuple[Any], kwargs: Dict[str, 
     assert new_args_and_kwargs, "Couldn't normalize args and kwargs"
     new_args, new_kwargs = new_args_and_kwargs
     return new_args, new_kwargs
+
+
+def get_legal_fn_name(fn_name):
+    return re.sub(r"[^a-zA-Z]+", "", fn_name.strip())
 
 
 def build_script_function(
@@ -123,7 +129,7 @@ def build_script_function(
     else:
         graph.registerOutput(node.output())
 
-    fn_name = str(node).strip()
+    fn_name = get_legal_fn_name(str(node))
     fn = torch._C._create_function_from_graph(fn_name, graph)
     return fn
 
@@ -134,11 +140,11 @@ def annotate_args_kwargs(
     normalized_kwargs: Dict[str, Any],
 ):
     unwrapped_normalized_args = tree_map(
-        lambda x: x.detach().contiguous().numpy() if isinstance(x, torch.Tensor) else x,
+        lambda x: x.cpu().detach().contiguous().numpy() if isinstance(x, torch.Tensor) else x,
         normalized_args,
     )
     unwrapped_normalized_kwargs = tree_map(
-        lambda x: x.detach().contiguous().numpy() if isinstance(x, torch.Tensor) else x,
+        lambda x: x.cpu().detach().contiguous().numpy() if isinstance(x, torch.Tensor) else x,
         normalized_kwargs,
     )
 
@@ -245,7 +251,7 @@ def try_torch_mlir_eager(op, args, kwargs, backend):
         )
 
     script_fun = build_script_function(op._schema, new_args, new_kwargs)
-    annotations, np_tensor_args, np_tensor_kwargs_flat = annotate_args_kwargs(
+    annotations, tensor_args, tensor_kwargs_flat = annotate_args_kwargs(
         script_fun, new_args, new_kwargs
     )
 
@@ -262,11 +268,15 @@ def try_torch_mlir_eager(op, args, kwargs, backend):
         op_mlir_backend_callable is not None
     ), f"Couldn't find function {script_fun.name} in module."
 
-    all_tensor_args = np_tensor_args + np_tensor_kwargs_flat
+    all_tensor_args = tensor_args + tensor_kwargs_flat
     out = op_mlir_backend_callable(*all_tensor_args)
 
     registered_op = OP_REGISTRY[(op._schema.name, op._schema.overload_name)]
     if registered_op["is_mutable"]:
         out = write_back_to_mutable(registered_op, out, all_tensor_args)
 
-    return out
+    result_numpy = np.asarray(out, dtype=out.dtype)
+    # TODO: Segfault if the copy of numpy array is not returned.
+    result_copy = np.copy(result_numpy)
+
+    return result_copy
