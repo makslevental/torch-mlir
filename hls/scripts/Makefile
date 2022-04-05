@@ -6,39 +6,42 @@ FILENAME := $(FN)
 test:
 	$(info $$var is [${REAL_ROOT_DIR}])
 
-$(FILENAME).drop:
-	cp $(FILENAME) $(FILENAME).drop
-	python read_large_file.py $(FILENAME).drop --drop_init_tensors
+#$(FILENAME).drop:
+#	cp $(FILENAME) $(FILENAME).drop
+#	python read_large_file.py $(FILENAME).drop --drop_init_tensors
 
 # promote allocs
-$(FILENAME).promoted: $(FILENAME).drop
-	$(ROOT_BINDIR)/torch-mlir-opt $(FILENAME).drop \
+$(FILENAME).promoted: $(FILENAME)
+	$(ROOT_BINDIR)/torch-mlir-opt $(FILENAME) \
  		-torch-hls-promote-allocs="hoist-globals" \
  		-cse -symbol-dce \
  		-o $(FILENAME).promoted
 
 # unroll reduction loops
-$(FILENAME).dirty: $(FILENAME).promoted
+$(FILENAME).mem2reg: $(FILENAME).promoted
 	$(ROOT_BINDIR)/torch-mlir-opt $(FILENAME).promoted \
-		-dirty-pass="unrollparfor=0 csts=1 unrollloops=1" \
+		-dirty-pass="unrollparfor=1 csts=1 unrollloops=1" \
 		-o $(FILENAME).dirty
+	python read_large_file.py $(FILENAME).dirty --mem2reg
+	$(ROOT_BINDIR)/torch-mlir-opt $(FILENAME).dirty.mem2reg \
+		-cse -symbol-dce \
+		-o $(FILENAME).mem2reg
 
 # lower partially so you can unroll parloops
-$(FILENAME).dirty.llvm: $(FILENAME).dirty
-	$(ROOT_BINDIR)/mlir-opt $(FILENAME).dirty \
+$(FILENAME).llvm: $(FILENAME).mem2reg
+	$(ROOT_BINDIR)/mlir-opt $(FILENAME).mem2reg \
 	  -convert-memref-to-llvm \
-	  -loop-invariant-code-motion \
-	  -o $(FILENAME).dirty.llvm
+	  -o $(FILENAME).llvm
 
-# unroll parallel loops
-$(FILENAME).dirty.llvm.unrollparfor: $(FILENAME).dirty.llvm
-	$(ROOT_BINDIR)/torch-mlir-opt $(FILENAME).dirty.llvm \
-		-dirty-pass="unrollparfor=1 csts=1 unrollloops=0" \
-		-o $(FILENAME).dirty.llvm.unrollparfor
+## unroll parallel loops
+#$(FILENAME).dirty.llvm.unrollparfor: $(FILENAME).dirty.llvm
+#	$(ROOT_BINDIR)/torch-mlir-opt $(FILENAME).dirty.llvm \
+#		-dirty-pass="unrollparfor=1 csts=1 unrollloops=0" \
+#		-o $(FILENAME).dirty.llvm.unrollparfor
 
 # lower to llvm dialect
-$(FILENAME).dirty.llvm.unrollparfor.llvm: $(FILENAME).dirty.llvm.unrollparfor
-	$(ROOT_BINDIR)/mlir-opt $(FILENAME).dirty.llvm.unrollparfor \
+$(FILENAME).dirty.llvm.unrollparfor.llvm: $(FILENAME).llvm
+	$(ROOT_BINDIR)/mlir-opt $(FILENAME).llvm \
 	  -convert-arith-to-llvm \
 	  -convert-math-to-llvm \
 	  -convert-func-to-llvm='use-bare-ptr-memref-call-conv=1' \
