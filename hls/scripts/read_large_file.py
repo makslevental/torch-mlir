@@ -320,14 +320,9 @@ def stores_loads(fp):
                 if "load" in line:
                     assign, source = idents
                     loads[source].append((assign, line))
-                elif "store" in line and "float*" in line:
-                    try:
-                        val, assign = idents
-                        stores[assign].append((i, val))
-                    except Exception as e:
-                        print(e)
-                        print("line ", i)
-                        print(line)
+                elif "store" in line and "float*" in line and not ("0x" in line or "e+" in line):
+                    val, assign = idents
+                    stores[assign].append((i, val))
             all_sig_lines.append(line)
 
     redundant_loads = set()
@@ -422,7 +417,7 @@ def stores_loads2(fp):
     """
 
     load_to_ssa = {}
-    stores = defaultdict(queue.Queue)
+    stores = {}
     all_sig_lines = []
     elementptrs_to_args = set()
 
@@ -440,19 +435,19 @@ def stores_loads2(fp):
 
             # collect stores that go to canonical ptrs (they're canonical after store_load previous pass
             # assign is a ptr (or address or whatever)
-            if "store" in line and "float*" in line:
+            if "store" in line and "float*" in line and not ("0x" in line or "e+" in line):
                 val, gep = idents
                 # make sure you're still storing to inout args
                 if gep not in elementptrs_to_args:
-                    stores[gep].put(val)
+                    stores[gep] = val
                     continue
             # find loads that aren't gep loads but load from pointers
             # (e.g., %val_8225 = load float, float* getelementptr inbounds... since those come from constants?)
             # in order to tie them back to the source (i.e., the most recent gep that should've been stored to)
             elif "load" in line and "getelementptr" not in line:
                 assign, gep = idents
-                if gep in stores and not stores[gep].empty():
-                    load_to_ssa[assign] = stores[gep].get()
+                if gep in stores and not stores[gep] is not None:
+                    load_to_ssa[assign] = stores[gep]
                     continue
 
             all_sig_lines.append(line)
@@ -468,13 +463,84 @@ def stores_loads2(fp):
             test_file.write(line)
 
 
+def mem2reg(fp):
+    load_to_ssa = {}
+    stores = {}
+    all_sig_lines = []
+    collapses = set()
+
+    with open(fp) as infile:
+        for i, line in enumerate(infile):
+            idents = re.findall(r"(%[\d|a-z|_]*)", line)
+            # allow stores to inout params
+            if "@forward" in line:
+                idents = re.findall(
+                    r"(%[\d|a-z|_]*): memref<[\d|x]*f32> {(\w+) = 0 : index}", line
+                )
+                inputs = set(iden for iden, typ in idents if typ == "in")
+                globals = set(iden for iden, typ in idents if "__constant_" in typ)
+                outputs = set(iden for iden, typ in idents if "out" in typ)
+                args = inputs.union(globals).union(outputs)
+                assert len(outputs) == 1
+            # %arg0: memref<1x16x9x9xf32> {in = 0 : index}
+
+            if "memref.alloca()" in line:
+                assert len(idents) == 1
+
+            if "= memref.collapse_shape" in line:
+                # assert idents[1] in args
+                collapses.add(idents[0])
+
+            # memref.store %5176590, %16[%c0, %c10, %c4, %c6]
+            if "memref.store" in line:
+                val, dst, *idxs = idents
+                if dst not in outputs:
+                    # you can have store, load, load, hmmmmmm
+                    stores[tuple([dst] + list(idxs))] = val
+                    continue
+            # %5176591 = memref.load %17[%c0, %c52, %c4, %c8] : memref<1x64x9x9xf32>
+            elif "memref.load" in line:
+                val, src, *idxs = idents
+                if src in globals:
+                    line = f"{val} = arith.constant 2.2{np.random.randint(11111, 99999)}e+00 : f32\n"
+                else:
+                    hsh = tuple([src] + list(idxs))
+                    if hsh in stores and not stores[hsh] is None:
+                        load_to_ssa[val] = stores[hsh]
+                        continue
+                    else:
+                        if not (src in inputs or src in outputs or src in collapses):
+                            print(line)
+                            print(hsh)
+                            raise Exception("wtfbbq")
+
+            all_sig_lines.append(line)
+
+    with open(f"{fp}.mem2reg", "w") as test_file:
+        for i, line in enumerate(all_sig_lines):
+            if "@forward" in line:
+                test_file.write(line)
+                continue
+            idents = re.findall(r"(%[\d|a-z|_]*)", line)
+            for ident in idents:
+                if ident in load_to_ssa:
+                    canonical_ssa = load_to_ssa[ident]
+                    line = re.sub(fr"{ident}\b", f"{canonical_ssa}", line)
+
+            test_file.write(line)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process some integers.")
     parser.add_argument("fp")
     parser.add_argument("--drop_init_tensors", action="store_true")
+    parser.add_argument("--mem2reg", action="store_true")
 
     args = parser.parse_args()
     fp = args.fp
+    if args.mem2reg:
+        mem2reg(fp)
+        exit()
     if args.drop_init_tensors:
         drop_init_tensors(fp)
     else:
