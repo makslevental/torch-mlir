@@ -197,6 +197,7 @@ BUFFERIZATION_PIPELINE = [
 
 LOWERING_PIPELINE = [
     "builtin.func(cse)",
+    # TODO: use this correctly in promoteallocs
     "torch-hls-drop-public-return",
     "builtin.func(cse)",
     # "builtin.func(convert-linalg-to-loops)",
@@ -295,7 +296,7 @@ def put_script_files(out, mod_name, in_shape, out_shape, out_suffix=""):
     os.chmod(f"{out_dir}/run_vitis.sh", st.st_mode | stat.S_IEXEC)
 
 
-def make_sub_layer(mod, in_shapes, out_shape):
+def make_sub_layer(mod, in_shapes, out_shape, scale):
     recursivescriptmodule, class_annotator = make_layer(
         mod, [None] + [(in_shape, torch.float32, True) for in_shape in in_shapes]
     )
@@ -307,7 +308,7 @@ def make_sub_layer(mod, in_shapes, out_shape):
     out = mb.module.operation.get_asm(
         large_elements_limit=100000, enable_debug_info=False
     )
-    put_script_files(out, recursivescriptmodule.original_name, in_shapes[0], out_shape)
+    put_script_files(out, recursivescriptmodule.original_name+f".{scale}", in_shapes[0], out_shape)
 
 
 def make_split_braggnn(scale=4, imgsz=11):
@@ -328,11 +329,11 @@ def make_split_braggnn(scale=4, imgsz=11):
     with torch.no_grad():
         x1 = torch.randn(1, 1, imgsz, imgsz)
         cnn1 = mods.cnn_layers_1(x1)
-        make_sub_layer(mods.cnn_layers_1, [x1.shape], cnn1.shape)
+        make_sub_layer(mods.cnn_layers_1, [x1.shape], cnn1.shape, scale)
 
         # nlb
         theta = mods.theta(cnn1)
-        make_sub_layer(mods.theta, [cnn1.shape], theta.shape)
+        make_sub_layer(mods.theta, [cnn1.shape], theta.shape, scale)
         phi = mods.theta(cnn1)
         g = mods.theta(cnn1)
         nlb = mods.theta_phi_g_combine(cnn1, theta, phi, g)
@@ -340,15 +341,16 @@ def make_split_braggnn(scale=4, imgsz=11):
             mods.theta_phi_g_combine,
             [cnn1.shape, theta.shape, phi.shape, g.shape],
             nlb.shape,
+            scale
         )
 
         # cnn2
         cnn2 = mods.cnn_layers_2(nlb)
-        make_sub_layer(mods.cnn_layers_2, [nlb.shape], cnn2.shape)
+        make_sub_layer(mods.cnn_layers_2, [nlb.shape], cnn2.shape, scale)
 
         # dense layers
         dense = mods.dense_layers(cnn2)
-        make_sub_layer(mods.dense_layers, [cnn2.shape], dense.shape)
+        make_sub_layer(mods.dense_layers, [cnn2.shape], dense.shape, scale)
 
 
 def make_whole_braggnn(scale=4, imgsz=11):
@@ -372,10 +374,11 @@ def make_whole_braggnn(scale=4, imgsz=11):
     )
 
     put_script_files(
-        out, recursivescriptmodule.original_name, tuple(t.shape), tuple(y.shape)
+        out, recursivescriptmodule.original_name+f".{scale}", tuple(t.shape), tuple(y.shape)
     )
 
 
 if __name__ == "__main__":
-    make_split_braggnn(scale=4, imgsz=11)
-    # make_whole_braggnn(scale=4, imgsz=11)
+    for i in range(1, 5):
+        make_split_braggnn(scale=i, imgsz=11)
+        make_whole_braggnn(scale=i, imgsz=11)

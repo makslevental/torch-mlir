@@ -195,9 +195,19 @@ class PromoteAllocsPass : public HLSPromoteAllocsBase<PromoteAllocsPass> {
   }
 
   void hoistLastStoreAlloc(FuncOp func) {
+    OpBuilder builder(func->getParentRegion());
+    for (int i = 0; i < func.getNumArguments(); ++i) {
+      func.setArgAttr(i, "in", builder.getIndexAttr(0));
+    }
+
     if (hoistGlobals) {
       func.walk<WalkOrder::PreOrder>([&](memref::GetGlobalOp op) {
-        func.insertArgument(func.getNumArguments(), op.getType(), {},
+//        DictionaryAttr Builder::getDictionaryAttr(ArrayRef<NamedAttribute> value) {
+//          return DictionaryAttr::get(context, value);
+//        }
+        auto namedAttr = builder.getNamedAttr(op.name(), builder.getIndexAttr(0));
+        auto dictAttr = builder.getDictionaryAttr(namedAttr);
+        func.insertArgument(func.getNumArguments(), op.getType(), {dictAttr},
                             func->getLoc());
         BlockArgument arg = func.getArgument(func.getNumArguments() - 1);
         op.replaceAllUsesWith(arg);
@@ -231,7 +241,9 @@ class PromoteAllocsPass : public HLSPromoteAllocsBase<PromoteAllocsPass> {
       auto memref_alloc =
           last_store.getMemRef().getDefiningOp<memref::AllocaOp>();
 
-      func.insertArgument(func.getNumArguments(), last_store.getMemRefType(), {},
+      auto namedAttr = builder.getNamedAttr("out", builder.getIndexAttr(0));
+      auto dictAttr = builder.getDictionaryAttr(namedAttr);
+      func.insertArgument(func.getNumArguments(), last_store.getMemRefType(), {dictAttr},
                           func->getLoc());
       BlockArgument arg = func.getArgument(func.getNumArguments() - 1);
       memref_alloc.replaceAllUsesWith(arg);
@@ -240,7 +252,9 @@ class PromoteAllocsPass : public HLSPromoteAllocsBase<PromoteAllocsPass> {
       auto memref_alloc =
           last_store.getMemRef().getDefiningOp<memref::AllocaOp>();
 
-      func.insertArgument(func.getNumArguments(), last_store.getMemRefType(), {},
+      auto namedAttr = builder.getNamedAttr("out", builder.getIndexAttr(0));
+      auto dictAttr = builder.getDictionaryAttr(namedAttr);
+      func.insertArgument(func.getNumArguments(), last_store.getMemRefType(), {dictAttr},
                           func->getLoc());
       BlockArgument arg = func.getArgument(func.getNumArguments() - 1);
       memref_alloc.replaceAllUsesWith(arg);

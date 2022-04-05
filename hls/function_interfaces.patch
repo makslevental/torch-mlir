@@ -1,0 +1,52 @@
+Index: mlir/include/mlir/IR/FunctionInterfaces.h
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/mlir/include/mlir/IR/FunctionInterfaces.h b/mlir/include/mlir/IR/FunctionInterfaces.h
+--- a/mlir/include/mlir/IR/FunctionInterfaces.h	(revision 8361c5da30588d3d4a48eae648f53be1feb5cfad)
++++ b/mlir/include/mlir/IR/FunctionInterfaces.h	(date 1649134792354)
+@@ -235,13 +235,13 @@
+       // that they contain a dialect prefix in their name.  Call the dialect, if
+       // registered, to verify the attributes themselves.
+       for (auto attr : argAttrs) {
+-        if (!attr.getName().strref().contains('.'))
+-          return op.emitOpError("arguments may only have dialect attributes");
+-        if (Dialect *dialect = attr.getNameDialect()) {
+-          if (failed(dialect->verifyRegionArgAttribute(op, /*regionIndex=*/0,
+-                                                       /*argIndex=*/i, attr)))
+-            return failure();
+-        }
++//        if (!attr.getName().strref().contains('.'))
++//          return op.emitOpError("arguments may only have dialect attributes");
++//        if (Dialect *dialect = attr.getNameDialect()) {
++//          if (failed(dialect->verifyRegionArgAttribute(op, /*regionIndex=*/0,
++//                                                       /*argIndex=*/i, attr)))
++//            return failure();
++//        }
+       }
+     }
+   }
+@@ -267,14 +267,14 @@
+       // that they contain a dialect prefix in their name.  Call the dialect, if
+       // registered, to verify the attributes themselves.
+       for (auto attr : resultAttrs) {
+-        if (!attr.getName().strref().contains('.'))
+-          return op.emitOpError("results may only have dialect attributes");
+-        if (Dialect *dialect = attr.getNameDialect()) {
+-          if (failed(dialect->verifyRegionResultAttribute(op, /*regionIndex=*/0,
+-                                                          /*resultIndex=*/i,
+-                                                          attr)))
+-            return failure();
+-        }
++//        if (!attr.getName().strref().contains('.'))
++//          return op.emitOpError("results may only have dialect attributes");
++//        if (Dialect *dialect = attr.getNameDialect()) {
++//          if (failed(dialect->verifyRegionResultAttribute(op, /*regionIndex=*/0,
++//                                                          /*resultIndex=*/i,
++//                                                          attr)))
++//            return failure();
++//        }
+       }
+     }
+   }
