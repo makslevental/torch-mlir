@@ -198,11 +198,11 @@ BUFFERIZATION_PIPELINE = [
 LOWERING_PIPELINE = [
     "builtin.func(cse)",
     # TODO: use this correctly in promoteallocs
-    "torch-hls-drop-public-return",
+    # "torch-hls-drop-public-return",
     "builtin.func(cse)",
-    # "builtin.func(convert-linalg-to-loops)",
+    "builtin.func(convert-linalg-to-loops)",
     # "builtin.func(convert-linalg-to-affine-loops)",
-    "builtin.func(convert-linalg-to-parallel-loops)",
+    # "builtin.func(convert-linalg-to-parallel-loops)",
     "builtin.func(promote-buffers-to-stack{max-alloc-size-in-bytes=1000000000 max-rank-of-allocated-memref=10})",
     "cse",
 ]
@@ -267,7 +267,7 @@ def put_script_files(out, mod_name, in_shape, out_shape, out_suffix=""):
     ).read()
     run_hls = run_hls.replace("XXX_DIR_XXX", out_dir)
     run_hls = run_hls.replace(
-        "XXX_LL_FILE_XXX", "forward.mlir.dirty.llvm.unrollparfor.llvm.cse.ll.vitis"
+        "XXX_LL_FILE_XXX", "forward.ll"
     )
     open(f"{out_dir}/run_hls.tcl", "w").write(run_hls)
 
@@ -276,7 +276,7 @@ def put_script_files(out, mod_name, in_shape, out_shape, out_suffix=""):
     ).read()
     hls_hooks = hls_hooks.replace("XXX_DIR_XXX", out_dir)
     hls_hooks = hls_hooks.replace(
-        "XXX_LL_FILE_XXX", "forward.mlir.dirty.llvm.unrollparfor.llvm.cse.ll.vitis"
+        "XXX_LL_FILE_XXX", "forward.ll"
     )
     open(f"{out_dir}/hls_hooks.tcl", "w").write(hls_hooks)
 
@@ -294,6 +294,16 @@ def put_script_files(out, mod_name, in_shape, out_shape, out_suffix=""):
     )
     st = os.stat(f"{out_dir}/run_vitis.sh")
     os.chmod(f"{out_dir}/run_vitis.sh", st.st_mode | stat.S_IEXEC)
+    shutil.copyfile(
+        "/home/mlevental/dev_projects/torch-mlir/hls/pytranslate/mlir_ops.py",
+        f"{out_dir}/mlir_ops.py",
+    )
+    shutil.copyfile(
+        "/home/mlevental/dev_projects/torch-mlir/hls/scripts/translate.sh",
+        f"{out_dir}/translate.sh",
+    )
+    st = os.stat(f"{out_dir}/translate.sh")
+    os.chmod(f"{out_dir}/translate.sh", st.st_mode | stat.S_IEXEC)
 
 
 def make_sub_layer(mod, in_shapes, out_shape, scale):
@@ -324,7 +334,7 @@ def make_split_braggnn(scale=4, imgsz=11):
         attr for attr_name, attr in attributes if isinstance(attr, torch.nn.Module)
     ]:
         attr.eval()
-        attr.apply(set_weights)
+        # attr.apply(set_weights)
 
     with torch.no_grad():
         x1 = torch.randn(1, 1, imgsz, imgsz)
@@ -360,7 +370,7 @@ def make_whole_braggnn(scale=4, imgsz=11):
         mod.eval()
         t = torch.randn((1, 1, imgsz, imgsz))
         y = mod(t)
-        mod.apply(set_weights)
+        # mod.apply(set_weights)
         recursivescriptmodule, class_annotator = make_layer(
             mod, [None, ([1, 1, imgsz, imgsz], torch.float32, True)]
         )
