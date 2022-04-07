@@ -52,7 +52,7 @@ class BraggNN(torch.nn.Module):
                 torch.nn.Conv2d(
                     in_channels=ic, out_channels=oc, kernel_size=3, stride=1, padding=0
                 ),
-                torch.nn.LeakyReLU(negative_slope=0.01),
+                torch.nn.LeakyReLU(negative_slope=0.025),
                 # Exp()
             ]
             fsz -= 2
@@ -62,7 +62,7 @@ class BraggNN(torch.nn.Module):
         for ic, oc in zip(dense_in_chs, fcsz):
             self.dense_ops += [
                 torch.nn.Linear(ic, oc),
-                torch.nn.LeakyReLU(negative_slope=0.01),
+                torch.nn.LeakyReLU(negative_slope=0.025),
             ]
         # output layer
         self.dense_ops += [torch.nn.Linear(fcsz[-1], 2)]
@@ -94,7 +94,7 @@ class cnn_layers_1(torch.nn.Module):
                 torch.nn.Conv2d(
                     in_channels=ic, out_channels=oc, kernel_size=3, stride=1, padding=0
                 ),
-                torch.nn.LeakyReLU(negative_slope=0.01),
+                torch.nn.LeakyReLU(negative_slope=0.025),
             ]
             fsz -= 2
 
@@ -169,7 +169,7 @@ class cnn_layers_2(torch.nn.Module):
                 torch.nn.Conv2d(
                     in_channels=ic, out_channels=oc, kernel_size=3, stride=1, padding=0
                 ),
-                torch.nn.LeakyReLU(negative_slope=0.01),
+                torch.nn.LeakyReLU(negative_slope=0.025),
                 # Exp()
             ]
             fsz -= 2
@@ -198,7 +198,7 @@ class dense_layers(torch.nn.Module):
         for ic, oc in zip(dense_in_chs, fcsz):
             self.dense_ops += [
                 torch.nn.Linear(ic, oc),
-                torch.nn.LeakyReLU(negative_slope=0.01),
+                torch.nn.LeakyReLU(negative_slope=0.025),
             ]
         # output layer
         self.dense_ops += [torch.nn.Linear(fcsz[-1], 2)]
