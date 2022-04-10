@@ -9,6 +9,12 @@ open_solution -reset solution1
 set_part "xcvu57p_CIV-fsvk2892-3-e"
 create_clock -period "680MHz"
 
+config_op fmacc -impl auto -precision low
+config_op fmadd -impl auto -precision low
+config_op facc -impl auto -precision low
+
+config_op fadd -impl fabric
+config_op fmul -impl meddsp
 
 set ::LLVM_CUSTOM_CMD {$LLVM_CUSTOM_OPT XXX_DIR_XXX/XXX_LL_FILE_XXX -o $LLVM_CUSTOM_OUTPUT}
 

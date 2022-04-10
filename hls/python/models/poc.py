@@ -200,6 +200,7 @@ LOWERING_PIPELINE = [
     "torch-hls-drop-public-return",
     "builtin.func(cse)",
     "builtin.func(convert-linalg-to-loops)",
+    "builtin.func(lower-affine)",
     # "builtin.func(convert-linalg-to-affine-loops)",
     # "builtin.func(convert-linalg-to-parallel-loops)",
     "builtin.func(promote-buffers-to-stack{max-alloc-size-in-bytes=1000000000 max-rank-of-allocated-memref=10})",

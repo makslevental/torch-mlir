@@ -101,7 +101,7 @@ import numpy as np
 
 def format_cst(cst):
     return float(np.random.randint(1, 100000))
-    return (handleDoubleToHex(cst)[:11] + "0" * 7).upper().replace("X", "x")
+    # return (handleDoubleToHex(cst)[:11] + "0" * 7).upper().replace("X", "x")
 
 
 var_count = 0
@@ -162,54 +162,57 @@ class Val:
 
 
 class Constant(Val):
+    def __init__(self, name):
+        super(Constant, self).__init__(name)
+        self._fmt = f"{format_cst(float(self.name))}"
+
     def __str__(self):
-        return f"{format_cst(float(self.name))}"
+        return self._fmt
 
 
 def Exp(val):
     v = Val(f"(exp ({val})")
-    # print(f"{v} = call float @llvm.exp.f32(float {val})")
     print(f"{v} = call float @expf(float {val})")
     return v
 
+OUTPUT_ARRAYS = []
 
 class ArrayDecl:
     def __init__(self, var_name, *shape, input=False, output=False, globl=False):
+        global OUTPUT_ARRAYS
         self.var_name = var_name
         self.curr_shape = shape
         self.prev_shape = shape
         self.registers = {}
         self.input = input
         self.output = output
+        if output:
+            OUTPUT_ARRAYS.append(self)
         self.globl = globl
 
     def __getitem__(self, index):
-        # print("load", self.var_name, index)
         index = self.idx_map(index)
         if index not in self.registers:
             assert self.input or self.globl, (self.var_name, index)
             v = Val(f"{self.var_name}_{'_'.join(map(str, index))}")
             v.var_id = v.name
             self.registers[index] = v
-            if self.globl:
-                shape = self.curr_shape
-                typ = get_array_type(shape, ptr=False)
-                idx = ", ".join([f"i64 {i}" for i in ([0] + list(index))])
-                print(
-                    f"%{v.name} = load float, float* getelementptr inbounds ({typ}, {typ}* @{self.var_name}, {idx}), align 4")
+            # if self.globl:
+            #     shape = self.curr_shape
+            #     typ = get_array_type(shape, ptr=False)
+            #     idx = ", ".join([f"i64 {i}" for i in ([0] + list(index))])
+            #     print(
+            #         f"%{v.name} = load float, float* getelementptr inbounds ({typ}, {typ}* @{self.var_name}, {idx}), align 4")
 
         return self.registers[index]
 
     def __setitem__(self, index, value):
-        # print("store", self.var_name, index, value)
-        # assert not self.input
         index = self.idx_map(index)
-        self.registers[index] = value
         assert not self.input and not self.globl
-        if self.output:
-            # store i32 %1, i32* %out_r, align 4
-            var_name = f"%{self.var_name}_{'_'.join(map(str, index))}"
-            print(f"store float {value}, float* {var_name}, align 4")
+        # if index in self.registers:
+        #     var_name = f"%{self.var_name}_{'_'.join(map(str, index))}"
+        #     print(f"store float {value}, float* {var_name}, align 4")
+        self.registers[index] = value
 
     def idx_map(self, index):
         return np.unravel_index(
@@ -233,7 +236,6 @@ class Global:
         if index not in self.csts:
             self.csts[index] = Constant(self.global_array[index])
         cst = self.csts[index]
-        # print("load", cst)
         return cst
 
     def __setitem__(self, key, value):
@@ -296,7 +298,6 @@ def Forward(forward):
                 )
 
     print('source_filename = "LLVMDialectModule"')
-    # print("declare float @llvm.exp.f32(float %a)")
     print("declare float @expf(float)")
     print("declare float @llvm.fmuladd.f32(float %a, float %b, float %c)")
     for glo in globals:
@@ -304,6 +305,11 @@ def Forward(forward):
 
     print(f"define void @forward({', '.join(args)}) {{\n")
     forward()
+    for arr in OUTPUT_ARRAYS:
+        for index, value in arr.registers.items():
+            var_name = f"%{arr.var_name}_{'_'.join(map(str, index))}"
+            print(f"store float {value}, float* {var_name}, align 4")
+
     print("ret void")
     print("}")
 
