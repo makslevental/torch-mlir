@@ -174,22 +174,30 @@ def Exp(val):
 
 
 class ArrayDecl:
-    def __init__(self, var_name, *shape, input=False, output=False):
+    def __init__(self, var_name, *shape, input=False, output=False, globl=False):
         self.var_name = var_name
         self.curr_shape = shape
         self.prev_shape = shape
         self.registers = {}
         self.input = input
         self.output = output
+        self.globl = globl
 
     def __getitem__(self, index):
         # print("load", self.var_name, index)
         index = self.idx_map(index)
         if index not in self.registers:
-            assert self.input, (self.var_name, index)
+            assert self.input or self.globl, (self.var_name, index)
             v = Val(f"{self.var_name}_{'_'.join(map(str, index))}")
             v.var_id = v.name
             self.registers[index] = v
+            if self.globl:
+                shape = self.curr_shape
+                typ = get_array_type(shape, ptr=False)
+                idx = ", ".join([f"i64 {i}" for i in ([0] + list(index))])
+                print(
+                    f"%{v.name} = load float, float* getelementptr inbounds ({typ}, {typ}* @{self.var_name}, {idx}), align 4")
+
         return self.registers[index]
 
     def __setitem__(self, index, value):
@@ -197,6 +205,7 @@ class ArrayDecl:
         # assert not self.input
         index = self.idx_map(index)
         self.registers[index] = value
+        assert not self.input and not self.globl
         if self.output:
             # store i32 %1, i32* %out_r, align 4
             var_name = f"%{self.var_name}_{'_'.join(map(str, index))}"
@@ -255,20 +264,43 @@ def get_default_args(func):
     }
 
 
+def get_array_type(shape, ptr=True):
+    typ = ""
+    for s in shape:
+        typ += f"[{s} x "
+    typ += "float"
+    for _ in shape:
+        typ += f"]"
+    if ptr:
+        typ += "*"
+    return typ
+
+
 def Forward(forward):
     Args = get_default_args(forward)
     args = []
+    globals = []
     for _arg_name, arg in Args.items():
         if isinstance(arg, ArrayDecl):
-            for index in np.ndindex(*arg.curr_shape):
-                if arg.input:
+            if arg.input:
+                for index in np.ndindex(*arg.curr_shape):
                     args.append(f"float %{arg.var_name}_{'_'.join(map(str, index))}")
-                else:
+            elif arg.output:
+                for index in np.ndindex(*arg.curr_shape):
                     args.append(f"float* %{arg.var_name}_{'_'.join(map(str, index))}")
+            elif arg.globl:
+                # @src32 = common global [16 x float], align 4
+                typ = get_array_type(arg.curr_shape, ptr=False)
+                globals.append(
+                    f"@{arg.var_name} = common global {typ} zeroinitializer, align 4"
+                )
+
     print('source_filename = "LLVMDialectModule"')
     # print("declare float @llvm.exp.f32(float %a)")
     print("declare float @expf(float)")
     print("declare float @llvm.fmuladd.f32(float %a, float %b, float %c)")
+    for glo in globals:
+        print(glo)
 
     print(f"define void @forward({', '.join(args)}) {{\n")
     forward()

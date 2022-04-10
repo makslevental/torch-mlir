@@ -18,7 +18,6 @@ from braggnn import (
     theta_phi_g,
     theta_phi_g_combine,
 )
-from gpt import GPT, GPTConfig
 from layers import make_layer
 # from eager.torch_dispatch import TorchMLIRTensor
 from resnet18 import ResNet18
@@ -198,7 +197,7 @@ BUFFERIZATION_PIPELINE = [
 LOWERING_PIPELINE = [
     "builtin.func(cse)",
     # TODO: use this correctly in promoteallocs
-    # "torch-hls-drop-public-return",
+    "torch-hls-drop-public-return",
     "builtin.func(cse)",
     "builtin.func(convert-linalg-to-loops)",
     # "builtin.func(convert-linalg-to-affine-loops)",
