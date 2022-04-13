@@ -1,16 +1,34 @@
 import inspect
+import argparse
+
 import os
+import pathlib
+from pathlib import Path
 import re
 import shutil
 import stat
 import subprocess
 
 import torch
+
 # noinspection PyUnresolvedReferences
 from torch import nn
 from torchvision.models.resnet import BasicBlock
 
-from braggnn import (
+from torch_mlir.dialects.torch.importer.jit_ir import ModuleBuilder
+
+# noinspection PyUnresolvedReferences
+from torch_mlir.passmanager import PassManager
+
+# i have no idea why but if you don't import this then linalg passes aren't registered
+# noinspection PyUnresolvedReferences
+from torch_mlir_e2e_test.linalg_on_tensors_backends.refbackend import RefBackendInvoker
+
+# noinspection PyUnresolvedReferences
+from torch_mlir_e2e_test.torchscript.annotations import annotate_args, export
+from torch_mlir_e2e_test.utils import run_pipeline_with_repro_report
+
+from hls.python.models.braggnn import (
     BraggNN,
     cnn_layers_1,
     cnn_layers_2,
@@ -18,18 +36,8 @@ from braggnn import (
     theta_phi_g,
     theta_phi_g_combine,
 )
-from layers import make_layer
-# from eager.torch_dispatch import TorchMLIRTensor
-from resnet18 import ResNet18
-from torch_mlir.dialects.torch.importer.jit_ir import ModuleBuilder
-# noinspection PyUnresolvedReferences
-from torch_mlir.passmanager import PassManager
-# i have no idea why but if you don't import this then linalg passes aren't registered
-# noinspection PyUnresolvedReferences
-from torch_mlir_e2e_test.linalg_on_tensors_backends.refbackend import RefBackendInvoker
-# noinspection PyUnresolvedReferences
-from torch_mlir_e2e_test.torchscript.annotations import annotate_args, export
-from torch_mlir_e2e_test.utils import run_pipeline_with_repro_report
+from hls.python.models.layers import make_layer
+from hls.python.models.resnet18 import ResNet18
 
 
 def set_weights(mod, typ=torch.float32, val=1, requires_grad=False):
@@ -96,7 +104,7 @@ def make_small_braggnn(in_channels=1, hw=11):
 
 
 def make_conv(
-        hw=5, in_channels=1, out_channels=1, kernel_size=3, stride=1, padding=0, bias=False
+    hw=5, in_channels=1, out_channels=1, kernel_size=3, stride=1, padding=0, bias=False
 ):
     with torch.no_grad():
         mod = torch.nn.Conv2d(
@@ -137,29 +145,18 @@ def make_resnet18():
         return make_layer(mod, [None, ([1, 3, 32, 32], torch.int32, True)])
 
 
-def make_gpt():
-    with torch.no_grad():
-        mconf = GPTConfig(10, 6, n_layer=2, n_head=4, n_embd=128)
-        mod = GPT(mconf)
-        mod.eval()
-        mod.apply(set_weights)
-        return make_layer(
-            mod, [None, ([512, 6], torch.int32, True), ([512, 6], torch.int32, True)]
-        )
-
-
 def hack_for_calyx(out):
     out = (
         out.replace("f32", "i32")
-            .replace("2.000000e+00", "2")
-            .replace("1.000000e+00", "1")
+        .replace("2.000000e+00", "2")
+        .replace("1.000000e+00", "1")
     )
     open(f"../scripts/braggnn.affine.mlir", "w").write(out)
     out = subprocess.run(
         [
-            "/home/mlevental/dev_projects/torch-mlir/cmake-build-debug/bin/torch-mlir-opt",
+            "/home/maksim/dev_projects/torch-mlir/cmake-build-debug/bin/torch-mlir-opt",
             "-pass-pipeline=reconcile-unrealized-casts",
-            "/home/mlevental/dev_projects/torch-mlir/hls/scripts/braggnn.affine.mlir",
+            "/home/maksim/dev_projects/torch-mlir/hls/scripts/braggnn.affine.mlir",
         ],
         capture_output=True,
     )
@@ -174,9 +171,7 @@ def hack_for_calyx(out):
     out = re.sub(r"memref.global .*", "", out)
 
     open(f"../scripts/braggnn.affine.mlir", "w").write(out)
-    open(f"/home/mlevental/dev_projects/circt/hls/braggnn.{dialect}.mlir", "w").write(
-        out
-    )
+    open(f"/home/maksim/dev_projects/circt/hls/braggnn.{dialect}.mlir", "w").write(out)
 
 
 BUFFERIZATION_PIPELINE = [
@@ -208,12 +203,12 @@ LOWERING_PIPELINE = [
 ]
 
 PIPELINE = (
-        [
-            "torchscript-module-to-torch-backend-pipeline",
-            "torch-backend-to-linalg-on-tensors-backend-pipeline",
-        ]
-        + BUFFERIZATION_PIPELINE
-        + LOWERING_PIPELINE
+    [
+        "torchscript-module-to-torch-backend-pipeline",
+        "torch-backend-to-linalg-on-tensors-backend-pipeline",
+    ]
+    + BUFFERIZATION_PIPELINE
+    + LOWERING_PIPELINE
 )
 # print('torch-mlir-opt -debug --pass-pipeline"', ",".join(PIPELINE), '"')
 
@@ -249,64 +244,38 @@ def make_wrapper(wrapper_str, in_shape, out_shape):
     return wrapper_str
 
 
-def put_script_files(out, mod_name, in_shape, out_shape, out_suffix=""):
-    out = out.replace('cf.assert %true, "expect groups to be 1"', "")
+def put_script_files(*, out_str, in_shape, out_shape, out_dir, forward_suffix=""):
+    out_str = re.sub(r"cf.assert .*", "", out_str)
 
-    out_dir = f"/home/mlevental/dev_projects/torch-mlir/hls/scripts/individual_layers/{mod_name}"
     os.makedirs(f"{out_dir}", exist_ok=True)
-    open(f"{out_dir}/forward{out_suffix}.mlir", "w").write(out)
+    open(f"{out_dir}/forward{forward_suffix}.mlir", "w").write(out_str)
 
-    wrapper_str = open(
-        "/home/mlevental/dev_projects/torch-mlir/hls/scripts/wrapper.cpp.fmt", "r"
-    ).read()
+    wrapper_str = open("wrapper.cpp.fmt", "r").read()
     wrapper_str = make_wrapper(wrapper_str, in_shape, out_shape)
     open(f"{out_dir}/wrapper.cpp", "w").write(wrapper_str)
 
-    run_hls = open(
-        "/home/mlevental/dev_projects/torch-mlir/hls/scripts/run_hls.tcl", "r"
-    ).read()
+    run_hls = open("run_hls.tcl", "r").read()
     run_hls = run_hls.replace("XXX_DIR_XXX", out_dir)
-    run_hls = run_hls.replace(
-        "XXX_LL_FILE_XXX", "forward.ll"
-    )
+    run_hls = run_hls.replace("XXX_LL_FILE_XXX", "forward.ll")
     open(f"{out_dir}/run_hls.tcl", "w").write(run_hls)
 
-    hls_hooks = open(
-        "/home/mlevental/dev_projects/torch-mlir/hls/scripts/hls_hooks.tcl", "r"
-    ).read()
+    hls_hooks = open("hls_hooks.tcl", "r").read()
     hls_hooks = hls_hooks.replace("XXX_DIR_XXX", out_dir)
-    hls_hooks = hls_hooks.replace(
-        "XXX_LL_FILE_XXX", "forward.ll"
-    )
+    hls_hooks = hls_hooks.replace("XXX_LL_FILE_XXX", "forward.ll")
     open(f"{out_dir}/hls_hooks.tcl", "w").write(hls_hooks)
 
-    shutil.copyfile(
-        "/home/mlevental/dev_projects/torch-mlir/hls/scripts/Makefile",
-        f"{out_dir}/Makefile",
-    )
-    shutil.copyfile(
-        "/home/mlevental/dev_projects/torch-mlir/hls/scripts/read_large_file.py",
-        f"{out_dir}/read_large_file.py",
-    )
-    shutil.copyfile(
-        "/home/mlevental/dev_projects/torch-mlir/hls/scripts/run_vitis.sh",
-        f"{out_dir}/run_vitis.sh",
-    )
+    shutil.copyfile("Makefile", f"{out_dir}/Makefile")
+    shutil.copyfile("read_large_file.py", f"{out_dir}/read_large_file.py")
+    shutil.copyfile("run_vitis.sh", f"{out_dir}/run_vitis.sh")
     st = os.stat(f"{out_dir}/run_vitis.sh")
     os.chmod(f"{out_dir}/run_vitis.sh", st.st_mode | stat.S_IEXEC)
-    shutil.copyfile(
-        "/home/mlevental/dev_projects/torch-mlir/hls/pytranslate/mlir_ops.py",
-        f"{out_dir}/mlir_ops.py",
-    )
-    shutil.copyfile(
-        "/home/mlevental/dev_projects/torch-mlir/hls/scripts/translate.sh",
-        f"{out_dir}/translate.sh",
-    )
+    shutil.copyfile("mlir_ops.py", f"{out_dir}/completely_unroll_to_llvm_ir.py")
+    shutil.copyfile("translate.sh", f"{out_dir}/translate.sh")
     st = os.stat(f"{out_dir}/translate.sh")
     os.chmod(f"{out_dir}/translate.sh", st.st_mode | stat.S_IEXEC)
 
 
-def make_sub_layer(mod, in_shapes, out_shape, scale):
+def make_sub_layer(mod, in_shapes, out_shape, scale, root_out_dir):
     recursivescriptmodule, class_annotator = make_layer(
         mod, [None] + [(in_shape, torch.float32, True) for in_shape in in_shapes]
     )
@@ -318,10 +287,14 @@ def make_sub_layer(mod, in_shapes, out_shape, scale):
     out = mb.module.operation.get_asm(
         large_elements_limit=100000, enable_debug_info=False
     )
-    put_script_files(out, recursivescriptmodule.original_name+f".{scale}", in_shapes[0], out_shape)
+
+    out_dir = str(root_out_dir / Path(recursivescriptmodule.original_name + f".{scale}"))
+    put_script_files(
+        out_str=out, in_shape=in_shapes[0], out_shape=out_shape, out_dir=out_dir
+    )
 
 
-def make_split_braggnn(scale=4, imgsz=11):
+def make_split_braggnn(root_out_dir, scale=4, imgsz=11, simplify_weights=False):
     class mods:
         cnn_layers_1 = cnn_layers_1(scale=scale, imgsz=imgsz)
         theta = theta_phi_g(scale=scale, imgsz=imgsz)
@@ -334,16 +307,17 @@ def make_split_braggnn(scale=4, imgsz=11):
         attr for attr_name, attr in attributes if isinstance(attr, torch.nn.Module)
     ]:
         attr.eval()
-        # attr.apply(set_weights)
+        if simplify_weights:
+            attr.apply(set_weights)
 
     with torch.no_grad():
         x1 = torch.randn(1, 1, imgsz, imgsz)
         cnn1 = mods.cnn_layers_1(x1)
-        make_sub_layer(mods.cnn_layers_1, [x1.shape], cnn1.shape, scale)
+        make_sub_layer(mods.cnn_layers_1, [x1.shape], cnn1.shape, scale, root_out_dir)
 
         # nlb
         theta = mods.theta(cnn1)
-        make_sub_layer(mods.theta, [cnn1.shape], theta.shape, scale)
+        make_sub_layer(mods.theta, [cnn1.shape], theta.shape, scale, root_out_dir)
         phi = mods.theta(cnn1)
         g = mods.theta(cnn1)
         nlb = mods.theta_phi_g_combine(cnn1, theta, phi, g)
@@ -351,26 +325,30 @@ def make_split_braggnn(scale=4, imgsz=11):
             mods.theta_phi_g_combine,
             [cnn1.shape, theta.shape, phi.shape, g.shape],
             nlb.shape,
-            scale
+            scale,
+            root_out_dir,
         )
 
         # cnn2
         cnn2 = mods.cnn_layers_2(nlb)
-        make_sub_layer(mods.cnn_layers_2, [nlb.shape], cnn2.shape, scale)
+        make_sub_layer(mods.cnn_layers_2, [nlb.shape], cnn2.shape, scale, root_out_dir)
 
         # dense layers
         dense = mods.dense_layers(cnn2)
-        make_sub_layer(mods.dense_layers, [cnn2.shape], dense.shape, scale)
+        make_sub_layer(
+            mods.dense_layers, [cnn2.shape], dense.shape, scale, root_out_dir
+        )
 
 
-def make_whole_braggnn(scale=4, imgsz=11):
+def make_whole_braggnn(root_out_dir, scale=4, imgsz=11, simplify_weights=False):
     mb = ModuleBuilder()
     with torch.no_grad():
         mod = BraggNN(imgsz=imgsz, scale=scale)
         mod.eval()
         t = torch.randn((1, 1, imgsz, imgsz))
         y = mod(t)
-        # mod.apply(set_weights)
+        if simplify_weights:
+            mod.apply(set_weights)
         recursivescriptmodule, class_annotator = make_layer(
             mod, [None, ([1, 1, imgsz, imgsz], torch.float32, True)]
         )
@@ -383,12 +361,30 @@ def make_whole_braggnn(scale=4, imgsz=11):
         large_elements_limit=100000, enable_debug_info=False
     )
 
+    out_dir = str(root_out_dir / Path(recursivescriptmodule.original_name + f".{scale}"))
     put_script_files(
-        out, recursivescriptmodule.original_name+f".{scale}", tuple(t.shape), tuple(y.shape)
+        out_str=out, in_shape=tuple(t.shape), out_shape=tuple(y.shape), out_dir=out_dir
     )
 
 
+def main():
+    parser = argparse.ArgumentParser(description="make stuff")
+    parser.add_argument("--no_whole_braggnn", action="store_false", default=False)
+    parser.add_argument("--no_split_braggnn", action="store_false", default=False)
+    parser.add_argument("--low_scale", type=int, default=1)
+    parser.add_argument("--high_scale", type=int, default=5)
+    parser.add_argument("--out_dir", type=Path, default=Path("../examples"))
+    args = parser.parse_args()
+
+    print(args)
+    args.out_dir = args.out_dir.resolve()
+
+    for i in range(args.low_scale, args.high_scale):
+        if not args.no_split_braggnn:
+            make_split_braggnn(args.out_dir, scale=i, imgsz=11)
+        if not args.no_whole_braggnn:
+            make_whole_braggnn(args.out_dir, scale=i, imgsz=11)
+
+
 if __name__ == "__main__":
-    for i in range(1, 5):
-        make_split_braggnn(scale=i, imgsz=11)
-        make_whole_braggnn(scale=i, imgsz=11)
+    main()
