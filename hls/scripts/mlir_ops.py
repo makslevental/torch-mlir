@@ -26,7 +26,8 @@ class Val:
         if isinstance(other, (float, int, bool)):
             other = Constant(other)
         v = Val(f"(* ({self}) ({other}))")
-        print(f"{v} = fmul float {self}, {other}")
+        # print(f"{v} = fmul float {self}, {other}")
+        print(f"{v} = call float @llvm.fmuladd.f32(float {self}, float {other}, float 0.0)")
         return v
 
     def __add__(self, other):
@@ -34,7 +35,8 @@ class Val:
         if isinstance(other, (float, int, bool)):
             other = Constant(other)
         v = Val(f"(+ ({self}) ({other}))")
-        print(f"{v} = fadd float {self}, {other}")
+        # print(f"{v} = fadd float {self}, {other}")
+        print(f"{v} = call float @llvm.fmuladd.f32(float {self}, float 1.0, float {other})")
         return v
 
     def __sub__(self, other):
@@ -61,7 +63,7 @@ class Val:
         if isinstance(other, (float, int, bool)):
             other = Constant(other)
         v = Val(f"(> ({self}) ({other}))")
-        print(f"{v} = fcmp ugt float {self}, {other}")
+        # print(f"{v} = fcmp ugt float {self}, {other}")
         return v
 
     def __str__(self):
