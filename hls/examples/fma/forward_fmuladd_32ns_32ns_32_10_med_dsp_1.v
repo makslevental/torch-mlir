@@ -6,12 +6,11 @@
 
 `timescale 1ns/1ps
 
-module forward_fmul_32ns_32ns_32_10_med_dsp_1
+module forward_fmuladd_32ns_32ns_32_10_med_dsp_1
 #(parameter
-    ID         = 1,
-    NUM_STAGE  = 3,
     din0_WIDTH = 32,
     din1_WIDTH = 32,
+    din2_WIDTH = 32,
     dout_WIDTH = 32
 )(
     input  wire                  clk,
@@ -19,6 +18,7 @@ module forward_fmul_32ns_32ns_32_10_med_dsp_1
     input  wire                  ce,
     input  wire [din0_WIDTH-1:0] din0,
     input  wire [din1_WIDTH-1:0] din1,
+    input  wire [din2_WIDTH-1:0] din2,
     output wire [dout_WIDTH-1:0] dout
 );
 //------------------------Local signal-------------------
@@ -28,21 +28,26 @@ wire                  a_tvalid;
 wire [31:0]           a_tdata;
 wire                  b_tvalid;
 wire [31:0]           b_tdata;
+wire                  c_tvalid;
+wire [31:0]           c_tdata;
 wire                  r_tvalid;
 wire [31:0]           r_tdata;
 reg  [din0_WIDTH-1:0] din0_buf1;
 reg  [din1_WIDTH-1:0] din1_buf1;
+reg  [din2_WIDTH-1:0] din2_buf1;
 reg                   ce_r;
 wire [dout_WIDTH-1:0] dout_i;
 reg  [dout_WIDTH-1:0] dout_r;
 //------------------------Instantiation------------------
-forward_fmul_32ns_32ns_32_10_med_dsp_1_ip forward_fmul_32ns_32ns_32_10_med_dsp_1_ip_u (
+forward_fmuladd_32ns_32ns_32_10_med_dsp_1_ip forward_fmuladd_32ns_32ns_32_10_med_dsp_1_ip_u (
     .aclk                 ( aclk ),
     .aclken               ( aclken ),
     .s_axis_a_tvalid      ( a_tvalid ),
     .s_axis_a_tdata       ( a_tdata ),
     .s_axis_b_tvalid      ( b_tvalid ),
     .s_axis_b_tdata       ( b_tdata ),
+    .s_axis_c_tvalid      ( c_tvalid ),
+    .s_axis_c_tdata       ( c_tdata ),
     .m_axis_result_tvalid ( r_tvalid ),
     .m_axis_result_tdata  ( r_tdata )
 );
@@ -53,12 +58,15 @@ assign a_tvalid = 1'b1;
 assign a_tdata  = din0_buf1;
 assign b_tvalid = 1'b1;
 assign b_tdata  = din1_buf1;
+assign c_tvalid = 1'b1;
+assign c_tdata  = din2_buf1;
 assign dout_i   = r_tdata;
 
 always @(posedge clk) begin
     if (ce) begin
         din0_buf1 <= din0;
         din1_buf1 <= din1;
+        din2_buf1 <= din2;
     end
 end
 
