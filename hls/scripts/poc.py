@@ -269,10 +269,18 @@ def put_script_files(*, out_str, in_shape, out_shape, out_dir, forward_suffix=""
     shutil.copyfile("run_vitis.sh", f"{out_dir}/run_vitis.sh")
     st = os.stat(f"{out_dir}/run_vitis.sh")
     os.chmod(f"{out_dir}/run_vitis.sh", st.st_mode | stat.S_IEXEC)
-    shutil.copyfile("mlir_ops.py", f"{out_dir}/completely_unroll_to_llvm_ir.py")
+    shutil.copyfile("mlir_ops.py", f"{out_dir}/mlir_ops.py")
     shutil.copyfile("translate.sh", f"{out_dir}/translate.sh")
     st = os.stat(f"{out_dir}/translate.sh")
     os.chmod(f"{out_dir}/translate.sh", st.st_mode | stat.S_IEXEC)
+
+    shutil.copyfile("make_schedule.py", f"{out_dir}/make_schedule.py")
+    shutil.copyfile("run_vivado.tcl", f"{out_dir}/run_vivado.tcl")
+    shutil.copyfile("run_vivado.sh", f"{out_dir}/forward_fmuladd_32ns_32ns_32_10_med_dsp_1_ip.tcl")
+    shutil.copyfile("run_vivado.sh", f"{out_dir}/forward_fmuladd_32ns_32ns_32_10_med_dsp_1.v")
+    shutil.copyfile("run_vivado.sh", f"{out_dir}/run_vivado.sh")
+    st = os.stat(f"{out_dir}/run_vivado.sh")
+    os.chmod(f"{out_dir}/run_vivado.sh", st.st_mode | stat.S_IEXEC)
 
 
 def make_sub_layer(mod, in_shapes, out_shape, scale, root_out_dir):
@@ -288,7 +296,9 @@ def make_sub_layer(mod, in_shapes, out_shape, scale, root_out_dir):
         large_elements_limit=100000, enable_debug_info=False
     )
 
-    out_dir = str(root_out_dir / Path(recursivescriptmodule.original_name + f".{scale}"))
+    out_dir = str(
+        root_out_dir / Path(recursivescriptmodule.original_name + f".{scale}")
+    )
     put_script_files(
         out_str=out, in_shape=in_shapes[0], out_shape=out_shape, out_dir=out_dir
     )
@@ -361,7 +371,38 @@ def make_whole_braggnn(root_out_dir, scale=4, imgsz=11, simplify_weights=False):
         large_elements_limit=100000, enable_debug_info=False
     )
 
-    out_dir = str(root_out_dir / Path(recursivescriptmodule.original_name + f".{scale}"))
+    out_dir = str(
+        root_out_dir / Path(recursivescriptmodule.original_name + f".{scale}")
+    )
+    put_script_files(
+        out_str=out, in_shape=tuple(t.shape), out_shape=tuple(y.shape), out_dir=out_dir
+    )
+
+
+def make_single_small_cnn(root_out_dir, scale=4, imgsz=11, simplify_weights=False):
+    mb = ModuleBuilder()
+    with torch.no_grad():
+        mod = torch.nn.Conv2d(1, scale, 3)
+        mod.eval()
+        t = torch.randn((1, 1, imgsz, imgsz))
+        y = mod(t)
+        if simplify_weights:
+            mod.apply(set_weights)
+        recursivescriptmodule, class_annotator = make_layer(
+            mod, [None, ([1, 1, imgsz, imgsz], torch.float32, True)]
+        )
+
+    mb.import_module(recursivescriptmodule._c, class_annotator)
+
+    run_pipeline_with_repro_report(mb.module, ",".join(PIPELINE), "")
+
+    out = mb.module.operation.get_asm(
+        large_elements_limit=100000, enable_debug_info=False
+    )
+
+    out_dir = str(
+        root_out_dir / Path(recursivescriptmodule.original_name + f".{scale}")
+    )
     put_script_files(
         out_str=out, in_shape=tuple(t.shape), out_shape=tuple(y.shape), out_dir=out_dir
     )
@@ -378,6 +419,8 @@ def main():
 
     print(args)
     args.out_dir = args.out_dir.resolve()
+
+    make_single_small_cnn(args.out_dir, scale=2, imgsz=5, simplify_weights=False)
 
     for i in range(args.low_scale, args.high_scale):
         if not args.no_split_braggnn:
