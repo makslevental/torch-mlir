@@ -2,6 +2,9 @@
 // Created by mlevental on 4/18/22.
 //
 
+#include "thread_pool.hpp"
+#include <functional>
+#include <numeric>
 #include <algorithm>
 #include <atomic>
 #include <condition_variable>
@@ -13,12 +16,23 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include "yamc_barrier.hpp"
 #include <thread>
 #include <vector>
 
 using namespace std;
 
-const int NUM_THREADS = 2;
+const unsigned long NUM_THREADS = 8;
+
+template<typename... T>
+void print(const T &...items) {
+  (cerr << ... << items);
+}
+
+template<typename... T>
+void println(const T &...items) {
+  print(items..., '\n');
+}
 
 vector<string> read_ll_file(string fp) {
   ifstream myfile(fp);
@@ -41,8 +55,7 @@ const regex reg4("float ");
 const regex reg5("(float\\* (%[\\d|a-z|_]*))");
 const regex reg6("float\\* ");
 
-std::pair<vector<string>, vector<string>> get_ssas_from_ir_line(string line) {
-
+std::pair<vector<string>, vector<string>> get_ssas_from_ir_line(string line, synced_stream &sync_out) {
   line = std::regex_replace(line, reg1, "");
   std::string line_orig = line;
 
@@ -59,10 +72,8 @@ std::pair<vector<string>, vector<string>> get_ssas_from_ir_line(string line) {
 
   vector<string> assign;
   vector<string> deps;
-  if (line_orig.find("fmul") != std::string::npos ||
-      line_orig.find("fadd") != std::string::npos ||
-      line_orig.find("fcmp") != std::string::npos ||
-      line_orig.find("fsub") != std::string::npos ||
+  if (line_orig.find("fmul") != std::string::npos || line_orig.find("fadd") != std::string::npos ||
+      line_orig.find("fcmp") != std::string::npos || line_orig.find("fsub") != std::string::npos ||
       line_orig.find("fdiv") != std::string::npos) {
     assign = {idents[0]};
     deps = std::vector<string>(idents.begin() + 1, idents.end());
@@ -75,12 +86,12 @@ std::pair<vector<string>, vector<string>> get_ssas_from_ir_line(string line) {
   } else if (line_orig.find("define void @forward") != std::string::npos) {
     std::smatch match;
     while (regex_search(line_orig, match, reg3)) {
-      auto inp = std::regex_replace(string(match[0]), reg4, ", ");
+      auto inp = std::regex_replace(string(match[0]), reg4, "");
       assign.emplace_back(inp);
       line_orig = match.suffix();
     }
     while (regex_search(line_orig, match, reg5)) {
-      auto outp = std::regex_replace(string(match[0]), reg6, ", ");
+      auto outp = std::regex_replace(string(match[0]), reg6, "");
       deps.emplace_back(outp);
       line_orig = match.suffix();
     }
@@ -91,205 +102,359 @@ std::pair<vector<string>, vector<string>> get_ssas_from_ir_line(string line) {
   return std::make_pair(assign, deps);
 }
 
-vector<vector<string>> topo_sort(map<string, set<string>> G) {
-  vector<set<string>> todo_sets(NUM_THREADS);
-  map<string, int> node_to_thread;
+template<typename Key, typename Val>
+struct ThreadSafeMap {
+  std::map<Key, Val> mainCache;
+  std::map<Key, std::unique_ptr<std::mutex>> mutexCache;
+  std::mutex gMutex;
 
-  int i = 0;
-  for (auto [u, vs] : G) {
-    todo_sets[i % NUM_THREADS].insert(u);
-    node_to_thread[u] = i++ % NUM_THREADS;
-    for (const auto &v : vs) {
-      todo_sets[i % NUM_THREADS].insert(v);
-      node_to_thread[v] = i++ % NUM_THREADS;
-    }
-  }
-
-  vector<vector<string>> todos(NUM_THREADS);
-  for (int j = 0; j < NUM_THREADS; ++j) {
-    todos.emplace_back(todo_sets[j].begin(), todo_sets[j].end());
-  }
-
-
-
-  std::mutex mtx;
-  std::vector<std::thread> threads;
-  std::condition_variable cv;
-  std::atomic<int> finished{0};
-  std::atomic<int> initialized{0};
-  std::atomic<bool> started{false};
-  vector<vector<string>> all_outs;
-
-
-  auto run = [&](int thread_id) {
-    ++initialized;
-    cv.notify_all();
+  Val getSafe(Key key) {
+    std::mutex *inner_mutex;
     {
-      std::unique_lock<std::mutex> m(mtx);
-      cv.wait(m, [&]() -> bool { return started; });
-    }
-
-    auto todo_set = todo_sets[thread_id];
-    auto todo = todos[thread_id];
-    while (!todo_set.empty()) {
-//      set<string> output;
-      for (const auto &node : todo) {
-        set<string> intersect;
-        set_intersection(todo_set.begin(), todo_set.end(), G[node].begin(),
-                         G[node].end(),
-                         std::inserter(intersect, intersect.begin()));
-        if (intersect.empty())
-          output.insert(node);
+      std::lock_guard<std::mutex> g_lk(gMutex);
+      auto it = mutexCache.find(key);
+      if (it == mutexCache.end()) {
+        it = mutexCache.emplace(key, std::make_unique<std::mutex>()).first;
       }
-
-      set<string> set_diff;
-      std::set_difference(todo_set.begin(), todo_set.end(), output.begin(),
-                          output.end(),
-                          std::inserter(set_diff, set_diff.begin()));
-      todo_set = set_diff;
-
-      vector<string> new_todo;
-      std::copy_if(todo.begin(), todo.end(), std::back_inserter(new_todo),
-                   [&todo_set](auto u) { return todo_set.count(u); });
-      todo = new_todo;
-
-      all_outs.emplace_back(vector<string>(output.begin(), output.end()));
+      inner_mutex = it->second.get();
     }
-
-    ++finished;
-    cv.notify_all();
-
-  };
-
-
-
-  threads.reserve(NUM_THREADS);
-  for (int thread_id = 0; thread_id < NUM_THREADS; ++thread_id) {
-    threads.emplace_back(run, thread_id);
-  }
-  {
-    std::unique_lock<std::mutex> m(mtx);
-    cv.wait(m, [&]() { return initialized == NUM_THREADS; });
-  }
-
-  started = true;
-  cv.notify_all();
-
-  if (!threads.empty()) {
-    for (int thread_id = 0; thread_id < NUM_THREADS; ++thread_id) {
-      threads[thread_id].join();
+    {
+      std::lock_guard<std::mutex> c_lk(*inner_mutex);
+      return mainCache[key];
     }
   }
 
+  void decrSafe(Key key) {
+    std::mutex *inner_mutex;
+    {
+      std::lock_guard<std::mutex> g_lk(gMutex);
+      auto it = mutexCache.find(key);
+      if (it == mutexCache.end()) {
+        it = mutexCache.emplace(key, std::make_unique<std::mutex>()).first;
+      }
+      inner_mutex = it->second.get();
+    }
+    {
+      std::lock_guard<std::mutex> c_lk(*inner_mutex);
+      mainCache[key]--;
+    }
+  }
 
+  Val getUnsafe(Key key) { return mainCache[key]; }
 
+  void setSafe(Key key, Val val) {
+    std::mutex *inner_mutex;
+    {
+      std::lock_guard<std::mutex> g_lk(gMutex);
+      auto it = mutexCache.find(key);
+      if (it == mutexCache.end()) {
+        it = mutexCache.emplace(key, std::make_unique<std::mutex>()).first;
+      }
+      inner_mutex = it->second.get();
+    }
+    {
+      std::lock_guard<std::mutex> c_lk(*inner_mutex);
+      mainCache[key] = val;
+    }
+  }
 
+  void setUnsafe(Key key, Val val) { mainCache[key] = val; }
 
+  void print() {
+    for (const auto &item: mainCache)
+      println(item.first, " in degree ", item.second);
+  }
+};
 
+typedef std::uint_fast32_t ui32;
+typedef std::uint_fast64_t ui64;
 
-
-
-
-
-
-
-
-
-
-
-//  vector<string> todo(todo_set.begin(), todo_set.end());
-
-//  while (!todo_set.empty()) {
-//    set<string> output;
-//    for (const auto &node : todo) {
-//      set<string> intersect;
-//      set_intersection(todo_set.begin(), todo_set.end(), edges[node].begin(),
-//                       edges[node].end(),
-//                       std::inserter(intersect, intersect.begin()));
-//      if (intersect.empty())
-//        output.insert(node);
-//    }
-//
-//    set<string> set_diff;
-//    std::set_difference(todo_set.begin(), todo_set.end(), output.begin(),
-//                        output.end(),
-//                        std::inserter(set_diff, set_diff.begin()));
-//    todo_set = set_diff;
-//
-//    vector<string> new_todo;
-//    std::copy_if(todo.begin(), todo.end(), std::back_inserter(new_todo),
-//                 [&todo_set](auto u) { return todo_set.count(u); });
-//    todo = new_todo;
-//
-//    all_outs.emplace_back(vector<string>(output.begin(), output.end()));
-//  }
-
-  return all_outs;
+template<typename T1, typename T2, typename F>
+void
+parallelize_loop(thread_pool &pool, const T1 &first_index, const T2 &index_after_last, F &loop, ui32 num_blocks = 0,
+                 ui32 sleep_duration = 1) {
+  typedef std::common_type_t<T1, T2> T;
+  T the_first_index = (T) first_index;
+  T last_index = (T) index_after_last;
+  if (the_first_index == last_index)
+    return;
+  if (last_index < the_first_index) {
+    T temp = last_index;
+    last_index = the_first_index;
+    the_first_index = temp;
+  }
+  last_index--;
+  if (num_blocks == 0)
+    num_blocks = NUM_THREADS;
+  ui64 total_size = (ui64) (last_index - the_first_index + 1);
+  ui64 block_size = (ui64) (total_size / num_blocks);
+  if (block_size == 0) {
+    block_size = 1;
+    num_blocks = (ui32) total_size > 1 ? (ui32) total_size : 1;
+  }
+  std::atomic<ui32> blocks_running = 0;
+  for (ui32 t = 0; t < num_blocks; t++) {
+    T start = ((T) (t * block_size) + the_first_index);
+    T end = (t == num_blocks - 1) ? last_index + 1 : ((T) ((t + 1) * block_size) + the_first_index);
+    blocks_running++;
+    pool.push_task([start, end, &loop, &blocks_running] {
+      loop(start, end);
+      blocks_running--;
+    });
+  }
+  while (blocks_running != 0) {
+    if (sleep_duration)
+      std::this_thread::sleep_for(std::chrono::microseconds(sleep_duration));
+    else
+      std::this_thread::yield();
+  }
 }
 
-tuple<map<string, set<string>>, map<string, string>, vector<string>,
-      vector<string>>
+
+tuple<vector<string>, map<string, set<string>>, map<string, set<string>>, map<string, string>, vector<string>, vector<string>>
 make_graph(const std::vector<string> &lines) {
   map<string, set<string>> G;
+  map<string, set<string>> Ginv;
   map<string, string> defining_lines;
   vector<string> inputs;
   vector<string> outputs;
+  thread_pool pool(NUM_THREADS);
+  synced_stream sync_out;
 
-  for (const auto &line : lines) {
-    auto [assign, deps] = get_ssas_from_ir_line(line);
-    if (assign.empty())
-      continue;
+  auto loop = [&lines, &inputs, &outputs, &defining_lines, &G, &Ginv, &sync_out](const int &a, const int &b) mutable {
+    for (int i = a; i < b; ++i) {
+      auto line = lines[i];
+      auto [assign, deps] = get_ssas_from_ir_line(line, sync_out);
+      if (assign.empty())
+        continue;
 
-    if (line.find("define void @forward") != std::string::npos) {
-      inputs = assign;
-      outputs = deps;
-      continue;
+
+      if (line.find("define void @forward") != std::string::npos) {
+        inputs = assign;
+        outputs = deps;
+        continue;
+      }
+
+      if (line.find("declare") != std::string::npos) {
+        continue;
+      }
+
+      defining_lines[assign[0]] = line;
+      for (const auto &assign: assign) {
+        for (const auto &dep: deps) {
+          // dep precedes assign
+          G[dep].emplace(assign);
+          Ginv[assign].emplace(dep);
+        }
+      }
     }
-
-    if (line.find("declare") != std::string::npos) {
-      continue;
-    }
-
-    defining_lines[assign[0]] = line;
-    for (const auto &dep : deps)
-      G[assign[0]].emplace(dep);
+  };
+  parallelize_loop(pool, 0, lines.size(), loop);
+  pool.wait_for_tasks();
+  for (const auto &inp: inputs) {
+    Ginv[inp] = {};
+  }
+  for (const auto &outp: outputs) {
+    G[outp] = {};
   }
 
-  return std::make_tuple(G, defining_lines, inputs, outputs);
+  set<string> all_set{};
+  for (const auto &item: G) {
+    all_set.insert(item.first);
+    for (const auto &item2: item.second)
+      all_set.insert(item2);
+  }
+  for (const auto &item: Ginv) {
+    all_set.insert(item.first);
+    for (const auto &item2: item.second)
+      all_set.insert(item2);
+  }
+
+  //    for (const auto &item: G) {
+  //        print("dep ", item.first, " assigns :");
+  //        for (const auto &item2: item.second)
+  //            print(item2, ", ");
+  //        println("");
+  //    }
+  //    for (const auto &item: Ginv) {
+  //        print("assign ", item.first, " deps :");
+  //        for (const auto &item2: item.second)
+  //            print(item2, ", ");
+  //        println("");
+  //    }
+
+  auto all_vec = vector<string>(all_set.begin(), all_set.end());
+  std::sort(all_vec.begin(), all_vec.end());
+  return std::make_tuple(all_vec, G, Ginv, defining_lines, inputs, outputs);
 }
 
-void make_stages(map<string, set<string>> G, map<string, string> defining_lines,
-                 vector<string> inputs, vector<string> outputs) {
+vector<set<std::string>>
+parallel_topo_sort(vector<string> all, map<string, set<string>> G, map<string, set<string>> Ginv) {
+  ThreadSafeMap<string, int> in_degree;
+  thread_pool pool(NUM_THREADS);
+
+  // initialize all in-degrees
+  // note this is the in-degree from u <- v
+  for (auto &u: all) {
+    if (Ginv.count(u))
+      in_degree.setUnsafe(u, Ginv[u].size());
+    else
+      in_degree.setUnsafe(u, 0);
+  }
+  in_degree.print();
 
 
+  // partition nodes
+  size_t length = all.size() / NUM_THREADS;
+  size_t remain = all.size() % NUM_THREADS;
+  size_t begin = 0;
+  size_t end = 0;
+  map<int, set<string>> partition;
+  for (size_t i = 0; i < std::min(NUM_THREADS, all.size()); ++i) {
+    end += (remain > 0) ? (length + !!(remain--)) : length;
+    partition[i] = set<string>(all.begin() + begin, all.begin() + end);
+    println("partition ", i, " ", partition[i].size());
+    begin = end;
+  }
+  println("\n");
+
+  // initialize 0 in degree nodes per thread/partition
+  atomic<int> depth = 0;
+  atomic<int> num_not_done = NUM_THREADS;
+
+  map<int, map<int, set<string>>> all_outputs;
+  yamc::barrier sync_point(NUM_THREADS, [&depth, &partition, &num_not_done, &in_degree]()mutable {
+    println("\n");
+    ++depth;
+    int _num_not_done = 0;
+    for (const auto &item: partition) {
+      if (!item.second.empty())
+        _num_not_done += 1;
+      else {
+        //                print(item.second.size(), ", ");
+      }
+    }
+    //        for (const auto &item: partition) {
+    //            if (item.second.size() < 20)
+    //                for (const auto &item: item.second) {
+    //                    print(item, " in degree ", in_degree.mainCache[item], ", ");
+    //                }
+    //            println("");
+    //        }
+    //        in_degree.print();
+
+    num_not_done = _num_not_done;
+    println("num done ", num_not_done);
+    println("\n");
+  });
+
+  for (int i = 0; i < NUM_THREADS; ++i) {
+    all_outputs[i] = {};
+    pool.push_task([&in_degree, i, &all_outputs, &G, &partition, &depth, &sync_point, &num_not_done]() mutable {
+      while (num_not_done > 0) {
+        // find new 0 degree nodes
+        sync_point.arrive_and_wait();
+        set<string> output;
+        for (const auto &u: partition[i]) {
+          if (in_degree.getSafe(u) <= 0) {
+            println(i, " outputting ", u);
+            output.insert(u);
+          }
+        }
+
+        sync_point.arrive_and_wait();
+        for (const auto &outp: output) {
+          for (const auto &assign: G[outp]) {
+            auto deg = in_degree.getSafe(assign);
+            in_degree.decrSafe(assign);
+            auto degn = in_degree.getSafe(assign);
+            println(i, " output ", outp, " decrementing ", assign, " from ", deg, " to ", degn);
+          }
+        }
+        sync_point.arrive_and_wait();
+
+        for (const auto &item: output) {
+          println(i, " erasing from partition ", item);
+          partition[i].erase(item);
+        }
+
+        all_outputs[i][depth] = output;
+
+        this_thread::sleep_for(std::chrono::microseconds(1));
+      }
+    });
+  }
+  pool.wait_for_tasks();
+
+  int _depth = depth;
+  println("max depth ", _depth);
+  vector<set<string>> stages;
+  for (int d = 0; d < _depth; ++d) {
+    set<string> set{};
+    for (int i = 0; i < NUM_THREADS; ++i) {
+      std::set_union(set.begin(), set.end(), all_outputs[i][d].begin(), all_outputs[i][d].end(),
+                     inserter(set, set.end()));
+    }
+    if (!set.empty()) {
+      stages.push_back(set);
+    }
+  }
+  return stages;
 }
+
+
+vector<set<std::string>> topo_sort(set<string> all, map<string, set<string>> G, map<string, set<string>> Ginv) {
+  map<string, int> in_degree;
+  for (auto &u: all) {
+    if (Ginv.count(u))
+      in_degree.emplace(u, Ginv[u].size());
+    else
+      in_degree.emplace(u, 0);
+  }
+
+  vector<set<string>> all_outputs;
+
+  int depth = 0;
+  while (!all.empty()) {
+    println(depth++);
+    // find new 0 degree nodes
+    set<string> output;
+    for (const auto &u: all) {
+      if (in_degree[u] <= 0)
+        output.insert(u);
+    }
+
+    // update in degree
+    for (const auto &outp: output) {
+      for (const auto &assign: G[outp]) {
+        in_degree[assign]--;
+      }
+      all.erase(outp);
+    }
+    if (!output.empty())
+      all_outputs.push_back(output);
+  }
+  return all_outputs;
+}
+
+void make_stages(map<string, set<string>> G, map<string, string> defining_lines, vector<string> inputs,
+                 vector<string> outputs) {}
 
 int main(int argc, char *argv[]) {
 
   auto fp = string(argv[1]);
   auto lines = read_ll_file(fp);
-  auto [G, defining_lines, inputs, outputs] = make_graph(lines);
+  auto [all, G, Ginv, defining_lines, inputs, outputs] = make_graph(lines);
 
-  auto topo_sort_G = topo_sort(G);
-
-
-  //  vector<tuple<string, string>> tuples;
-  //
-  //  tuples.emplace_back("11", "5");
-  //  tuples.emplace_back("11", "7");
-  //  tuples.emplace_back("8", "3");
-  //  tuples.emplace_back("2", "11");
-  //  tuples.emplace_back("9", "11");
-  //  tuples.emplace_back("9", "8");
-  //  tuples.emplace_back("10", "11");
-  //
-  //  auto top_sort = topo_sort(tuples);
-  //  for (int i = 0; i < top_sort.size(); ++i) {
-  //    cout << "stage " << i << ": ";
-  //    for (const auto &item : top_sort[i])
-  //      cout << item << ", ";
-  //    cout << "\n";
-  //  }
+  //    auto stages = topo_sort(set<string>(all.begin(), all.end()), G, Ginv);
+  auto stages = parallel_topo_sort(all, G, Ginv);
+  cout << "num stages: " << stages.size() << "\n";
+  for (int i = 0; i < stages.size(); ++i) {
+    cout << "stage " << i << " ops " << stages[i].size() << "\n";
+    for (const auto &item: stages[i])
+      cout << item << " -- ";
+    cout << "\n";
+  }
 
   return 0;
 }
