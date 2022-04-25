@@ -233,7 +233,7 @@ def try_torch_mlir_eager(op, args, kwargs, backend):
     if not hasattr(op, "_schema"):
         raise RuntimeError(f"op {op} has no schema.")
 
-    new_args, new_kwargs = normalize_args_kwargs(op.overloadpacket, args, kwargs)
+    new_args, new_kwargs = normalize_args_kwargs(op, args, kwargs)
 
     if "layout" in new_kwargs and new_kwargs["layout"] not in {0, None}:
         raise UnsupportedByTorchMlirEagerMode(
