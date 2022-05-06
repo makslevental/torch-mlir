@@ -194,10 +194,10 @@ LOWERING_PIPELINE = [
     # TODO: use this correctly in promoteallocs
     "torch-hls-drop-public-return",
     "builtin.func(cse)",
-    "builtin.func(convert-linalg-to-loops)",
-    "builtin.func(lower-affine)",
+    # "builtin.func(convert-linalg-to-loops)",
     # "builtin.func(convert-linalg-to-affine-loops)",
-    # "builtin.func(convert-linalg-to-parallel-loops)",
+    "builtin.func(convert-linalg-to-parallel-loops)",
+    # "builtin.func(lower-affine)",
     "builtin.func(promote-buffers-to-stack{max-alloc-size-in-bytes=1000000000 max-rank-of-allocated-memref=10})",
     "cse",
 ]
@@ -254,7 +254,7 @@ def put_script_files(*, out_str, in_shape, out_shape, out_dir, forward_suffix=""
     wrapper_str = make_wrapper(wrapper_str, in_shape, out_shape)
     open(f"{out_dir}/wrapper.cpp", "w").write(wrapper_str)
 
-    run_hls = open("run_hls.tcl", "r").read()
+    run_hls = open("run_vitis.tcl", "r").read()
     run_hls = run_hls.replace("XXX_DIR_XXX", out_dir)
     run_hls = run_hls.replace("XXX_LL_FILE_XXX", "forward.ll")
     open(f"{out_dir}/run_hls.tcl", "w").write(run_hls)
@@ -276,8 +276,8 @@ def put_script_files(*, out_str, in_shape, out_shape, out_dir, forward_suffix=""
 
     shutil.copyfile("make_schedule.py", f"{out_dir}/make_schedule.py")
     shutil.copyfile("run_vivado.tcl", f"{out_dir}/run_vivado.tcl")
-    shutil.copyfile("run_vivado.sh", f"{out_dir}/forward_fmuladd_32ns_32ns_32_10_med_dsp_1_ip.tcl")
-    shutil.copyfile("run_vivado.sh", f"{out_dir}/forward_fmuladd_32ns_32ns_32_10_med_dsp_1.v")
+    shutil.copyfile("forward_fmuladd_32ns_32ns_32_10_med_dsp_1_ip.tcl", f"{out_dir}/forward_fmuladd_32ns_32ns_32_10_med_dsp_1_ip.tcl")
+    shutil.copyfile("forward_fmuladd_32ns_32ns_32_10_med_dsp_1.v", f"{out_dir}/forward_fmuladd_32ns_32ns_32_10_med_dsp_1.v")
     shutil.copyfile("run_vivado.sh", f"{out_dir}/run_vivado.sh")
     st = os.stat(f"{out_dir}/run_vivado.sh")
     os.chmod(f"{out_dir}/run_vivado.sh", st.st_mode | stat.S_IEXEC)
@@ -324,30 +324,31 @@ def make_split_braggnn(root_out_dir, scale=4, imgsz=11, simplify_weights=False):
         x1 = torch.randn(1, 1, imgsz, imgsz)
         cnn1 = mods.cnn_layers_1(x1)
         make_sub_layer(mods.cnn_layers_1, [x1.shape], cnn1.shape, scale, root_out_dir)
+        return
 
-        # nlb
-        theta = mods.theta(cnn1)
-        make_sub_layer(mods.theta, [cnn1.shape], theta.shape, scale, root_out_dir)
-        phi = mods.theta(cnn1)
-        g = mods.theta(cnn1)
-        nlb = mods.theta_phi_g_combine(cnn1, theta, phi, g)
-        make_sub_layer(
-            mods.theta_phi_g_combine,
-            [cnn1.shape, theta.shape, phi.shape, g.shape],
-            nlb.shape,
-            scale,
-            root_out_dir,
-        )
-
-        # cnn2
-        cnn2 = mods.cnn_layers_2(nlb)
-        make_sub_layer(mods.cnn_layers_2, [nlb.shape], cnn2.shape, scale, root_out_dir)
-
-        # dense layers
-        dense = mods.dense_layers(cnn2)
-        make_sub_layer(
-            mods.dense_layers, [cnn2.shape], dense.shape, scale, root_out_dir
-        )
+        # # nlb
+        # theta = mods.theta(cnn1)
+        # make_sub_layer(mods.theta, [cnn1.shape], theta.shape, scale, root_out_dir)
+        # phi = mods.theta(cnn1)
+        # g = mods.theta(cnn1)
+        # nlb = mods.theta_phi_g_combine(cnn1, theta, phi, g)
+        # make_sub_layer(
+        #     mods.theta_phi_g_combine,
+        #     [cnn1.shape, theta.shape, phi.shape, g.shape],
+        #     nlb.shape,
+        #     scale,
+        #     root_out_dir,
+        # )
+        #
+        # # cnn2
+        # cnn2 = mods.cnn_layers_2(nlb)
+        # make_sub_layer(mods.cnn_layers_2, [nlb.shape], cnn2.shape, scale, root_out_dir)
+        #
+        # # dense layers
+        # dense = mods.dense_layers(cnn2)
+        # make_sub_layer(
+        #     mods.dense_layers, [cnn2.shape], dense.shape, scale, root_out_dir
+        # )
 
 
 def make_whole_braggnn(root_out_dir, scale=4, imgsz=11, simplify_weights=False):
@@ -420,11 +421,11 @@ def main():
     print(args)
     args.out_dir = args.out_dir.resolve()
 
-    make_single_small_cnn(args.out_dir, scale=2, imgsz=5, simplify_weights=False)
+    # make_single_small_cnn(args.out_dir, scale=2, imgsz=5, simplify_weights=False)
 
     for i in range(args.low_scale, args.high_scale):
-        if not args.no_split_braggnn:
-            make_split_braggnn(args.out_dir, scale=i, imgsz=11)
+        # if not args.no_split_braggnn:
+        #     make_split_braggnn(args.out_dir, scale=i, imgsz=11)
         if not args.no_whole_braggnn:
             make_whole_braggnn(args.out_dir, scale=i, imgsz=11)
 
