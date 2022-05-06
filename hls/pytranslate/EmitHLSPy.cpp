@@ -783,14 +783,24 @@ void ModuleEmitter::emitAffineParallel(AffineParallelOp op) {
     }
   }
 
+  indent() << "def body(";
+  for (unsigned i = 0, e = op.getNumDims(); i < e; ++i) {
+    auto iterVar = op.getBody()->getArgument(i);
+    emitValue(iterVar);
+    if (i < op.getNumDims()-1)
+      os << ", ";
+  }
+  os << "):";
+  os << "\n";
+  addIndent();
+  emitBlock(*op.getBody());
+  reduceIndent();
+
+  os << "\n";
+  indent() << "ParFor(body, ranges=(";
   auto steps = getIntArrayAttrValue(op, op.getStepsAttrName());
   for (unsigned i = 0, e = op.getNumDims(); i < e; ++i) {
-    indent() << "for ";
-    auto iterVar = op.getBody()->getArgument(i);
-
-    // Emit lower bound.
-    emitValue(iterVar);
-    os << " in range(";
+    os << "range(";
     auto lowerMap = op.getLowerBoundsValueMap().getAffineMap();
     AffineExprEmitter lowerEmitter(state, lowerMap.getNumDims(),
                                    op.getLowerBoundsOperands());
@@ -801,22 +811,14 @@ void ModuleEmitter::emitAffineParallel(AffineParallelOp op) {
     AffineExprEmitter upperEmitter(state, upperMap.getNumDims(),
                                    op.getUpperBoundsOperands());
     upperEmitter.emitAffineExpr(upperMap.getResult(i));
+    os << ", ";
 
-    // Emit increase step.
-    emitValue(iterVar);
-    os << ", " << steps[i] << "):";
-    os << "\n";
-
-    addIndent();
+    os << steps[i] << ")";
+    if (i < op.getNumDims()-1)
+      os << ", ";
   }
-
-  emitBlock(*op.getBody());
-
-  for (unsigned i = 0, e = op.getNumDims(); i < e; ++i) {
-    reduceIndent();
-
-    indent() << "\n";
-  }
+  indent() << "))\n";
+  os << "\n";
 }
 
 void ModuleEmitter::emitAffineApply(AffineApplyOp op) {
@@ -1583,7 +1585,7 @@ void ModuleEmitter::emitFunction(FuncOp func) {
 /// Top-level MLIR module emitter.
 void ModuleEmitter::emitModule(ModuleOp module) {
   os << R"XXX(import numpy as np
-from mlir_ops import ArrayDecl, Global, Exp, Forward, FMulAdd
+from mlir_ops import ArrayDecl, Global, Exp, Forward, FMulAdd, ParFor
 )XXX";
   os << "\n\n";
   os << " # fmt: off\n";

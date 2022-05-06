@@ -6,7 +6,8 @@ open_solution -reset solution1
 #set_part "xcvu35p-fsvh2104-3-e"
 #set_part "xc7a200tfbg484-3"
 #set_part "xcvu19p-fsvb3824-3-e"
-set_part "xcvu57p_CIV-fsvk2892-3-e"
+#set_part "xcvu57p_CIV-fsvk2892-3-e"
+set_part "xcu280-fsvh2892-2L-e"
 create_clock -period "680MHz"
 
 config_op fmacc -impl auto -precision low

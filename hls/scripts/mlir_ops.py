@@ -265,6 +265,8 @@ class RemoveMulAdd(ast.NodeTransformer):
     def visit_AugAssign(self, node):
         return node
 
+def ParFor(body, *args):
+    pass
 
 def transform_forward_py():
     code_ast = astor.parse_file("forward.py")
