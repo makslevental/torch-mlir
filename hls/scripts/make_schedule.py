@@ -36,6 +36,13 @@ fmuladd_32ns_32ns_32_10_med_dsp_{id}(
 """
 )
 
+mac = (
+    lambda id: f"""
+
+
+"""
+)
+
 MAX_DSPS = 9024
 # MAX_DSPS = 1200
 MAX_BRAMS = 4032

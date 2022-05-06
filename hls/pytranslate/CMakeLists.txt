@@ -19,4 +19,4 @@ target_link_libraries(scalehls-translate
         ${translation_libs}
         )
 
-add_executable(make_schedule .make_schedule.cpp)
+#add_executable(make_schedule .make_schedule.cpp)
