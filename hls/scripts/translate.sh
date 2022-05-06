@@ -1,5 +1,5 @@
 set -e
-torch-mlir-opt /home/mlevental/dev_projects/torch-mlir/hls/examples/BraggNN.1/forward.mlir -torch-hls-promote-allocs -cse -symbol-dce -o forward.mlir.promoted
+/Users/mlevental/dev_projects/torch-mlir/cmake-build-debug/bin/torch-mlir-opt conv2d.mlir -torch-hls-promote-allocs -cse -symbol-dce -o conv2d.mlir.promoted
 python - <<EOF
 
 import re
@@ -11,7 +11,7 @@ patt2 = rf"scf\.parallel \({arg_pat}, {arg_pat}, {arg_pat}, {arg_pat}\) = \({con
 
 cst_map = {}
 
-old_lines = open("forward.mlir.promoted").readlines()
+old_lines = open("conv2d.mlir.promoted").readlines()
 new_lines = []
 for i, line in enumerate(old_lines):
     if "arith.constant" in line and "index" in line:
@@ -31,7 +31,7 @@ EOF
 sed -i 's/scf\.yield//g' forward.affine.mlir
 
 #torch-mlir-opt forward.affine.mlir -affine-loop-unroll="unroll-full unroll-full-threshold=10000000" -o forward.affine.unrolled.mlir
-scalehls-translate forward.affine.mlir --emit-hlspy --mlir-print-elementsattrs-with-hex-if-larger=-1 -o forward.py
+/Users/mlevental/dev_projects/torch-mlir/cmake-build-debug/bin/scalehls-translate forward.affine.mlir --emit-hlspy --mlir-print-elementsattrs-with-hex-if-larger=-1 -o forward.py
 black forward.py
 python mlir_ops.py
 #python forward_rewritten.py > forward.ll
