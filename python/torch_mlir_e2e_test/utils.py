@@ -29,9 +29,14 @@ def run_pipeline_with_repro_report(module,
         sys.stderr = StringIO()
         asm_for_error_report = module.operation.get_asm(
             large_elements_limit=10, enable_debug_info=True)
+        filename = os.path.join(tempfile.gettempdir(), module_name + ".mlir")
+        print(filename)
+        with open(filename, 'w') as f:
+            f.write(asm_for_error_report)
         # Lower module in place to make it ready for compiler backends.
         with module.context:
             pm = PassManager.parse(pipeline)
+            print(pm)
             pm.run(module)
     except Exception as e:
         # TODO: More robust.

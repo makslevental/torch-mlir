@@ -58,10 +58,10 @@ def HLSTorch_AtenTHNNConv2dOutOp : Torch_Op<"aten.thnn_conv2d.out", [
   let arguments = (ins
     AnyTorchTensorType:$input,
     AnyTorchTensorType:$weight,
-    TorchIntListType:$kernel_size,
+    AnyTorchListOfTorchIntType:$kernel_size,
     AnyTorchOptionalTensorType:$bias,
-    TorchIntListType:$stride,
-    TorchIntListType:$padding,
+    AnyTorchListOfTorchIntType:$stride,
+    AnyTorchListOfTorchIntType:$padding,
     AnyTorchTensorType:$out
   );
   let results = (outs
@@ -81,10 +81,10 @@ def HLSTorch_AtenMaxPool2dWithIndicesOutOp : Torch_Op<"aten.max_pool2d_with_indi
   let summary = "aten::max_pool2d_with_indices.out : (Tensor, int[], int[], int[], int[], bool, Tensor, Tensor) -> (Tensor, Tensor)`";
   let arguments = (ins
     AnyTorchTensorType:$self,
-    TorchIntListType:$kernel_size,
-    TorchIntListType:$stride,
-    TorchIntListType:$padding,
-    TorchIntListType:$dilation,
+    AnyTorchListOfTorchIntType:$kernel_size,
+    AnyTorchListOfTorchIntType:$stride,
+    AnyTorchListOfTorchIntType:$padding,
+    AnyTorchListOfTorchIntType:$dilation,
     Torch_BoolType:$ceil_mode,
     AnyTorchTensorType:$out,
     AnyTorchTensorType:$indices
@@ -103,7 +103,7 @@ def HLSTorch_AtenAdaptiveAvgPool2dOutOp : Torch_Op<"aten.adaptive_avg_pool2d.out
   let summary = "Generated op for `aten::adaptive_avg_pool2d.out : (Tensor, int[], Tensor) -> (Tensor)`";
   let arguments = (ins
     AnyTorchTensorType:$self,
-    TorchIntListType:$output_size,
+    AnyTorchListOfTorchIntType:$output_size,
     AnyTorchTensorType:$out
   );
   let results = (outs
@@ -182,11 +182,11 @@ def HLSTorch_Aten_ConvolutionOp : Torch_Op<"aten._convolution", [
     AnyTorchTensorType:$input,
     AnyTorchTensorType:$weight,
     AnyTorchOptionalTensorType:$bias,
-    TorchIntListType:$stride,
-    TorchIntListType:$padding,
-    TorchIntListType:$dilation,
+    AnyTorchListOfTorchIntType:$stride,
+    AnyTorchListOfTorchIntType:$padding,
+    AnyTorchListOfTorchIntType:$dilation,
     Torch_BoolType:$transposed,
-    TorchIntListType:$output_padding,
+    AnyTorchListOfTorchIntType:$output_padding,
     Torch_IntType:$groups,
     Torch_BoolType:$benchmark,
     Torch_BoolType:$deterministic,

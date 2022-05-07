@@ -16,6 +16,8 @@
 #include "mlir/Dialect/Tosa/IR/TosaOps.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 //#include "scalehls/Dialect/HLS/HLS.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/Math/IR/Math.h"
 
 namespace mlir {
 namespace scalehls {

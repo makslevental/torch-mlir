@@ -18,6 +18,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include <iostream>
 
 #define DEBUG_TYPE "hls-promote-allocs"
@@ -54,7 +55,7 @@ namespace {
 class PromoteAllocsPass : public HLSPromoteAllocsBase<PromoteAllocsPass> {
   void runOnOperation() override {
     auto module = getOperation();
-    module.walk([&](FuncOp func) {
+    module.walk([&](func::FuncOp func) {
       //      LiveRanges liveRanges_ = liveRanges(func);
       //      SortedUniqueLiveRangeMap<size_t> sortedLiveRanges;
       //      for (const auto &item : liveRanges_) {
@@ -74,7 +75,7 @@ class PromoteAllocsPass : public HLSPromoteAllocsBase<PromoteAllocsPass> {
     });
   }
 
-  std::vector<int64_t> getConcreteShape(memref::AllocOp op, FuncOp func) {
+  std::vector<int64_t> getConcreteShape(memref::AllocOp op, func::FuncOp func) {
     MemRefType type = op.getType();
     std::vector<int64_t> shape;
     auto dynamicSizes = op.getDynamicSizes();
@@ -96,7 +97,7 @@ class PromoteAllocsPass : public HLSPromoteAllocsBase<PromoteAllocsPass> {
     return shape;
   }
 
-  //  std::vector<int64_t> getConcreteShape(memref::StoreOp op, FuncOp func) {
+  //  std::vector<int64_t> getConcreteShape(memref::StoreOp op, func::FuncOp func) {
   //    MemRefType type = op.getMemRefType();
   //    std::vector<int64_t> shape;
   //    auto dynamicSizes = op.getDynamicSizes();
@@ -118,7 +119,7 @@ class PromoteAllocsPass : public HLSPromoteAllocsBase<PromoteAllocsPass> {
   //    return shape;
   //  }
 
-  LiveRanges liveRanges(FuncOp func) {
+  LiveRanges liveRanges(func::FuncOp func) {
     SetVector<Operation *> sortedOps;
     func.walk([&sortedOps, &func](Operation *op) {
       if (op->getName() == func->getName())
@@ -154,7 +155,7 @@ class PromoteAllocsPass : public HLSPromoteAllocsBase<PromoteAllocsPass> {
     return allocLiveRange;
   }
 
-  void hoistLastStoreAlloc(FuncOp func,
+  void hoistLastStoreAlloc(func::FuncOp func,
                            std::vector<PlannedAlloc> plannedAllocs) {
 
     auto inputSlab =
@@ -194,7 +195,7 @@ class PromoteAllocsPass : public HLSPromoteAllocsBase<PromoteAllocsPass> {
     func.eraseArgument(func.getNumArguments() - 2);
   }
 
-  void hoistLastStoreAlloc(FuncOp func) {
+  void hoistLastStoreAlloc(func::FuncOp func) {
     OpBuilder builder(func->getParentRegion());
     for (int i = 0; i < func.getNumArguments(); ++i) {
       func.setArgAttr(i, "in", builder.getIndexAttr(0));
@@ -270,14 +271,14 @@ class PromoteAllocsPass : public HLSPromoteAllocsBase<PromoteAllocsPass> {
     }
   }
 
-  void dropAsserts(FuncOp func) {
+  void dropAsserts(func::FuncOp func) {
     func.walk([&](cf::AssertOp op) {
       op->remove();
       op->destroy();
     });
   }
 
-  void changeToAlloca(FuncOp func) {
+  void changeToAlloca(func::FuncOp func) {
     OpBuilder builder(func.getBody());
     func.walk([&](memref::AllocOp op) {
       builder.setInsertionPoint(op);

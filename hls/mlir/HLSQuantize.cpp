@@ -17,6 +17,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include <iostream>
 
 using namespace mlir;
@@ -232,7 +233,7 @@ public:
 };
 } // namespace
 
-std::unique_ptr<OperationPass<FuncOp>>
+std::unique_ptr<OperationPass<func::FuncOp>>
 mlir::torch::HLS::createHLSQuantizePass() {
   return std::make_unique<HLSQuantize>();
 }
@@ -278,7 +279,7 @@ class HLSQuantizeModulePass
 //    });
     module->dump();
 
-    module.walk([&](FuncOp func) {
+    module.walk([&](func::FuncOp func) {
       OpBuilder builder(func.getBody());
       IRRewriter rewriter(builder);
       func.walk([&](memref::GetGlobalOp op) {

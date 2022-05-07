@@ -19,6 +19,8 @@
 #include "mlir/IR/Operation.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Dialect/Bufferization/Transforms/Bufferize.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/Affine/IR/AffineOps.h"
 
 using namespace ::mlir;
 using namespace ::mlir::bufferization;
@@ -266,43 +268,43 @@ public:
   }
 };
 
-class VectorTransferReadOpConverter
-    : public OpConversionPattern<vector::TransferReadOp> {
-public:
-  using OpConversionPattern<vector::TransferReadOp>::OpConversionPattern;
+//class VectorTransferReadOpConverter
+//    : public OpConversionPattern<vector::TransferReadOp> {
+//public:
+//  using OpConversionPattern<vector::TransferReadOp>::OpConversionPattern;
+//
+//  LogicalResult
+//  matchAndRewrite(vector::TransferReadOp readOp, OpAdaptor adaptor,
+//                  ConversionPatternRewriter &rewriter) const final {
+//    if (readOp.getShapedType().isa<MemRefType>())
+//      return failure();
+//    rewriter.replaceOpWithNewOp<vector::TransferReadOp>(
+//        readOp, readOp.getType(), adaptor.source(), adaptor.indices(),
+//        adaptor.permutation_mapAttr(), adaptor.padding(), adaptor.mask(),
+//        adaptor.in_boundsAttr());
+//    return success();
+//  }
+//};
 
-  LogicalResult
-  matchAndRewrite(vector::TransferReadOp readOp, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const final {
-    if (readOp.getShapedType().isa<MemRefType>())
-      return failure();
-    rewriter.replaceOpWithNewOp<vector::TransferReadOp>(
-        readOp, readOp.getType(), adaptor.source(), adaptor.indices(),
-        adaptor.permutation_mapAttr(), adaptor.padding(), adaptor.mask(),
-        adaptor.in_boundsAttr());
-    return success();
-  }
-};
 
-
-class VectorTransferWriteOpConverter
-    : public OpConversionPattern<vector::TransferWriteOp> {
-public:
-  using OpConversionPattern<vector::TransferWriteOp>::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(vector::TransferWriteOp writeOp, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const final {
-    if (writeOp.getShapedType().isa<MemRefType>())
-      return failure();
-    rewriter.create<vector::TransferWriteOp>(
-        writeOp.getLoc(), adaptor.vector(), adaptor.source(), adaptor.indices(),
-        adaptor.permutation_mapAttr(),
-        adaptor.in_bounds() ? adaptor.in_boundsAttr() : ArrayAttr());
-    rewriter.replaceOp(writeOp, adaptor.source());
-    return success();
-  }
-};
+//class VectorTransferWriteOpConverter
+//    : public OpConversionPattern<vector::TransferWriteOp> {
+//public:
+//  using OpConversionPattern<vector::TransferWriteOp>::OpConversionPattern;
+//
+//  LogicalResult
+//  matchAndRewrite(vector::TransferWriteOp writeOp, OpAdaptor adaptor,
+//                  ConversionPatternRewriter &rewriter) const final {
+//    if (writeOp.getShapedType().isa<MemRefType>())
+//      return failure();
+//    rewriter.create<vector::TransferWriteOp>(
+//        writeOp.getLoc(), adaptor.vector(), adaptor.source(), adaptor.indices(),
+//        adaptor.permutation_mapAttr(),
+//        adaptor.in_bounds() ? adaptor.in_boundsAttr() : ArrayAttr());
+//    rewriter.replaceOp(writeOp, adaptor.source());
+//    return success();
+//  }
+//};
 } // namespace
 
 
@@ -317,9 +319,9 @@ void populateHLSLinalgBufferizePatterns(BufferizeTypeConverter &typeConverter,
       BufferizeTensorReshapeOp<tensor::ExpandShapeOp>,
       BufferizeTensorReshapeOp<tensor::CollapseShapeOp>,
       ExtractSliceOpConverter,
-      InsertSliceOpConverter,
-      VectorTransferReadOpConverter,
-      VectorTransferWriteOpConverter
+      InsertSliceOpConverter
+//      VectorTransferReadOpConverter,
+//      VectorTransferWriteOpConverter
   >(typeConverter, patterns.getContext());
   // clang-format on
     patterns.add<GeneralizePadOpPattern>(patterns.getContext());
@@ -359,7 +361,7 @@ struct HLSLinalgBufferizePass
 };
 } // end anonymous namespace
 
-std::unique_ptr<OperationPass<FuncOp>>
+std::unique_ptr<OperationPass<func::FuncOp>>
 mlir::torch::HLS::createHLSLinalgBufferizePass() {
   return std::make_unique<HLSLinalgBufferizePass>();
 }

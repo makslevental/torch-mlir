@@ -9,6 +9,9 @@
 
 #include "InitAllDialects.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "mlir/Dialect/Math/IR/Math.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
 
 namespace mlir {
 namespace scalehls {
