@@ -4,12 +4,13 @@ Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
 <+>UTF-8
 ===================================================================
 diff --git a/mlir/include/mlir/IR/FunctionInterfaces.h b/mlir/include/mlir/IR/FunctionInterfaces.h
---- a/mlir/include/mlir/IR/FunctionInterfaces.h	(revision 8361c5da30588d3d4a48eae648f53be1feb5cfad)
-+++ b/mlir/include/mlir/IR/FunctionInterfaces.h	(date 1649134792354)
-@@ -235,13 +235,13 @@
+--- a/mlir/include/mlir/IR/FunctionInterfaces.h	(revision e1318078a4e160eb723bcbcfcdcc9a1b618f7067)
++++ b/mlir/include/mlir/IR/FunctionInterfaces.h	(date 1651883503354)
+@@ -235,15 +235,15 @@
+       // Verify that all of the argument attributes are dialect attributes, i.e.
        // that they contain a dialect prefix in their name.  Call the dialect, if
        // registered, to verify the attributes themselves.
-       for (auto attr : argAttrs) {
+-      for (auto attr : argAttrs) {
 -        if (!attr.getName().strref().contains('.'))
 -          return op.emitOpError("arguments may only have dialect attributes");
 -        if (Dialect *dialect = attr.getNameDialect()) {
@@ -17,6 +18,8 @@ diff --git a/mlir/include/mlir/IR/FunctionInterfaces.h b/mlir/include/mlir/IR/Fu
 -                                                       /*argIndex=*/i, attr)))
 -            return failure();
 -        }
+-      }
++//      for (auto attr : argAttrs) {
 +//        if (!attr.getName().strref().contains('.'))
 +//          return op.emitOpError("arguments may only have dialect attributes");
 +//        if (Dialect *dialect = attr.getNameDialect()) {
@@ -24,13 +27,15 @@ diff --git a/mlir/include/mlir/IR/FunctionInterfaces.h b/mlir/include/mlir/IR/Fu
 +//                                                       /*argIndex=*/i, attr)))
 +//            return failure();
 +//        }
-       }
++//      }
      }
    }
-@@ -267,14 +267,14 @@
+   if (ArrayAttr allResultAttrs = op.getAllResultAttrs()) {
+@@ -267,16 +267,16 @@
+       // Verify that all of the result attributes are dialect attributes, i.e.
        // that they contain a dialect prefix in their name.  Call the dialect, if
        // registered, to verify the attributes themselves.
-       for (auto attr : resultAttrs) {
+-      for (auto attr : resultAttrs) {
 -        if (!attr.getName().strref().contains('.'))
 -          return op.emitOpError("results may only have dialect attributes");
 -        if (Dialect *dialect = attr.getNameDialect()) {
@@ -39,6 +44,8 @@ diff --git a/mlir/include/mlir/IR/FunctionInterfaces.h b/mlir/include/mlir/IR/Fu
 -                                                          attr)))
 -            return failure();
 -        }
+-      }
++//      for (auto attr : resultAttrs) {
 +//        if (!attr.getName().strref().contains('.'))
 +//          return op.emitOpError("results may only have dialect attributes");
 +//        if (Dialect *dialect = attr.getNameDialect()) {
@@ -47,6 +54,7 @@ diff --git a/mlir/include/mlir/IR/FunctionInterfaces.h b/mlir/include/mlir/IR/Fu
 +//                                                          attr)))
 +//            return failure();
 +//        }
-       }
++//      }
      }
    }
+

@@ -997,13 +997,13 @@ SmallVector<SmallString<8>, 4>
 ModuleEmitter::getTransferIndices(TransferOpType op) {
   // Get the head indices of the transfer read/write.
   SmallVector<SmallString<8>, 4> indices;
-  for (auto index : op.indices()) {
+  for (auto index : op.getIndices()) {
     assert(isDeclared(index) && "index has not been declared");
     indices.push_back(getName(index));
   }
   // Construct the physical indices.
-  for (unsigned i = 0, e = op.permutation_map().getNumResults(); i < e; ++i) {
-    auto expr = op.permutation_map().getResult(i);
+  for (unsigned i = 0, e = op.getPermutationMap().getNumResults(); i < e; ++i) {
+    auto expr = op.getPermutationMap().getResult(i);
     if (auto dimExpr = expr.template dyn_cast<AffineDimExpr>())
       indices[dimExpr.getPosition()] += " + iv" + std::to_string(i);
   }
@@ -1024,7 +1024,7 @@ getTransferCondition(TransferOpType op,
   // Construct the condition of transfer if required.
   SmallString<16> condition;
   for (auto i : outOfBoundDims) {
-    auto expr = op.permutation_map().getResult(i);
+    auto expr = op.getPermutationMap().getResult(i);
     if (auto dimExpr = expr.template dyn_cast<AffineDimExpr>()) {
       auto pos = dimExpr.getPosition();
       condition += indices[pos];
@@ -1038,7 +1038,7 @@ getTransferCondition(TransferOpType op,
 
 /// Vector-related statement emitters.
 void ModuleEmitter::emitTransferRead(vector::TransferReadOp op) {
-  auto rank = emitNestedLoopHeader(op.vector());
+  auto rank = emitNestedLoopHeader(op.getVector());
   auto indices = getTransferIndices(op);
   auto condition = getTransferCondition(op, indices);
 
@@ -1048,9 +1048,9 @@ void ModuleEmitter::emitTransferRead(vector::TransferReadOp op) {
   }
 
   indent();
-  emitValue(op.vector(), rank);
+  emitValue(op.getVector(), rank);
   os << " = ";
-  emitValue(op.source());
+  emitValue(op.getSource());
   for (auto index : indices)
     os << "[" << index << "]";
   os << "\n";
@@ -1061,9 +1061,9 @@ void ModuleEmitter::emitTransferRead(vector::TransferReadOp op) {
     addIndent();
 
     indent();
-    emitValue(op.vector(), rank);
+    emitValue(op.getVector(), rank);
     os << " = ";
-    emitValue(op.padding());
+    emitValue(op.getPadding());
     os << "\n";
     reduceIndent();
   }
@@ -1071,7 +1071,7 @@ void ModuleEmitter::emitTransferRead(vector::TransferReadOp op) {
 }
 
 void ModuleEmitter::emitTransferWrite(vector::TransferWriteOp op) {
-  auto rank = emitNestedLoopHeader(op.vector());
+  auto rank = emitNestedLoopHeader(op.getVector());
   auto indices = getTransferIndices(op);
   auto condition = getTransferCondition(op, indices);
 
@@ -1081,11 +1081,11 @@ void ModuleEmitter::emitTransferWrite(vector::TransferWriteOp op) {
   }
 
   indent();
-  emitValue(op.source());
+  emitValue(op.getSource());
   for (auto index : indices)
     os << "[" << index << "]";
   os << " = ";
-  emitValue(op.vector(), rank);
+  emitValue(op.getVector(), rank);
   os << "\n";
 
   if (!condition.empty())
@@ -1094,14 +1094,14 @@ void ModuleEmitter::emitTransferWrite(vector::TransferWriteOp op) {
 }
 
 void ModuleEmitter::emitBroadcast(vector::BroadcastOp op) {
-  auto rank = emitNestedLoopHeader(op.vector());
+  auto rank = emitNestedLoopHeader(op.getVector());
   indent();
-  emitValue(op.vector(), rank);
+  emitValue(op.getVector(), rank);
   os << " = ";
-  emitValue(op.source());
+  emitValue(op.getSource());
 
   // Figure out whether each dimision is broadcast or multicast.
-  if (auto type = op.source().getType().dyn_cast<ShapedType>())
+  if (auto type = op.getSource().getType().dyn_cast<ShapedType>())
     for (unsigned dim = 0, e = type.getRank(); dim < e; ++dim) {
       if (type.getDimSize(dim) == 1)
         os << "[0]";
@@ -1157,10 +1157,11 @@ void ModuleEmitter::emitStore(memref::StoreOp op) {
 }
 
 void ModuleEmitter::emitMemCpy(memref::CopyOp op) {
+  return ;
   indent() << "memcpy(";
   emitValue(op.target());
   os << ", ";
-  emitValue(op.source());
+  emitValue(op.getSource());
   os << ", ";
 
   auto type = op.target().getType().cast<MemRefType>();
@@ -1585,7 +1586,8 @@ void ModuleEmitter::emitFunction(FuncOp func) {
 /// Top-level MLIR module emitter.
 void ModuleEmitter::emitModule(ModuleOp module) {
   os << R"XXX(import numpy as np
-from mlir_ops import ArrayDecl, Global, Exp, Forward, FMulAdd, ParFor
+from hls.scripts.mlir_ops import ArrayDecl, Global, Forward
+from hls.scripts.verilog_val import MAC, ParFor
 )XXX";
   os << "\n\n";
   os << " # fmt: off\n";
