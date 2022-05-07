@@ -66,7 +66,7 @@ class VerilogWire:
         # print(
         #     f"{v} = call float @llvm.fmuladd.f32(float {self}, float {other}, float 0.0)"
         # )
-        return v
+        return VerilogWire(f"{format_cst(None)} * {format_cst(None)}")
 
     def __add__(self, other):
         # <result> = fadd float 4.0, %var
@@ -77,7 +77,7 @@ class VerilogWire:
         # print(
         #     f"{v} = call float @llvm.fmuladd.f32(float {self}, float 1.0, float {other})"
         # )
-        return v
+        return VerilogWire(f"{format_cst(None)} + {format_cst(None)}")
 
     def __gt__(self, other):
         # <result> = fcmp ugt float 4.0, 5.0
@@ -85,7 +85,7 @@ class VerilogWire:
             other = VerilogWire(other)
         v = VerilogWire(f"(> ({self}) ({other}))")
         # print(f"{v} = fcmp ugt float {self}, {other}")
-        return v
+        return VerilogWire(f"{format_cst(None)} > {format_cst(None)}")
 
 
 class VerilogReg:
@@ -177,7 +177,7 @@ def make_args_globals(Args):
     return args
 
 
-FILE = open("forward.1.v", "w")
+FILE = open("forward.v", "w")
 
 
 # FILE = sys.stdout
