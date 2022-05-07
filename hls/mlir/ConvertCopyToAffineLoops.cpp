@@ -14,6 +14,7 @@
 #include "mlir/IR/Dominance.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 
 using namespace mlir;
 using namespace mlir::torch::HLS;
@@ -218,7 +219,7 @@ struct ConvertCopyToAffineLoops
 };
 } // namespace
 
-std::unique_ptr<OperationPass<FuncOp>>
+std::unique_ptr<OperationPass<func::FuncOp>>
 mlir::torch::HLS::createConvertCopyToAffineLoopsPass() {
   return std::make_unique<ConvertCopyToAffineLoops>();
 }

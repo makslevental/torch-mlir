@@ -31,7 +31,6 @@ add_mlir_library(HLSTorch
         HLSPasses.cpp
         MemoryPlanning.cpp
         ConvertCopyToAffineLoops.cpp
-        DirtyPass.cpp
 
         ADDITIONAL_HEADER_DIRS
         ${PROJECT_SOURCE_DIR}/hls/mlir

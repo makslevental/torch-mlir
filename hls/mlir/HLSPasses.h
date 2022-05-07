@@ -14,12 +14,13 @@
 
 #include <memory>
 #include <mlir/Dialect/Bufferization/Transforms/Bufferize.h>
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 
 namespace mlir {
 namespace torch {
 namespace HLS {
 
-std::unique_ptr<OperationPass<FuncOp>> createHLSRefineTypesPass();
+std::unique_ptr<OperationPass<func::FuncOp>> createHLSRefineTypesPass();
 
 std::unique_ptr<OperationPass<ModuleOp>> createHLSDropPublicReturnPass();
 
@@ -27,23 +28,23 @@ std::unique_ptr<OperationPass<ModuleOp>> createHLSPromoteAllocsPass();
 
 std::unique_ptr<OperationPass<ModuleOp>> createHLSHLSQuantizeModulePass();
 
-std::unique_ptr<OperationPass<FuncOp>> createHLSLinalgBufferizePass();
+std::unique_ptr<OperationPass<func::FuncOp>> createHLSLinalgBufferizePass();
 
-std::unique_ptr<OperationPass<FuncOp>> createHLSDecomposeComplexOpsPass();
+std::unique_ptr<OperationPass<func::FuncOp>> createHLSDecomposeComplexOpsPass();
 
-std::unique_ptr<OperationPass<FuncOp>> createHLSConvertTorchToLinalgPass();
+std::unique_ptr<OperationPass<func::FuncOp>> createHLSConvertTorchToLinalgPass();
 
-std::unique_ptr<OperationPass<FuncOp>> createHLSQuantizePass();
+std::unique_ptr<OperationPass<func::FuncOp>> createHLSQuantizePass();
 
 std::unique_ptr<OperationPass<ModuleOp>> createHLSHLSQuantizeModulePass();
 
-std::unique_ptr<OperationPass<FuncOp>> createConvertCopyToAffineLoopsPass();
+std::unique_ptr<OperationPass<func::FuncOp>> createConvertCopyToAffineLoopsPass();
 
-//std::unique_ptr<OperationPass<FuncOp>> createSimplifyMemrefAccessPass();
+//std::unique_ptr<OperationPass<func::FuncOp>> createSimplifyMemrefAccessPass();
 
-// std::unique_ptr<OperationPass<FuncOp>> createHLSReduceOpVariantsPass();
+// std::unique_ptr<OperationPass<func::FuncOp>> createHLSReduceOpVariantsPass();
 
-// std::unique_ptr<OperationPass<FuncOp>> createHLSConvertOperatorsPass();
+// std::unique_ptr<OperationPass<func::FuncOp>> createHLSConvertOperatorsPass();
 
 // std::unique_ptr<OperationPass<ModuleOp>>
 // createHLSAdjustCallingConventionsPass();

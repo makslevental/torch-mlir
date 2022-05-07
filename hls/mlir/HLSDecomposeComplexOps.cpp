@@ -14,6 +14,7 @@
 #include "torch-mlir/Dialect/Torch/IR/TorchOps.h"
 #include "torch-mlir/Dialect/Torch/Utils/Utils.h"
 #include "llvm/ADT/StringExtras.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 
 using namespace mlir;
 using namespace mlir::torch;
@@ -50,7 +51,7 @@ class DecomposeComplexOpsPass
 };
 } // namespace
 
-std::unique_ptr<OperationPass<FuncOp>>
+std::unique_ptr<OperationPass<func::FuncOp>>
 mlir::torch::HLS::createHLSDecomposeComplexOpsPass() {
   return std::make_unique<DecomposeComplexOpsPass>();
 }

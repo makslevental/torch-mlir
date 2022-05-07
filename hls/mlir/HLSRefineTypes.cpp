@@ -19,6 +19,7 @@
 #include "torch-mlir/Dialect/Torch/IR/TorchOps.h"
 #include "torch-mlir/Dialect/Torch/Utils/TorchUpstream.h"
 #include "torch-mlir/Dialect/Torch/Utils/Utils.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 
 using namespace mlir;
 using namespace mlir::torch;
@@ -41,22 +42,22 @@ using namespace mlir::torch::torch_upstream; // For ScalarType and type
 //   llvm::report_fatal_error("unhandled type for getScalarTypeForType");
 // }
 
-static Type getTypeForScalarType(MLIRContext *context, ScalarType dtypeInt) {
-  switch (dtypeInt) {
-  case ScalarType::Float:
-    return Float32Type::get(context);
-  case ScalarType::Double:
-    return Float64Type::get(context);
-  case ScalarType::Long:
-    return IntegerType::get(context, 64, IntegerType::Signed);
-  case ScalarType::Int:
-    return IntegerType::get(context, 32, IntegerType::Signed);
-  case ScalarType::Bool:
-    return IntegerType::get(context, 1);
-  default:
-    return Type();
-  }
-}
+//static Type getTypeForScalarType(MLIRContext *context, ScalarType dtypeInt) {
+//  switch (dtypeInt) {
+//  case ScalarType::Float:
+//    return Float32Type::get(context);
+//  case ScalarType::Double:
+//    return Float64Type::get(context);
+//  case ScalarType::Long:
+//    return IntegerType::get(context, 64, IntegerType::Signed);
+//  case ScalarType::Int:
+//    return IntegerType::get(context, 32, IntegerType::Signed);
+//  case ScalarType::Bool:
+//    return IntegerType::get(context, 1);
+//  default:
+//    return Type();
+//  }
+//}
 
 static Type getTypeForDTypeInteger(MLIRContext *context, int64_t dtypeInt) {
   return getTypeForScalarType(context, (ScalarType)dtypeInt);
@@ -1708,7 +1709,7 @@ static bool isSafeToRefineOperandInPlace(OpOperand *use, Type newOperandType) {
   return operationIsValidWithRefinedType(use, newOperandType);
 }
 
-void optimize(FuncOp func, TypeAnalyzer &analyzer) {
+void optimize(func::FuncOp func, TypeAnalyzer &analyzer) {
   func.walk([&](Operation *op) {
     auto convertValuesToMostRefinedType = [&](ValueRange values, OpBuilder &b) {
       for (Value v : values) {
@@ -1816,7 +1817,7 @@ class HLSRefineTypesPass : public HLSRefineTypesBase<HLSRefineTypesPass> {
 };
 } // namespace
 
-std::unique_ptr<OperationPass<FuncOp>>
+std::unique_ptr<OperationPass<func::FuncOp>>
 mlir::torch::HLS::createHLSRefineTypesPass() {
   return std::make_unique<HLSRefineTypesPass>();
 }

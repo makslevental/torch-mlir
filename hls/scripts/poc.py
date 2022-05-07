@@ -175,30 +175,32 @@ def hack_for_calyx(out):
 
 
 BUFFERIZATION_PIPELINE = [
-    # "tensor-constant-bufferize{alignment=0}",
-    "builtin.func(torch-hls-linalg-bufferize)",
-    "builtin.func(linalg-bufferize)",
-    "builtin.func(cse)",
-    "arith-bufferize",
-    "builtin.func(tensor-bufferize)",
+    # Bufferize.
+    "func.func(scf-bufferize)",
+    "func.func(tm-tensor-bufferize)",
+    # "func.func(torch-hls-linalg-bufferize)",
+    "func.func(linalg-bufferize)",
     "func-bufferize",
-    ## "builtin.func(buffer-hoisting)",
-    "builtin.func(buffer-loop-hoisting)",
+    "arith-bufferize",
+    "func.func(tensor-bufferize)",
+    "func.func(buffer-loop-hoisting)",
+    "func.func(finalizing-bufferize)",
+    # "tensor-constant-bufferize{alignment=0}",
+    ## "func.func(buffer-hoisting)",
     ## "builtin.module(buffer-results-to-out-params)",
-    "builtin.func(finalizing-bufferize)",
-    "builtin.func(cse)",
+    "func.func(finalizing-bufferize)",
 ]
 
 LOWERING_PIPELINE = [
-    "builtin.func(cse)",
+    "func.func(cse)",
     # TODO: use this correctly in promoteallocs
     "torch-hls-drop-public-return",
-    "builtin.func(cse)",
-    # "builtin.func(convert-linalg-to-loops)",
-    # "builtin.func(convert-linalg-to-affine-loops)",
-    "builtin.func(convert-linalg-to-parallel-loops)",
-    # "builtin.func(lower-affine)",
-    "builtin.func(promote-buffers-to-stack{max-alloc-size-in-bytes=1000000000 max-rank-of-allocated-memref=10})",
+    "func.func(cse)",
+    # "func.func(convert-linalg-to-loops)",
+    # "func.func(convert-linalg-to-affine-loops)",
+    "func.func(convert-linalg-to-parallel-loops)",
+    # "func.func(lower-affine)",
+    "func.func(promote-buffers-to-stack{max-alloc-size-in-bytes=1000000000 max-rank-of-allocated-memref=10})",
     "cse",
 ]
 
@@ -257,7 +259,7 @@ def put_script_files(*, out_str, in_shape, out_shape, out_dir, forward_suffix=""
     run_hls = open("run_vitis.tcl", "r").read()
     run_hls = run_hls.replace("XXX_DIR_XXX", out_dir)
     run_hls = run_hls.replace("XXX_LL_FILE_XXX", "forward.ll")
-    open(f"{out_dir}/run_hls.tcl", "w").write(run_hls)
+    open(f"{out_dir}/run_vitis.tcl", "w").write(run_hls)
 
     hls_hooks = open("hls_hooks.tcl", "r").read()
     hls_hooks = hls_hooks.replace("XXX_DIR_XXX", out_dir)
@@ -270,14 +272,14 @@ def put_script_files(*, out_str, in_shape, out_shape, out_dir, forward_suffix=""
     st = os.stat(f"{out_dir}/run_vitis.sh")
     os.chmod(f"{out_dir}/run_vitis.sh", st.st_mode | stat.S_IEXEC)
     shutil.copyfile("mlir_ops.py", f"{out_dir}/mlir_ops.py")
+    shutil.copyfile("llvm_val.py", f"{out_dir}/llvm_val.py")
+    shutil.copyfile("verilog_val.py", f"{out_dir}/verilog_val.py")
     shutil.copyfile("translate.sh", f"{out_dir}/translate.sh")
     st = os.stat(f"{out_dir}/translate.sh")
     os.chmod(f"{out_dir}/translate.sh", st.st_mode | stat.S_IEXEC)
 
     shutil.copyfile("make_schedule.py", f"{out_dir}/make_schedule.py")
     shutil.copyfile("run_vivado.tcl", f"{out_dir}/run_vivado.tcl")
-    shutil.copyfile("forward_fmuladd_32ns_32ns_32_10_med_dsp_1_ip.tcl", f"{out_dir}/forward_fmuladd_32ns_32ns_32_10_med_dsp_1_ip.tcl")
-    shutil.copyfile("forward_fmuladd_32ns_32ns_32_10_med_dsp_1.v", f"{out_dir}/forward_fmuladd_32ns_32ns_32_10_med_dsp_1.v")
     shutil.copyfile("run_vivado.sh", f"{out_dir}/run_vivado.sh")
     st = os.stat(f"{out_dir}/run_vivado.sh")
     os.chmod(f"{out_dir}/run_vivado.sh", st.st_mode | stat.S_IEXEC)

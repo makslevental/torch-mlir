@@ -11,6 +11,8 @@
 #define HLS_PASSDETAIL_H
 
 #include "mlir/Pass/Pass.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/IR/BuiltinOps.h"
 
 namespace mlir {
 namespace torch {
