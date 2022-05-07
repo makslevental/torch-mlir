@@ -56,7 +56,7 @@ class DropPublicReturnPass
     returnOp->setOperands({});
 
     // Update the function type.
-    auto funcType = func.getType();
+    auto funcType = func.getFunctionType();
     func.setType(
         FunctionType::get(funcType.getContext(), funcType.getInputs(), {}));
   }

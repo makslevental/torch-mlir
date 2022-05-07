@@ -13,6 +13,7 @@
 //#include "HLS.h"
 
 namespace mlir {
+class ModuleOp;
 namespace scalehls {
 
 using namespace mlir::func;

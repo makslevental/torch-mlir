@@ -4,6 +4,7 @@ from ast import Assign, Mult, Add, BinOp, Name, Call
 
 import astor
 import numpy as np
+from ast_tools.passes import apply_passes
 
 from verilog_val import VerilogForward, VerilogWire, VerilogConstant
 
@@ -172,9 +173,13 @@ class RemoveMAC(ast.NodeTransformer):
         if node in self.dels:
             return None
         elif node in self.subs:
+            mac_inst = Call(func=Name(id="MAC"), args=self.subs[node], keywords=[])
             return Assign(
                 targets=node.targets,
-                value=Call(func=Name(id="MAC"), args=self.subs[node], keywords=[]),
+                value=Call(
+                    func=mac_inst,
+                    args=[],
+                    keywords=[]),
                 type_comment=None,
             )
         else:
@@ -203,9 +208,9 @@ class RemoveMAC(ast.NodeTransformer):
 
 
 def transform_forward_py():
-    code_ast = astor.parse_file("braggnn.py")
+    code_ast = astor.parse_file("forward.py")
     new_tree = RemoveMAC().visit(code_ast)
-    with open("braggnn_forward_rewritten.py", "w") as f:
+    with open("forward_rewritten.py", "w") as f:
         f.write(astor.code_gen.to_source(new_tree))
 
 

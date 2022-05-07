@@ -25,6 +25,7 @@
 #include "mlir/Dialect/Linalg/Utils/Utils.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/IR/Operation.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Support/MathExtras.h"
@@ -66,7 +67,7 @@ struct DirtyPassLLVM
   void runOnOperation() override;
 };
 
-struct DirtyPass : public PassWrapper<DirtyPass, OperationPass<FuncOp>> {
+struct DirtyPass : public PassWrapper<DirtyPass, OperationPass<func::FuncOp>> {
   StringRef getArgument() const final { return "dirty-pass"; }
   StringRef getDescription() const final { return "Dirty Pass."; }
   DirtyPass() = default;

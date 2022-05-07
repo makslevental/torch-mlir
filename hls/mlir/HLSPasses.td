@@ -11,21 +11,21 @@ def HLSDropPublicReturn : Pass<"torch-hls-drop-public-return", "ModuleOp"> {
     }];
 }
 
-def HLSLinalgBufferize : Pass<"torch-hls-linalg-bufferize", "FuncOp"> {
+def HLSLinalgBufferize : Pass<"torch-hls-linalg-bufferize", "func::FuncOp"> {
   let constructor = "mlir::torch::HLS::createHLSLinalgBufferizePass()";
   let description = [{
     don't allocate new buffers for ops labeled as a "out variant"
   }];
 }
 
-def HLSDecomposeComplexOps : Pass<"torch-hls-decompose-complex-ops", "FuncOp"> {
+def HLSDecomposeComplexOps : Pass<"torch-hls-decompose-complex-ops", "func::FuncOp"> {
   let constructor = "mlir::torch::HLS::createHLSDecomposeComplexOpsPass()";
     let description = [{
       decompose matmulout
     }];
 }
 
-def HLSRefineTypes : Pass<"torch-hls-refine-types", "FuncOp"> {
+def HLSRefineTypes : Pass<"torch-hls-refine-types", "func::FuncOp"> {
   let constructor = "mlir::torch::HLS::createHLSRefineTypesPass()";
   let description = [{
     for some reason trying to handle refines (for new ops) in sequence doesn't work
@@ -33,7 +33,7 @@ def HLSRefineTypes : Pass<"torch-hls-refine-types", "FuncOp"> {
   }];
 }
 
-def HLSConvertTorchToLinalg : Pass<"convert-torch-hls-to-linalg", "FuncOp"> {
+def HLSConvertTorchToLinalg : Pass<"convert-torch-hls-to-linalg", "func::FuncOp"> {
   let constructor = "mlir::torch::HLS::createHLSConvertTorchToLinalgPass()";
   let description = [{
     handle new ops
@@ -58,13 +58,13 @@ def HLSHLSQuantizeModule : Pass<"torch-hls-quantize-module", "ModuleOp"> {
   }];
 }
 
-def HLSQuantize : Pass<"torch-hls-quantize", "FuncOp"> {
+def HLSQuantize : Pass<"torch-hls-quantize", "func::FuncOp"> {
   let constructor = "mlir::torch::HLS::createHLSQuantizePass()";
   let description = [{
   }];
 }
 
-def ConvertCopyToAffineLoops : Pass<"torch-hls-convert-copy-to-affine-loops", "FuncOp"> {
+def ConvertCopyToAffineLoops : Pass<"torch-hls-convert-copy-to-affine-loops", "func::FuncOp"> {
   let summary = "Convert copy and assign to affine loops";
   let description = [{
       This convert-copy-to-affine-loops pass will first remove redundant copies
@@ -74,7 +74,7 @@ def ConvertCopyToAffineLoops : Pass<"torch-hls-convert-copy-to-affine-loops", "F
   let constructor = "mlir::torch::HLS::createConvertCopyToAffineLoopsPass()";
 }
 
-//def SimplifyMemrefAccess : Pass<"simplify-memref-access", "FuncOp"> {
+//def SimplifyMemrefAccess : Pass<"simplify-memref-access", "func::FuncOp"> {
 //  let summary = "Remove redundant load and store operations";
 //  let description = [{
 //    This simplify-memref-access pass will eliminate the known redundant load and
