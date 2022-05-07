@@ -1586,8 +1586,8 @@ void ModuleEmitter::emitFunction(FuncOp func) {
 /// Top-level MLIR module emitter.
 void ModuleEmitter::emitModule(ModuleOp module) {
   os << R"XXX(import numpy as np
-from hls.scripts.mlir_ops import ArrayDecl, Global, Forward
-from hls.scripts.verilog_val import MAC, ParFor
+from mlir_ops import ArrayDecl, Global, Forward
+from verilog_val import MAC, ParFor
 )XXX";
   os << "\n\n";
   os << " # fmt: off\n";

@@ -34,4 +34,4 @@ sed -i 's/scf\.yield//g' forward.affine.mlir
 scalehls-translate forward.affine.mlir --emit-hlspy --mlir-print-elementsattrs-with-hex-if-larger=-1 -o forward.py
 black forward.py
 python mlir_ops.py
-#python forward_rewritten.py > forward.ll
+python forward_rewritten.py > forward.v
