@@ -1,12 +1,13 @@
 import ast
 import inspect
+import warnings
 from ast import Assign, Mult, Add, BinOp, Name, Call
 
 import astor
 import numpy as np
-from ast_tools.passes import apply_passes
+# from ast_tools.passes import apply_passes
 
-from verilog_val import VerilogForward, VerilogWire, VerilogConstant
+from verilog_val import VerilogWire, VerilogConstant, VerilogForward
 
 MAC_IDX = None
 
@@ -30,7 +31,8 @@ class ArrayDecl:
     def __getitem__(self, index):
         index = self.idx_map(index)
         if index not in self.registers:
-            assert self.input or self.globl, (self.var_name, index)
+            if not (self.input or self.globl):
+                warnings.warn(f"wtf are you doing assigning to {self.var_name, index}")
             v = self.val_cons(f"{self.var_name}_{'_'.join(map(str, index))}")
             v.var_id = v.name
             self.registers[index] = v
