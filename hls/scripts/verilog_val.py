@@ -1,4 +1,3 @@
-import sys
 from collections import defaultdict, deque
 from itertools import product
 from textwrap import dedent, indent
@@ -58,8 +57,35 @@ class VerilogWire:
     def __str__(self):
         return f"{self.name}"
 
+    def __mul__(self, other):
+        # <result> = fmul float 4.0, %var
+        if isinstance(other, (float, int, bool)):
+            other = VerilogWire(other)
+        v = VerilogWire(f"(* ({self}) ({other}))")
+        # print(f"{v} = fmul float {self}, {other}")
+        # print(
+        #     f"{v} = call float @llvm.fmuladd.f32(float {self}, float {other}, float 0.0)"
+        # )
+        return v
 
+    def __add__(self, other):
+        # <result> = fadd float 4.0, %var
+        if isinstance(other, (float, int, bool)):
+            other = VerilogWire(other)
+        v = VerilogWire(f"(+ ({self}) ({other}))")
+        # print(f"{v} = fadd float {self}, {other}")
+        # print(
+        #     f"{v} = call float @llvm.fmuladd.f32(float {self}, float 1.0, float {other})"
+        # )
+        return v
 
+    def __gt__(self, other):
+        # <result> = fcmp ugt float 4.0, 5.0
+        if isinstance(other, (float, int, bool)):
+            other = VerilogWire(other)
+        v = VerilogWire(f"(> ({self}) ({other}))")
+        # print(f"{v} = fcmp ugt float {self}, {other}")
+        return v
 
 
 class VerilogReg:
@@ -152,6 +178,8 @@ def make_args_globals(Args):
 
 
 FILE = open("forward.1.v", "w")
+
+
 # FILE = sys.stdout
 
 
@@ -197,7 +225,6 @@ def VerilogForward(Args, OUTPUT_ARRAYS, forward):
     for mac_idx in MAC_STACKS:
         print(make_mac(mac_idx), file=FILE)
 
-
     for mac_idx, macs in MAC_STACKS.items():
         print(indent("always @(posedge ap_clk) begin", "\t"), file=FILE)
         for mac in macs:
@@ -226,7 +253,7 @@ def VerilogForward(Args, OUTPUT_ARRAYS, forward):
 
     for arr in OUTPUT_ARRAYS:
         for idx, reg in arr.registers.items():
-            out_wire = '_arg1_' + '_'.join(map(str, idx))
+            out_wire = "_arg1_" + "_".join(map(str, idx))
             print(indent(f"assign {out_wire} = {reg};", "\t"), file=FILE)
         print(file=FILE)
 
@@ -249,6 +276,6 @@ def ParFor(body, ranges):
         body(*idxs)
         # if len(MAC_STACKS[MAC_IDX]):
         #     MAC_STACKS[MAC_IDX].append((make_mac_output(MAC_IDX),))
-            # MAC_STACKS[MAC_IDX].append(MAC_TERMINAL(PAR_IDX))
+        # MAC_STACKS[MAC_IDX].append(MAC_TERMINAL(PAR_IDX))
 
     PAR_IDX += 1
