@@ -32,6 +32,6 @@ sed -i 's/scf\.yield//g' forward.affine.mlir
 
 #torch-mlir-opt forward.affine.mlir -affine-loop-unroll="unroll-full unroll-full-threshold=10000000" -o forward.affine.unrolled.mlir
 scalehls-translate forward.affine.mlir --emit-hlspy --mlir-print-elementsattrs-with-hex-if-larger=-1 -o forward.py
-black forward.py
+# black forward.py
 python mlir_ops.py
 python forward_rewritten.py
