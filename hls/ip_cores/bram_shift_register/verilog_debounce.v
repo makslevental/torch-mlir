@@ -22,16 +22,16 @@
 ------------------------------------------------------------------------------*/
 
 module verilog_debounce(
-    input clk,             //system clock
+    input ap_clk,             //system clock
     input reset_n,         //asynchronous active low reset
     input [1:0] button,    //two input signals to be debounced
     output [1:0] result    //two debounced signals
     );
 
     debounce #(50_000_000,10)                     //VHDL component name and generic parameter mapping
-    debounce_0(clk,reset_n,button[0],result[0]);  //instance name and port mapping for first signal
+    debounce_0(ap_clk,reset_n,button[0],result[0]);  //instance name and port mapping for first signal
 
     debounce #(50_000_000,10)                     //VHDL component name and generic parameter mapping
-    debounce_1(clk,reset_n,button[1],result[1]);  //instance name and port mapping for second signal
+    debounce_1(ap_clk,reset_n,button[1],result[1]);  //instance name and port mapping for second signal
 	 
 endmodule	
