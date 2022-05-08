@@ -14,13 +14,7 @@ REG_COUNT = 0
 WIRE_COUNT = 0
 
 
-def make_id(idx):
-    return idx
-
-
-def make_mac(idx):
-    id = make_id(idx)
-
+def make_mac(id):
     return f"""
     
     wire aresetn_{id};
@@ -28,6 +22,7 @@ def make_mac(idx):
     wire a_tlast_{id};
     reg[15:0] b_tdata_{id};
     wire[15:0] r_tdata_{id};
+    reg[15:0] r_tdata_{id}_reg;
     wire r_tlast_{id};
      
     mac mac_{id} (
@@ -43,8 +38,27 @@ def make_mac(idx):
 
 
 def make_mac_output(idx):
-    id = make_id(idx)
-    return f"r_tdata_{id}_reg <= r_tdata_{id}"
+    mac = MACS[idx]
+    return f"r_tdata_{mac.id}_reg <= r_tdata_{mac.id}"
+
+
+def make_relu(id):
+    return f"""
+    
+    reg[15:0] din_relu_{id};
+    wire[15:0] dout_relu_{id};
+    reg[15:0] dout_relu_{id}_reg;
+     
+    relu relu_{id} (
+        .din_relu(din_relu_{id}),
+        .dout_relu(dout_relu_{id})
+    );
+    """
+
+
+def make_relu_output(idx):
+    relu = RELUS[idx]
+    return f"dout_relu_{relu.id}_reg <= dout_relu_{relu.id}"
 
 
 class VerilogWire:
@@ -57,35 +71,35 @@ class VerilogWire:
     def __str__(self):
         return f"{self.name}"
 
-    def __mul__(self, other):
-        # <result> = fmul float 4.0, %var
-        if isinstance(other, (float, int, bool)):
-            other = VerilogWire(other)
-        v = VerilogWire(f"(* ({self}) ({other}))")
-        # print(f"{v} = fmul float {self}, {other}")
-        # print(
-        #     f"{v} = call float @llvm.fmuladd.f32(float {self}, float {other}, float 0.0)"
-        # )
-        return VerilogWire(f"{format_cst(None)} * {format_cst(None)}")
+    # def __mul__(self, other):
+    #     # <result> = fmul float 4.0, %var
+    #     if isinstance(other, (float, int, bool)):
+    #         other = VerilogWire(other)
+    #     v = VerilogWire(f"(* ({self}) ({other}))")
+    #     # print(f"{v} = fmul float {self}, {other}")
+    #     # print(
+    #     #     f"{v} = call float @llvm.fmuladd.f32(float {self}, float {other}, float 0.0)"
+    #     # )
+    #     return VerilogWire(f"{format_cst(None)} * {format_cst(None)}")
 
-    def __add__(self, other):
-        # <result> = fadd float 4.0, %var
-        if isinstance(other, (float, int, bool)):
-            other = VerilogWire(other)
-        v = VerilogWire(f"(+ ({self}) ({other}))")
-        # print(f"{v} = fadd float {self}, {other}")
-        # print(
-        #     f"{v} = call float @llvm.fmuladd.f32(float {self}, float 1.0, float {other})"
-        # )
-        return VerilogWire(f"{format_cst(None)} + {format_cst(None)}")
+    # def __add__(self, other):
+    #     # <result> = fadd float 4.0, %var
+    #     if isinstance(other, (float, int, bool)):
+    #         other = VerilogWire(other)
+    #     v = VerilogWire(f"(+ ({self}) ({other}))")
+    #     # print(f"{v} = fadd float {self}, {other}")
+    #     # print(
+    #     #     f"{v} = call float @llvm.fmuladd.f32(float {self}, float 1.0, float {other})"
+    #     # )
+    #     return VerilogWire(f"{format_cst(None)} + {format_cst(None)}")
 
-    def __gt__(self, other):
-        # <result> = fcmp ugt float 4.0, 5.0
-        if isinstance(other, (float, int, bool)):
-            other = VerilogWire(other)
-        v = VerilogWire(f"(> ({self}) ({other}))")
-        # print(f"{v} = fcmp ugt float {self}, {other}")
-        return VerilogWire(f"{format_cst(None)} > {format_cst(None)}")
+    # def __gt__(self, other):
+    #     # <result> = fcmp ugt float 4.0, 5.0
+    #     if isinstance(other, (float, int, bool)):
+    #         other = VerilogWire(other)
+    #     v = VerilogWire(f"(> ({self}) ({other}))")
+    #     # print(f"{v} = fcmp ugt float {self}, {other}")
+    #     return VerilogWire(f"{format_cst(None)} > {format_cst(None)}")
 
 
 class VerilogReg:
@@ -119,42 +133,91 @@ class MAC_TERMINAL:
         return str(self.parfor_idx)
 
 
-MAC_STACKS = defaultdict(deque)
+MAC_QUEUES = defaultdict(deque)
+
+
+
+class MMAC:
+    def __init__(self, MAC_IDX):
+        self.mac_idx = MAC_IDX
+        self.id = '_'.join(map(str, MAC_IDX))
+        self.a_wire = VerilogWire(f"a_tdata_{self.id}")
+        self.b_wire = VerilogWire(f"b_tdata_{self.id}")
+        self.r_wire = VerilogWire(f"r_tdata_{self.id}")
+        self.work = deque()
+    
+    def push_work(self, a, b):
+        self.work.append(f"{self.a_wire} <= {a}")
+        self.work.append(f"{self.b_wire} <= {b}")
+    
+    def push_read_result(self, r):
+            self.work.append(f"{r} <= {self.r_wire}")
+
 
 MACS = {}
 
 
-class MAC(VerilogWire):
-    def __init__(self, a, b, c):
-        super(MAC, self).__init__(str(MAC_IDX))
-        self.mac_idx = MAC_IDX
-        inps = [a, b, c]
-        for i, v in enumerate(inps):
+def MAC(*idx):
+    if idx not in MACS:
+        MACS[idx] = MMAC(idx)
+    mac = MACS[idx]
+    
+    def op(*args, **kwargs):
+        for i, v in enumerate(args):
             if isinstance(v, (float, int, bool)):
-                inps[i] = VerilogConstant(v)
+                args[i] = VerilogConstant(v)
 
-        a, b, c = inps
-        self.a = VerilogWire(f"a_tdata_{MAC_IDX}")
-        self.b = VerilogWire(f"b_tdata_{MAC_IDX}")
-        self.r_wire = VerilogWire(f"r_tdata_{MAC_IDX}")
-        # TODO: start of accum
-        if isinstance(b, VerilogConstant) and isinstance(c, VerilogConstant):
-            self.set_mac_wires(c)
-        self.set_mac_wires(a, b)
-        MACS[MAC_IDX] = self
+        if kwargs["type"] == 'MulAdd':
+            a, b, c = args
+            # TODO: start of accum
+            if isinstance(b, VerilogConstant) and isinstance(c, VerilogConstant):
+                # TODO: BRAM move here
+                mac.push_work(c, "16'b0")
+            mac.push_work(a, b)
+        else:
+            a, b = args
+            if kwargs["type"] == "Add":
+                # TODO: this is actually 4 cycles
+                # need wires out of the MAC
+                mac.push_work(a, "16'b0")
+                mac.push_work(b, "16'b0")
+            elif kwargs["type"] == "Mult":
+                mac.push_work("16'b0", "16'b0")
+                mac.push_work(a, b)
+        
+        return mac.r_wire
 
-    def __call__(self, *args, **kwargs):
-        return self.r_wire
+    return op
 
-    def set_mac_wires(self, a=None, b=None, r=None):
-        a_wire, b_wire, r_wire = self.a, self.b, self.r_wire
-        if a is not None and b is not None:
-            MAC_STACKS[MAC_IDX].append(((f"{a_wire} <= {a}"), (f"{b_wire} <= {b}")))
-        elif a is not None and b is None:
-            MAC_STACKS[MAC_IDX].append(((f"{a_wire} <= {a}"), (f"{b_wire} <= 16'd0")))
-        elif a is None and b is None:
-            assert r is not None
-            MAC_STACKS[MAC_IDX].append((f"{r} <= {r_wire}",))
+RELUS = {}
+
+class RReLU:
+    def __init__(self, idx):
+        self.idx = idx
+        self.id = '_'.join(map(str, idx))
+        self.in_wire = VerilogWire(f"din_relu_{self.id}")
+        self.out_wire = VerilogWire(f"dout_relu_{self.id}")
+        self.work = deque()
+    
+    def push_work(self, a):
+        self.work.append(f"{self.in_wire} <= {a}")
+
+    def push_read_result(self, r):
+            self.work.append(f"{r} <= {self.out_wire}")
+
+
+def ReLU(*idx):
+    if idx not in RELUS:
+        RELUS[idx] = RReLU(idx)
+    relu = RELUS[idx]
+
+    def op(*args, **kwargs):
+        a = args
+        relu.push_work(a)
+
+        return relu.out_wire
+    
+    return op
 
 
 def make_args_globals(Args):
@@ -184,7 +247,7 @@ FILE = open("forward.v", "w")
 
 
 def any_rounds_left():
-    return any([len(macs) for macs in MAC_STACKS.values()])
+    return any([len(macs) for macs in MAC_QUEUES.values()])
 
 
 def VerilogForward(Args, OUTPUT_ARRAYS, forward):
@@ -222,14 +285,16 @@ def VerilogForward(Args, OUTPUT_ARRAYS, forward):
 
     rounds = []
 
-    for mac_idx in MAC_STACKS:
-        print(make_mac(mac_idx), file=FILE)
+    for mac in MACS.values():
+        print(make_mac(mac.id), file=FILE)
 
-    for mac_idx, macs in MAC_STACKS.items():
+    for relu in RELUS.values():
+        print(make_relu(relu.id), file=FILE)
+
+    for _mac_idx, mac in MACS.items():
         print(indent("always @(posedge ap_clk) begin", "\t"), file=FILE)
-        for mac in macs:
-            for assign in mac:
-                print(indent(f'{assign.replace("<=", "=")};', "\t\t"), file=FILE)
+        for assign in mac.work:
+            print(indent(f'{assign.replace("<=", "=")};', "\t\t"), file=FILE)
         print(indent("end", "\t"), file=FILE)
         print(file=FILE)
 
