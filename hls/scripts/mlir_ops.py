@@ -1,10 +1,11 @@
 import ast
 import inspect
 import warnings
-from ast import Assign, Mult, Add, BinOp, Name, Call
+from ast import Assign, Mult, Add, BinOp, Name, Call, keyword, Str, IfExp, Compare
 
 import astor
 import numpy as np
+
 # from ast_tools.passes import apply_passes
 
 from verilog_val import VerilogWire, VerilogConstant, VerilogForward
@@ -15,7 +16,15 @@ OUTPUT_ARRAYS = []
 
 
 class ArrayDecl:
-    def __init__(self, var_name, *shape, input=False, output=False, globl=False, val_cons=VerilogWire):
+    def __init__(
+        self,
+        var_name,
+        *shape,
+        input=False,
+        output=False,
+        globl=False,
+        val_cons=VerilogWire,
+    ):
         global OUTPUT_ARRAYS
         self.var_name = var_name
         self.curr_shape = shape
@@ -31,8 +40,8 @@ class ArrayDecl:
     def __getitem__(self, index):
         index = self.idx_map(index)
         if index not in self.registers:
-            if not (self.input or self.globl):
-                warnings.warn(f"wtf are you doing assigning to {self.var_name, index}")
+            # if not self.output:
+            #     warnings.warn(f"wtf are you doing assigning to {self.var_name, index}")
             v = self.val_cons(f"{self.var_name}_{'_'.join(map(str, index))}")
             v.var_id = v.name
             self.registers[index] = v
@@ -116,10 +125,10 @@ class RemoveMulAdd(ast.NodeTransformer):
             for i in range(len(assigns) - 1):
                 assign1, assign2 = assigns[i], assigns[i + 1]
                 if (
-                        isinstance(assign1.value, BinOp)
-                        and isinstance(assign1.value.op, Mult)
-                        and isinstance(assign2.value, BinOp)
-                        and isinstance(assign2.value.op, Add)
+                    isinstance(assign1.value, BinOp)
+                    and isinstance(assign1.value.op, Mult)
+                    and isinstance(assign2.value, BinOp)
+                    and isinstance(assign2.value.op, Add)
                 ):
                     self.dels.add(assign1)
                     self.subs[assign2] = (
@@ -149,6 +158,14 @@ class RemoveMulAdd(ast.NodeTransformer):
 class RemoveMAC(ast.NodeTransformer):
     subs = {}
     dels = set()
+    body_args = []
+
+    def visit_FunctionDef(self, node):
+        print(node.name)
+        if node.name == "body":
+            self.body_args = node.args.args
+        self.generic_visit(node)
+        return node
 
     def visit_For(self, node):
         self.generic_visit(node)
@@ -157,10 +174,10 @@ class RemoveMAC(ast.NodeTransformer):
             for i in range(len(assigns) - 1):
                 assign1, assign2 = assigns[i], assigns[i + 1]
                 if (
-                        isinstance(assign1.value, BinOp)
-                        and isinstance(assign1.value.op, Mult)
-                        and isinstance(assign2.value, BinOp)
-                        and isinstance(assign2.value.op, Add)
+                    isinstance(assign1.value, BinOp)
+                    and isinstance(assign1.value.op, Mult)
+                    and isinstance(assign2.value, BinOp)
+                    and isinstance(assign2.value.op, Add)
                 ):
                     self.dels.add(assign1)
                     self.subs[assign2] = (
@@ -175,13 +192,101 @@ class RemoveMAC(ast.NodeTransformer):
         if node in self.dels:
             return None
         elif node in self.subs:
-            mac_inst = Call(func=Name(id="MAC"), args=self.subs[node], keywords=[])
+            mac_inst = Call(func=Name(id="MAC"), args=self.body_args, keywords=[])
             return Assign(
                 targets=node.targets,
                 value=Call(
                     func=mac_inst,
-                    args=[],
-                    keywords=[]),
+                    args=self.subs[node],
+                    keywords=[keyword(arg="type", value=Str("MulAdd"))],
+                ),
+                type_comment=None,
+            )
+        else:
+            return node
+
+    def visit_AugAssign(self, node):
+        return node
+
+
+class RemoveMulOrAdd(ast.NodeTransformer):
+    subs = {}
+    body_args = []
+
+    def visit_FunctionDef(self, node):
+        print(node.name)
+        if node.name == "body":
+            self.body_args = node.args.args
+            assigns = [b for b in node.body if isinstance(b, Assign)]
+            for assign in assigns:
+                if (
+                    isinstance(assign.value, BinOp)
+                    and isinstance(assign.value.op, Mult)
+                ) or (
+                    isinstance(assign.value, BinOp) and isinstance(assign.value.op, Add)
+                ):
+                    self.subs[assign] = (
+                        assign.value.left,
+                        assign.value.right,
+                    )
+                else:
+                    print(assign.value)
+
+        self.generic_visit(node)
+        return node
+
+    def visit_Assign(self, node):
+        if node in self.subs:
+            mac_inst = Call(func=Name(id="MAC"), args=self.body_args, keywords=[])
+            return Assign(
+                targets=node.targets,
+                value=Call(
+                    func=mac_inst,
+                    args=self.subs[node],
+                    keywords=[keyword(arg="type", value=Str(node.value.op.__doc__))],
+                ),
+                type_comment=None,
+            )
+        else:
+            return node
+
+    def visit_AugAssign(self, node):
+        return node
+
+
+class RemoveIfExp(ast.NodeTransformer):
+    subs = {}
+    dels = set()
+    body_args = []
+
+    def visit_FunctionDef(self, node):
+        if node.name == "body":
+            self.body_args = node.args.args
+            assigns = [b for b in node.body if isinstance(b, Assign)]
+            if len(assigns) > 1:
+                for i in range(len(assigns) - 1):
+                    assign1, assign2 = assigns[i], assigns[i + 1]
+                    if isinstance(assign1.value, Compare) and isinstance(
+                        assign2.value, IfExp
+                    ):
+                        self.dels.add(assign1)
+                        self.subs[assign2] = (assign1.value.left,)
+
+        self.generic_visit(node)
+        return node
+
+    def visit_Assign(self, node):
+        if node in self.dels:
+            return None
+        elif node in self.subs:
+            relu_inst = Call(func=Name(id="ReLU"), args=self.body_args, keywords=[])
+            return Assign(
+                targets=node.targets,
+                value=Call(
+                    func=relu_inst,
+                    args=self.subs[node],
+                    keywords=[],
+                ),
                 type_comment=None,
             )
         else:
@@ -212,6 +317,8 @@ class RemoveMAC(ast.NodeTransformer):
 def transform_forward_py():
     code_ast = astor.parse_file("forward.py")
     new_tree = RemoveMAC().visit(code_ast)
+    new_tree = RemoveMulOrAdd().visit(new_tree)
+    new_tree = RemoveIfExp().visit(new_tree)
     with open("forward_rewritten.py", "w") as f:
         f.write(astor.code_gen.to_source(new_tree))
 

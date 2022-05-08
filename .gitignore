@@ -20,3 +20,5 @@ __pycache__
 
 # Bazel
 bazel-*
+
+cmake-build-debug

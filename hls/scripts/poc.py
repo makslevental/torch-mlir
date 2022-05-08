@@ -354,7 +354,6 @@ def make_split_braggnn(root_out_dir, scale=4, imgsz=11, simplify_weights=False):
 
 
 def make_whole_braggnn(root_out_dir, scale=4, imgsz=11, simplify_weights=False):
-    mb = ModuleBuilder()
     with torch.no_grad():
         mod = BraggNN(imgsz=imgsz, scale=scale)
         mod.eval()
@@ -366,17 +365,29 @@ def make_whole_braggnn(root_out_dir, scale=4, imgsz=11, simplify_weights=False):
             mod, [None, ([1, 1, imgsz, imgsz], torch.float32, True)]
         )
 
+    out_dir = str(
+        root_out_dir / Path(recursivescriptmodule.original_name + f".{scale}")
+    )
+    open(f"{out_dir}/forward.ts.mlir", "w").write(str(recursivescriptmodule.graph))
+
+    mb = ModuleBuilder()
     mb.import_module(recursivescriptmodule._c, class_annotator)
+    run_pipeline_with_repro_report(mb.module, ",".join([
+        "torchscript-module-to-torch-backend-pipeline",
+        "torch-backend-to-linalg-on-tensors-backend-pipeline",
+    ]), "")
+    out = mb.module.operation.get_asm(
+        large_elements_limit=100000, enable_debug_info=False
+    )
+    open(f"{out_dir}/forward.linalg.mlir", "w").write(out)
 
+    mb = ModuleBuilder()
+    mb.import_module(recursivescriptmodule._c, class_annotator)
     run_pipeline_with_repro_report(mb.module, ",".join(PIPELINE), "")
-
     out = mb.module.operation.get_asm(
         large_elements_limit=100000, enable_debug_info=False
     )
 
-    out_dir = str(
-        root_out_dir / Path(recursivescriptmodule.original_name + f".{scale}")
-    )
     put_script_files(
         out_str=out, in_shape=tuple(t.shape), out_shape=tuple(y.shape), out_dir=out_dir
     )
@@ -423,7 +434,7 @@ def main():
     print(args)
     args.out_dir = args.out_dir.resolve()
 
-    # make_single_small_cnn(args.out_dir, scale=2, imgsz=5, simplify_weights=False)
+    make_single_small_cnn(args.out_dir, scale=2, imgsz=5, simplify_weights=False)
 
     for i in range(args.low_scale, args.high_scale):
         # if not args.no_split_braggnn:

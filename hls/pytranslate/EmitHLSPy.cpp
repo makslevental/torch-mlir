@@ -1486,7 +1486,7 @@ void ModuleEmitter::emitNestedLoopFooter(unsigned rank) {
 void ModuleEmitter::emitBlock(Block &block) {
   for (auto &op : block) {
 
-    if (!llvm::dyn_cast<scf::YieldOp>(op)) {
+    if (!llvm::dyn_cast<scf::YieldOp>(op) && !llvm::dyn_cast<AffineYieldOp>(op)) {
       std::string s;
       llvm::raw_string_ostream rs{s};
       op.print(rs);
@@ -1587,7 +1587,7 @@ void ModuleEmitter::emitFunction(FuncOp func) {
 void ModuleEmitter::emitModule(ModuleOp module) {
   os << R"XXX(import numpy as np
 from mlir_ops import ArrayDecl, Global, Forward
-from verilog_val import MAC, ParFor
+from verilog_val import MAC, ParFor, ReLU
 )XXX";
   os << "\n\n";
   os << " # fmt: off\n";
