@@ -372,10 +372,16 @@ def make_whole_braggnn(root_out_dir, scale=4, imgsz=11, simplify_weights=False):
 
     mb = ModuleBuilder()
     mb.import_module(recursivescriptmodule._c, class_annotator)
-    run_pipeline_with_repro_report(mb.module, ",".join([
-        "torchscript-module-to-torch-backend-pipeline",
-        "torch-backend-to-linalg-on-tensors-backend-pipeline",
-    ]), "")
+    run_pipeline_with_repro_report(
+        mb.module,
+        ",".join(
+            [
+                "torchscript-module-to-torch-backend-pipeline",
+                "torch-backend-to-linalg-on-tensors-backend-pipeline",
+            ]
+        ),
+        "",
+    )
     out = mb.module.operation.get_asm(
         large_elements_limit=100000, enable_debug_info=False
     )
@@ -391,19 +397,67 @@ def make_whole_braggnn(root_out_dir, scale=4, imgsz=11, simplify_weights=False):
     put_script_files(
         out_str=out, in_shape=tuple(t.shape), out_shape=tuple(y.shape), out_dir=out_dir
     )
+    open(f"{out_dir}/mod.txt", "w").write(str(mod))
 
 
-def make_single_small_cnn(root_out_dir, scale=4, imgsz=11, simplify_weights=False):
+def make_single_small_cnn(
+    root_out_dir, in_channels=2, out_channels=4, imgsz=11, simplify_weights=False
+):
     mb = ModuleBuilder()
     with torch.no_grad():
-        mod = torch.nn.Conv2d(1, scale, 3)
+        mod = torch.nn.Conv2d(in_channels, out_channels, 3)
         mod.eval()
-        t = torch.randn((1, 1, imgsz, imgsz))
+        print(mod)
+        t = torch.randn((1, in_channels, imgsz, imgsz))
         y = mod(t)
         if simplify_weights:
             mod.apply(set_weights)
         recursivescriptmodule, class_annotator = make_layer(
-            mod, [None, ([1, 1, imgsz, imgsz], torch.float32, True)]
+            mod, [None, ([1, in_channels, imgsz, imgsz], torch.float32, True)]
+        )
+
+    mb.import_module(recursivescriptmodule._c, class_annotator)
+
+    run_pipeline_with_repro_report(mb.module, ",".join(PIPELINE), "")
+
+    out = mb.module.operation.get_asm(
+        large_elements_limit=100000, enable_debug_info=False
+    )
+
+    out_dir = str(
+        root_out_dir / Path(recursivescriptmodule.original_name + f".{out_channels}")
+    )
+    open(f"{out_dir}/mod.txt", "w").write(str(mod))
+    put_script_files(
+        out_str=out, in_shape=tuple(t.shape), out_shape=tuple(y.shape), out_dir=out_dir
+    )
+
+
+class DoubleCNN(nn.Module):
+    def __init__(self, scale):
+        super().__init__()
+        self.conv1 = torch.nn.Conv2d(8//scale, 16//scale, 1)
+        self.conv2 = torch.nn.Conv2d(16//scale, 8//scale, 3)
+        self.conv3 = torch.nn.Conv2d(8//scale, 4//scale, 3)
+
+    def forward(self, x):
+        y = self.conv1(x)
+        z = self.conv2(y)
+        w = self.conv3(z)
+        return w
+
+
+def make_double_small_cnn(root_out_dir, scale=1, imgsz=11, simplify_weights=False):
+    mb = ModuleBuilder()
+    with torch.no_grad():
+        mod = DoubleCNN(scale)
+        mod.eval()
+        t = torch.randn((1, 8, imgsz, imgsz))
+        y = mod(t)
+        if simplify_weights:
+            mod.apply(set_weights)
+        recursivescriptmodule, class_annotator = make_layer(
+            mod, [None, ([1, 8, imgsz, imgsz], torch.float32, True)]
         )
 
     mb.import_module(recursivescriptmodule._c, class_annotator)
@@ -420,6 +474,7 @@ def make_single_small_cnn(root_out_dir, scale=4, imgsz=11, simplify_weights=Fals
     put_script_files(
         out_str=out, in_shape=tuple(t.shape), out_shape=tuple(y.shape), out_dir=out_dir
     )
+    open(f"{out_dir}/mod.txt", "w").write(str(mod))
 
 
 def main():
@@ -434,13 +489,14 @@ def main():
     print(args)
     args.out_dir = args.out_dir.resolve()
 
-    make_single_small_cnn(args.out_dir, scale=2, imgsz=5, simplify_weights=False)
+    # make_single_small_cnn(args.out_dir, in_channels=1, out_channels=16, imgsz=11, simplify_weights=False)
+    make_double_small_cnn(args.out_dir, scale=1, imgsz=9, simplify_weights=False)
 
-    for i in range(args.low_scale, args.high_scale):
-        # if not args.no_split_braggnn:
-        #     make_split_braggnn(args.out_dir, scale=i, imgsz=11)
-        if not args.no_whole_braggnn:
-            make_whole_braggnn(args.out_dir, scale=i, imgsz=11)
+    # for i in range(args.low_scale, args.high_scale):
+    #     # if not args.no_split_braggnn:
+    #     #     make_split_braggnn(args.out_dir, scale=i, imgsz=11)
+    #     if not args.no_whole_braggnn:
+    #         make_whole_braggnn(args.out_dir, scale=i, imgsz=11)
 
 
 if __name__ == "__main__":

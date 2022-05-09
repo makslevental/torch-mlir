@@ -19,6 +19,9 @@ generate_target all [get_files  project_1/project_1.srcs/sources_1/ip/mul_half_p
 add_files -norecurse -scan_for_includes mac.v -force
 import_files -norecurse mac.v -force
 
+add_files -norecurse -scan_for_includes relu.v -force
+import_files -norecurse relu.v -force
+
 add_files -norecurse -scan_for_includes forward.v -force
 import_files -norecurse forward.v -force
 
