@@ -1,5 +1,6 @@
 from collections import defaultdict, deque
 from itertools import product
+from math import log2
 from textwrap import dedent, indent
 
 import numpy as np
@@ -136,38 +137,46 @@ class MAC_TERMINAL:
 MAC_QUEUES = defaultdict(deque)
 
 
-
 class MMAC:
     def __init__(self, MAC_IDX):
         self.mac_idx = MAC_IDX
-        self.id = '_'.join(map(str, MAC_IDX))
+        self.id = "_".join(map(str, MAC_IDX))
         self.a_wire = VerilogWire(f"a_tdata_{self.id}")
         self.b_wire = VerilogWire(f"b_tdata_{self.id}")
         self.r_wire = VerilogWire(f"r_tdata_{self.id}")
+        self.r_reg = VerilogWire(f"r_tdata_{self.id}_reg")
         self.work = deque()
-    
+
     def push_work(self, a, b):
-        self.work.append(f"{self.a_wire} <= {a}")
-        self.work.append(f"{self.b_wire} <= {b}")
-    
+        self.work.append((f"{self.a_wire} <= {a}", f"{self.b_wire} <= {b}"))
+
     def push_read_result(self, r):
-            self.work.append(f"{r} <= {self.r_wire}")
+        self.work.append(f"{self.r_reg} <= {r}")
 
 
 MACS = {}
 
+round = 0
+
 
 def MAC(*idx):
+
+    if len(idx) < 4:
+        _idx = 4 * [0]
+        _idx[0 : len(idx)] = idx
+        idx = tuple(_idx)
+
     if idx not in MACS:
         MACS[idx] = MMAC(idx)
     mac = MACS[idx]
-    
+
     def op(*args, **kwargs):
+        args = list(args)
         for i, v in enumerate(args):
             if isinstance(v, (float, int, bool)):
                 args[i] = VerilogConstant(v)
 
-        if kwargs["type"] == 'MulAdd':
+        if kwargs["type"] == "MulAdd":
             a, b, c = args
             # TODO: start of accum
             if isinstance(b, VerilogConstant) and isinstance(c, VerilogConstant):
@@ -184,26 +193,28 @@ def MAC(*idx):
             elif kwargs["type"] == "Mult":
                 mac.push_work("16'b0", "16'b0")
                 mac.push_work(a, b)
-        
-        return mac.r_wire
+
+        return mac.r_reg
 
     return op
 
+
 RELUS = {}
+
 
 class RReLU:
     def __init__(self, idx):
         self.idx = idx
-        self.id = '_'.join(map(str, idx))
+        self.id = "_".join(map(str, idx))
         self.in_wire = VerilogWire(f"din_relu_{self.id}")
         self.out_wire = VerilogWire(f"dout_relu_{self.id}")
         self.work = deque()
-    
+
     def push_work(self, a):
         self.work.append(f"{self.in_wire} <= {a}")
 
     def push_read_result(self, r):
-            self.work.append(f"{r} <= {self.out_wire}")
+        self.work.append(f"{r} <= {self.out_wire}")
 
 
 def ReLU(*idx):
@@ -216,8 +227,16 @@ def ReLU(*idx):
         relu.push_work(a)
 
         return relu.out_wire
-    
+
     return op
+
+
+def ParFor(body, ranges):
+    for i, idx in enumerate(product(*ranges)):
+        body(*idx)
+        if idx in MACS:
+            mac = MACS[idx]
+            mac.push_read_result(mac.r_wire)
 
 
 def make_args_globals(Args):
@@ -291,10 +310,53 @@ def VerilogForward(Args, OUTPUT_ARRAYS, forward):
     for relu in RELUS.values():
         print(make_relu(relu.id), file=FILE)
 
+    fsm_width = 0
     for _mac_idx, mac in MACS.items():
-        print(indent("always @(posedge ap_clk) begin", "\t"), file=FILE)
-        for assign in mac.work:
-            print(indent(f'{assign.replace("<=", "=")};', "\t\t"), file=FILE)
+        fsm_width = max(fsm_width, int(log2(len(mac.work))) + 1)
+
+    print(
+        indent(
+            dedent(
+                f"""
+    reg [{fsm_width-1}:0] fsm_state;
+    reg [{fsm_width-1}:0] fsm_state_next;
+
+    always @(*) begin
+       fsm_state_next = fsm_state + 1;
+    end
+
+    always @(posedge ap_clk or negedge ap_rst) begin
+       if (!ap_rst)
+          fsm_state <= {fsm_width}'b0;
+       else
+          fsm_state <= fsm_state_next;
+    end
+    """
+            ),
+            "\t",
+        ),
+        file=FILE,
+    )
+
+    for _mac_idx, mac in MACS.items():
+        print(indent("always @ (fsm_state) begin", "\t"), file=FILE)
+        print(indent("case(fsm_state)", "\t\t"), file=FILE)
+        for i, assigns in enumerate(mac.work):
+            if isinstance(assigns, tuple):
+                print(indent(f"{fsm_width}'d{i} : begin", "\t\t\t"), file=FILE)
+                for assign in assigns:
+                    print(
+                        indent(f'{assign.replace("<=", "=")};', "\t\t\t\t"), file=FILE
+                    )
+                print(indent("end", "\t\t\t"), file=FILE)
+            else:
+                print(
+                    indent(
+                        f"{fsm_width}'d{i} : {assigns.replace('<=', '=')};", "\t\t\t"
+                    ),
+                    file=FILE,
+                )
+        print(indent("endcase", "\t\t"), file=FILE)
         print(indent("end", "\t"), file=FILE)
         print(file=FILE)
 
@@ -327,20 +389,3 @@ def VerilogForward(Args, OUTPUT_ARRAYS, forward):
 
 def test_hex():
     print(format_cst(1000 + np.random.randn(1)[0]))
-
-
-PAR_IDX = 0
-
-
-def ParFor(body, ranges):
-    global PAR_IDX
-    global MAC_IDX
-
-    for i, idxs in enumerate(product(*ranges)):
-        MAC_IDX = i
-        body(*idxs)
-        # if len(MAC_STACKS[MAC_IDX]):
-        #     MAC_STACKS[MAC_IDX].append((make_mac_output(MAC_IDX),))
-        # MAC_STACKS[MAC_IDX].append(MAC_TERMINAL(PAR_IDX))
-
-    PAR_IDX += 1
