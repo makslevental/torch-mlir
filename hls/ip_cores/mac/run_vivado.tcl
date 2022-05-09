@@ -41,6 +41,7 @@ launch_runs impl_1 -jobs 16
 report_utilization -file project_1/hier_util.rpt -hierarchical -hierarchical_percentages
 create_clock -period 10.000 -name clk -waveform {0.000 5.000} [get_ports ap_clk]
 report_timing -file project_1/timing_synth.rpt
+report_timing_summary -file project_1/timing_synth_summary.rpt
 
 
 
