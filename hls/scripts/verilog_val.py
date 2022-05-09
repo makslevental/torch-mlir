@@ -171,6 +171,8 @@ def MAC(*idx):
     mac = MACS[idx]
 
     def op(*args, **kwargs):
+        global BODY_HAS_MAC
+        BODY_HAS_MAC = True
         args = list(args)
         for i, v in enumerate(args):
             if isinstance(v, (float, int, bool)):
@@ -230,13 +232,17 @@ def ReLU(*idx):
 
     return op
 
+BODY_HAS_MAC = False
 
 def ParFor(body, ranges):
+    global BODY_HAS_MAC
     for i, idx in enumerate(product(*ranges)):
         body(*idx)
-        if idx in MACS:
+        if BODY_HAS_MAC and idx in MACS:
+            print("wtf", i)
             mac = MACS[idx]
             mac.push_read_result(mac.r_wire)
+    BODY_HAS_MAC = False
 
 
 def make_args_globals(Args):
@@ -302,8 +308,6 @@ def VerilogForward(Args, OUTPUT_ARRAYS, forward):
 
     forward()
 
-    rounds = []
-
     for mac in MACS.values():
         print(make_mac(mac.id), file=FILE)
 
@@ -338,7 +342,8 @@ def VerilogForward(Args, OUTPUT_ARRAYS, forward):
         file=FILE,
     )
 
-    for _mac_idx, mac in MACS.items():
+    for mac_idx, mac in MACS.items():
+        print(indent(f"// mac idx {mac_idx}", "\t"), file=FILE)
         print(indent("always @ (fsm_state) begin", "\t"), file=FILE)
         print(indent("case(fsm_state)", "\t\t"), file=FILE)
         for i, assigns in enumerate(mac.work):
@@ -350,9 +355,10 @@ def VerilogForward(Args, OUTPUT_ARRAYS, forward):
                     )
                 print(indent("end", "\t\t\t"), file=FILE)
             else:
+                print(mac_idx, i, assigns)
                 print(
                     indent(
-                        f"{fsm_width}'d{i} : {assigns.replace('<=', '=')};", "\t\t\t"
+                        f"{fsm_width}'d{i} : {assigns};", "\t\t\t"
                     ),
                     file=FILE,
                 )
