@@ -239,7 +239,6 @@ def ParFor(body, ranges):
     for i, idx in enumerate(product(*ranges)):
         body(*idx)
         if BODY_HAS_MAC and idx in MACS:
-            print("wtf", i)
             mac = MACS[idx]
             mac.push_read_result(mac.r_wire)
     BODY_HAS_MAC = False
@@ -355,7 +354,6 @@ def VerilogForward(Args, OUTPUT_ARRAYS, forward):
                     )
                 print(indent("end", "\t\t\t"), file=FILE)
             else:
-                print(mac_idx, i, assigns)
                 print(
                     indent(
                         f"{fsm_width}'d{i} : {assigns};", "\t\t\t"

@@ -7,8 +7,8 @@ import astor
 import numpy as np
 
 # from ast_tools.passes import apply_passes
-
-from verilog_val import VerilogWire, VerilogConstant, VerilogForward
+from llvm_val import LLVMForward, LLVMVal, LLVMConstant
+# from verilog_val import VerilogWire, VerilogConstant, VerilogForward
 
 MAC_IDX = None
 
@@ -17,13 +17,13 @@ OUTPUT_ARRAYS = []
 
 class ArrayDecl:
     def __init__(
-        self,
-        var_name,
-        *shape,
-        input=False,
-        output=False,
-        globl=False,
-        val_cons=VerilogWire,
+            self,
+            var_name,
+            *shape,
+            input=False,
+            output=False,
+            globl=False,
+            val_cons=LLVMVal,
     ):
         global OUTPUT_ARRAYS
         self.var_name = var_name
@@ -40,8 +40,8 @@ class ArrayDecl:
     def __getitem__(self, index):
         index = self.idx_map(index)
         if index not in self.registers:
-            # if not self.output:
-            #     warnings.warn(f"wtf are you doing assigning to {self.var_name, index}")
+            if not self.input:
+                return LLVMConstant("0.0")
             v = self.val_cons(f"{self.var_name}_{'_'.join(map(str, index))}")
             v.var_id = v.name
             self.registers[index] = v
@@ -51,9 +51,10 @@ class ArrayDecl:
     def __setitem__(self, index, value):
         index = self.idx_map(index)
         assert not self.input and not self.globl
-        # if index in self.registers:
-        #     var_name = f"%{self.var_name}_{'_'.join(map(str, index))}"
-        #     print(f"store float {value}, float* {var_name}, align 4")
+        if self.val_cons == LLVMVal:
+            if index in self.registers:
+                var_name = f"%{self.var_name}_{'_'.join(map(str, index))}"
+                # print(f"store float {value}, float* {var_name}, align 4")
         self.registers[index] = value
 
     def idx_map(self, index):
@@ -68,18 +69,25 @@ class ArrayDecl:
 
 
 class Global:
-    def __init__(self, var_name, global_name, global_array, cst_cons=VerilogConstant):
+    def __init__(self, var_name, global_name, global_array, cst_cons=LLVMConstant):
+        # @cx = global { float, float } { float 1.000000e+00, float 9.900000e+01 }, align 4
+        # @_ZL5arg_1 = internal constant [10 x [10 x [10 x [10 x float]]]] zeroinitializer, align 16
         self.var_name = var_name
         self.global_name = global_name
         self.global_array = global_array
+        self.curr_shape = global_array.shape
         self.cst_cons = cst_cons
         self.csts = {}
 
     def __getitem__(self, index):
-        if index not in self.csts:
-            self.csts[index] = self.cst_cons(self.global_array[index])
-        cst = self.csts[index]
-        return cst
+        # if index not in self.csts:
+        #     self.csts[index] = self.cst_cons(self.global_array[index])
+        # cst = self.csts[index]
+        v = LLVMVal(self.var_name)
+        idx = [str(np.ravel_multi_index(index, self.curr_shape))]
+        v.var_id = f"glob_{self.var_name}_idx_{'_'.join(idx)}"
+        return v
+        # return cst
 
     def __setitem__(self, key, value):
         raise Exception("wtfbbq")
@@ -97,21 +105,24 @@ def get_default_args(func):
     }
 
 
-def get_array_type(shape, ptr=True):
-    typ = ""
-    for s in shape:
-        typ += f"[{s} x "
-    typ += "float"
-    for _ in shape:
-        typ += "]"
-    if ptr:
-        typ += "*"
+def get_array_type(shape, ptr=True, nd=False):
+    if nd:
+        typ = ""
+        for s in shape:
+            typ += f"[{s} x "
+        typ += "float"
+        for _ in shape:
+            typ += "]"
+        if ptr:
+            typ += "*"
+    else:
+        typ = f"{np.prod(shape)} x float"
     return typ
 
 
 def Forward(forward):
     Args = get_default_args(forward)
-    VerilogForward(Args, OUTPUT_ARRAYS, forward)
+    LLVMForward(Args, OUTPUT_ARRAYS, forward)
 
 
 class RemoveMulAdd(ast.NodeTransformer):
@@ -125,10 +136,10 @@ class RemoveMulAdd(ast.NodeTransformer):
             for i in range(len(assigns) - 1):
                 assign1, assign2 = assigns[i], assigns[i + 1]
                 if (
-                    isinstance(assign1.value, BinOp)
-                    and isinstance(assign1.value.op, Mult)
-                    and isinstance(assign2.value, BinOp)
-                    and isinstance(assign2.value.op, Add)
+                        isinstance(assign1.value, BinOp)
+                        and isinstance(assign1.value.op, Mult)
+                        and isinstance(assign2.value, BinOp)
+                        and isinstance(assign2.value.op, Add)
                 ):
                     self.dels.add(assign1)
                     self.subs[assign2] = (
@@ -161,7 +172,6 @@ class RemoveMAC(ast.NodeTransformer):
     body_args = []
 
     def visit_FunctionDef(self, node):
-        print(node.name)
         if node.name == "body":
             self.body_args = node.args.args
         self.generic_visit(node)
@@ -174,10 +184,10 @@ class RemoveMAC(ast.NodeTransformer):
             for i in range(len(assigns) - 1):
                 assign1, assign2 = assigns[i], assigns[i + 1]
                 if (
-                    isinstance(assign1.value, BinOp)
-                    and isinstance(assign1.value.op, Mult)
-                    and isinstance(assign2.value, BinOp)
-                    and isinstance(assign2.value.op, Add)
+                        isinstance(assign1.value, BinOp)
+                        and isinstance(assign1.value.op, Mult)
+                        and isinstance(assign2.value, BinOp)
+                        and isinstance(assign2.value.op, Add)
                 ):
                     self.dels.add(assign1)
                     self.subs[assign2] = (
@@ -214,23 +224,20 @@ class RemoveMulOrAdd(ast.NodeTransformer):
     body_args = []
 
     def visit_FunctionDef(self, node):
-        print(node.name)
         if node.name == "body":
             self.body_args = node.args.args
             assigns = [b for b in node.body if isinstance(b, Assign)]
             for assign in assigns:
                 if (
-                    isinstance(assign.value, BinOp)
-                    and isinstance(assign.value.op, Mult)
+                        isinstance(assign.value, BinOp)
+                        and isinstance(assign.value.op, Mult)
                 ) or (
-                    isinstance(assign.value, BinOp) and isinstance(assign.value.op, Add)
+                        isinstance(assign.value, BinOp) and isinstance(assign.value.op, Add)
                 ):
                     self.subs[assign] = (
                         assign.value.left,
                         assign.value.right,
                     )
-                else:
-                    print(assign.value)
 
         self.generic_visit(node)
         return node
@@ -267,7 +274,7 @@ class RemoveIfExp(ast.NodeTransformer):
                 for i in range(len(assigns) - 1):
                     assign1, assign2 = assigns[i], assigns[i + 1]
                     if isinstance(assign1.value, Compare) and isinstance(
-                        assign2.value, IfExp
+                            assign2.value, IfExp
                     ):
                         self.dels.add(assign1)
                         self.subs[assign2] = (assign1.value.left,)
