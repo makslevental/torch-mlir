@@ -368,6 +368,7 @@ def make_whole_braggnn(root_out_dir, scale=4, imgsz=11, simplify_weights=False):
     out_dir = str(
         root_out_dir / Path(recursivescriptmodule.original_name + f".{scale}")
     )
+    os.makedirs(out_dir, exist_ok=True)
     open(f"{out_dir}/forward.ts.mlir", "w").write(str(recursivescriptmodule.graph))
 
     mb = ModuleBuilder()
@@ -492,11 +493,11 @@ def main():
     # make_single_small_cnn(args.out_dir, in_channels=1, out_channels=16, imgsz=11, simplify_weights=False)
     make_double_small_cnn(args.out_dir, scale=1, imgsz=9, simplify_weights=False)
 
-    # for i in range(args.low_scale, args.high_scale):
-    #     # if not args.no_split_braggnn:
-    #     #     make_split_braggnn(args.out_dir, scale=i, imgsz=11)
-    #     if not args.no_whole_braggnn:
-    #         make_whole_braggnn(args.out_dir, scale=i, imgsz=11)
+    for i in range(args.low_scale, args.high_scale):
+        # if not args.no_split_braggnn:
+        #     make_split_braggnn(args.out_dir, scale=i, imgsz=11)
+        if not args.no_whole_braggnn:
+            make_whole_braggnn(args.out_dir, scale=i, imgsz=11, simplify_weights=False)
 
 
 if __name__ == "__main__":
