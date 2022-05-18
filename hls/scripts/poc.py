@@ -490,8 +490,8 @@ def main():
     print(args)
     args.out_dir = args.out_dir.resolve()
 
-    # make_single_small_cnn(args.out_dir, in_channels=1, out_channels=16, imgsz=11, simplify_weights=False)
-    make_double_small_cnn(args.out_dir, scale=1, imgsz=9, simplify_weights=False)
+    make_single_small_cnn(args.out_dir, in_channels=1, out_channels=16, imgsz=11, simplify_weights=False)
+    # make_double_small_cnn(args.out_dir, scale=1, imgsz=9, simplify_weights=False)
 
     for i in range(args.low_scale, args.high_scale):
         # if not args.no_split_braggnn:
