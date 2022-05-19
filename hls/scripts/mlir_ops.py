@@ -1,70 +1,287 @@
+# from ast_tools.passes import apply_passes
+# from llvm_val import LLVMForward, LLVMVal, LLVMConstant
+# from verilog_val import VerilogWire, VerilogConstant, VerilogForward
 import ast
 import inspect
-import warnings
+import itertools
 from ast import Assign, Mult, Add, BinOp, Name, Call, keyword, Str, IfExp, Compare
+from collections import deque
+from itertools import product
+from typing import Tuple, Union, Dict, Any
 
 import astor
 import numpy as np
 
 # from ast_tools.passes import apply_passes
 # from llvm_val import LLVMForward, LLVMVal, LLVMConstant
-# from verilog_val import VerilogWire, VerilogConstant, VerilogForward
-import ast
-import inspect
-import warnings
-from ast import Assign, Mult, Add, BinOp, Name, Call, keyword, Str, IfExp, Compare
-
-import astor
-import numpy as np
-
-# from ast_tools.passes import apply_passes
-# from llvm_val import LLVMForward, LLVMVal, LLVMConstant
-# from verilog_val import VerilogWire, VerilogConstant, VerilogForward
-from cpp_val import CPPVal, CPPConstant, CPPForward, ArrayVal, GlobalVal
+from verilog_val import VerilogForward
 
 MAC_IDX = None
 
 OUTPUT_ARRAYS = []
 
+from dataclasses import dataclass
+
+
+class Val:
+    def __init__(self, name, val_id):
+        self.name = name
+        self.val_id = val_id
+
+    def __str__(self):
+        # return f"{self.name}_{self.val_id}"
+        # return f"{self.name}"
+        return f"val"
+
+    def __repr__(self):
+        return str(self)
+
+    def __mul__(self, other):
+        global PES
+        if isinstance(other, (float, int, bool)):
+            other = Constant(other)
+        m = Mul(self, other)
+        v = Val(f"(* {self} {other})", m)
+        PES[CURRENT_PE].push_instructions(m)
+        return v
+
+    def __truediv__(self, other):
+        global PES
+        if isinstance(other, (float, int, bool)):
+            other = Constant(other)
+        d = Div(self, other)
+        v = Val(f"(/ {self} {other})", d)
+        PES[CURRENT_PE].push_instructions(d)
+        return v
+
+    def __add__(self, other):
+        global PES
+        if isinstance(other, (float, int, bool)):
+            other = Constant(other)
+        a = Add(self, other)
+        v = Val(f"(+ {self} {other})", a)
+        PES[CURRENT_PE].push_instructions(a)
+        return v
+
+    def __sub__(self, other):
+        global PES
+        if isinstance(other, (float, int, bool)):
+            other = Constant(other)
+        s = Sub(self, other)
+        v = Val(f"(- {self} {other})", s)
+        PES[CURRENT_PE].push_instructions(s)
+        return v
+
+    def __gt__(self, other):
+        global PES
+        if isinstance(other, (float, int, bool)):
+            other = Constant(other)
+        g = GT(self, other)
+        v = Val(f"(> {self} {other})", g)
+        PES[CURRENT_PE].push_instructions(g)
+        return v
+
+
+ArrayIndex = Tuple[int]
+
+
+class ArrayVal(Val):
+    def __init__(self, name, val_id: ArrayIndex):
+        super().__init__(name, val_id)
+
+    def __str__(self):
+        return f"array{self.name}"
+
+
+class GlobalArrayVal(ArrayVal):
+    def __str__(self):
+        return f"global{self.name}_{'_'.join(map(str, self.val_id))}"
+
+
+@dataclass(frozen=True)
+class _Instruction:
+    pass
+
+
+@dataclass(frozen=True)
+class NOP(_Instruction):
+    pass
+
+
+@dataclass(frozen=True)
+class Bin(_Instruction):
+    left: Val
+    right: Val
+
+
+@dataclass(frozen=True)
+class Mul(Bin):
+    left: Val
+    right: Val
+
+
+@dataclass(frozen=True)
+class Div(Bin):
+    left: Val
+    right: Val
+
+
+@dataclass(frozen=True)
+class Add(Bin):
+    left: Val
+    right: Val
+
+
+@dataclass(frozen=True)
+class Sub(Bin):
+    left: Val
+    right: Val
+
+
+@dataclass(frozen=True)
+class GT(Bin):
+    left: Val
+    right: Val
+
+
+@dataclass(frozen=True)
+class ReLUInst(_Instruction):
+    val: Val
+
+
+
+@dataclass(frozen=True)
+class ExpInst(_Instruction):
+    val: Val
+
+
+@dataclass(frozen=True)
+class GetArrayItemInst(_Instruction):
+    index: ArrayIndex = None
+    val: ArrayVal = None
+
+
+@dataclass(frozen=True)
+class SetArrayItemInst(_Instruction):
+    index: ArrayIndex = None
+    val: Val = None
+
+
+@dataclass(frozen=True)
+class GetGlobalArrayItemInst(_Instruction):
+    index: ArrayIndex = None
+    val: GlobalArrayVal = None
+
+
+Instruction = Union[NOP]
+
+# def assert_never(x: NoReturn) -> NoReturn:
+#     raise AssertionError("Unhandled type: {}".format(type(x).__name__))
+#
+# def showResult(r: Result) -> str:
+#     if isinstance(r, OK):
+#         return str(r.result)
+#     elif isinstance(r, Failure):
+#         return "Failure: " + r.msg
+#     else:
+#         assert_never(r)
+
+PEIndex = Tuple[int]
+CURRENT_PE: PEIndex = None
+
+
+class PE:
+    def __init__(self, index):
+        self.index = index
+        self._instructions = deque()
+
+    def push_instructions(self, inst):
+        self._instructions.append(inst)
+
+    def num_instructions(self):
+        return len(self._instructions)
+
+    def push_nop(self):
+        self._instructions.append(NOP())
+
+
+
+PES: Dict[PEIndex, PE] = {}
+
+
+class Constant(Val):
+    def __init__(self, cst_val):
+        super().__init__("cst", cst_val)
+
+
+def ReLU(*args):
+    def op(arg):
+        pe = PES[CURRENT_PE]
+        r = ReLUInst(arg)
+        v = Val(f"(relu {arg}", r)
+        pe.push_instructions(r)
+        return v
+
+    return op
+
+def Exp(*args):
+    def op(arg):
+        pe = PES[CURRENT_PE]
+        r = Exp(arg)
+        v = Val(f"(relu {arg}", r)
+        pe.push_instructions(r)
+        return v
+
+    return op
+
+
+def index_map(index, curr_shape, prev_shape):
+    return tuple(
+        np.unravel_index(
+            np.ravel_multi_index(index, curr_shape), prev_shape
+        )
+    )
 
 class ArrayDecl:
-    def __init__(
-            self, var_name, *shape, input=False, output=False, globl=False
-    ):
-        global OUTPUT_ARRAYS
-        self.var_name = var_name
+    def __init__(self, arr_name, *shape, input=False, output=False):
+        self.arr_name = arr_name
         self.curr_shape = shape
         self.prev_shape = shape
+        self.pe_index = shape
         self.registers = {}
         self.input = input
         self.output = output
-        if output:
-            OUTPUT_ARRAYS.append(self)
-        self.globl = globl
 
-    def __getitem__(self, index):
-        index = self.idx_map(index)
+    def __getitem__(self, index: ArrayIndex):
+        global PES
+        try:
+            index = self.idx_map(index)
+        except ValueError:
+            index = (-1, -1, -1, -1)
+
         if index not in self.registers:
             if not self.input:
-                return CPPConstant("0.0")
-            v = ArrayVal(f"{self.var_name}_{'_'.join(map(str, index))}")
-            v.var_id = index
+                v = Constant("0.0")
+            else:
+                v = ArrayVal(f"{self.arr_name}", index)
             self.registers[index] = v
 
-        return self.registers[index]
+        v = self.registers[index]
+        PES[CURRENT_PE].push_instructions(GetArrayItemInst(index, v))
+        return v
 
     def __setitem__(self, index, value):
-        index = self.idx_map(index)
-        assert not self.input and not self.globl
-        if index in self.registers:
-            var_name = f"%{self.var_name}_{'_'.join(map(str, index))}"
-            # print(f"store float {value}, float* {var_name}, align 4")
+        global PES
+        try:
+            index = self.idx_map(index)
+        except ValueError:
+            index = (-1, -1, -1, -1)
+        assert not self.input
+        PES[CURRENT_PE].push_instructions(SetArrayItemInst(index, value))
         self.registers[index] = value
 
     def idx_map(self, index):
-        return np.unravel_index(
-            np.ravel_multi_index(index, self.curr_shape), self.prev_shape
-        )
+        return index_map(index, self.curr_shape, self.prev_shape)
 
     def reshape(self, *shape):
         self.prev_shape = self.curr_shape
@@ -72,31 +289,38 @@ class ArrayDecl:
         return self
 
 
-class Global:
-    def __init__(self, var_name, global_name, global_array, cst_cons=CPPConstant):
-        # @cx = global { float, float } { float 1.000000e+00, float 9.900000e+01 }, align 4
-        # @_ZL5arg_1 = internal constant [10 x [10 x [10 x [10 x float]]]] zeroinitializer, align 16
-        self.var_name = var_name
+class GlobalArray:
+    def __init__(self, name, global_name, global_array):
+        self.name = name
         self.global_name = global_name
         self.global_array = global_array
         self.curr_shape = global_array.shape
-        self.cst_cons = cst_cons
         self.csts = {}
 
-    def __getitem__(self, index):
-        # if index not in self.csts:
-        #     self.csts[index] = self.cst_cons(self.global_array[index])
-        # cst = self.csts[index]
-        v = GlobalVal(self.var_name)
-        v.var_id = index
+    def __getitem__(self, index: ArrayIndex):
+        global PES
+        v = GlobalArrayVal(self.name, index)
+        PES[CURRENT_PE].push_instructions(GetGlobalArrayItemInst(index=index, val=v))
         return v
-        # return cst
 
-    def __setitem__(self, key, value):
-        raise Exception("wtfbbq")
 
-    def reshape(self, shape):
-        raise Exception("wtfbbq")
+def ParFor(body, ranges):
+    global PES, CURRENT_PE
+    pes_run = set()
+    num_insts = None
+    for i, idx in enumerate(sorted(itertools.product(*ranges))):
+        CURRENT_PE = i
+        cur_num_insts = PES[CURRENT_PE].num_instructions()
+        body(*idx)
+        pes_run.add(i)
+        if num_insts is None:
+            num_insts = PES[CURRENT_PE].num_instructions() - cur_num_insts
+
+    for pe_idx, pe in PES.items():
+        if pe_idx not in pes_run:
+            for _ in range(num_insts):
+                pe.push_nop()
+
 
 
 def get_default_args(func):
@@ -123,9 +347,13 @@ def get_array_type(shape, ptr=True, nd=False):
     return typ
 
 
-def Forward(forward):
+def Forward(forward, max_range):
+    global PES
+    for i, idx in enumerate(sorted(itertools.product(*[list(range(i)) for i in max_range]))):
+        PES[i] = PE(i)
+
     Args = get_default_args(forward)
-    CPPForward(Args, OUTPUT_ARRAYS, forward)
+    VerilogForward(Args, OUTPUT_ARRAYS, forward, PES)
 
 
 class RemoveMulAdd(ast.NodeTransformer):
@@ -350,11 +578,49 @@ class RemoveIfExp(ast.NodeTransformer):
 #     open("unrolled.py", "w").write(to_source(fun_tree))
 
 
+def parse_range_call(rang):
+    lo, hi, step = [r.value for r in rang.args]
+    return hi
+
+
+# class FindMaxRange(ast.NodeTransformer):
+#     max_range = None
+#
+#     def visit_Call(self, node: Call) -> Any:
+#         call_str = astor.code_gen.to_source(node)
+#         if "ParFor" in call_str:
+#             ranges = []
+#             for range_call in node.keywords[0].value.elts:
+#                 ranges.append(parse_range_call(range_call))
+#             max_range = max(list(itertools.product(*ranges)))
+#             if self.max_range is None:
+#                 self.max_range = max_range
+#             self.max_range = max(self.max_range, max_range)
+#         self.generic_visit(node)
+#         return node
+
+
+class SetMaxRange(ast.NodeTransformer):
+    def __init__(self, max_range):
+        super(SetMaxRange, self).__init__()
+        self.max_range = max_range
+
+    def visit_Call(self, node: Call) -> Any:
+        call_str = astor.code_gen.to_source(node)
+        if "Forward" in call_str:
+            node.keywords.append(
+                keyword(arg="max_range", value=Str([i for i in self.max_range]))
+            )
+        self.generic_visit(node)
+        return node
+
+
 def transform_forward_py():
     code_ast = astor.parse_file("forward.py")
     # new_tree = RemoveMAC().visit(code_ast)
     # new_tree = RemoveMulOrAdd().visit(code_ast)
-    new_tree = RemoveMul().visit(code_ast)
+    new_tree = SetMaxRange((1, 16, 9, 9)).visit(code_ast)
+    # new_tree = RemoveMul().visit(code_ast)
     new_tree = RemoveIfExp().visit(new_tree)
     with open("forward_rewritten.py", "w") as f:
         f.write(astor.code_gen.to_source(new_tree))

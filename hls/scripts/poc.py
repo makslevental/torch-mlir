@@ -400,15 +400,22 @@ def make_whole_braggnn(root_out_dir, scale=4, imgsz=11, simplify_weights=False):
     )
     open(f"{out_dir}/mod.txt", "w").write(str(mod))
 
+class ConvPlusReLU(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+        self.conv = torch.nn.Conv2d(in_channels, out_channels, 3)
+        self.relu = torch.nn.ReLU()
+
+    def forward(self, x):
+        return self.relu(self.conv(x))
 
 def make_single_small_cnn(
     root_out_dir, in_channels=2, out_channels=4, imgsz=11, simplify_weights=False
 ):
     mb = ModuleBuilder()
     with torch.no_grad():
-        mod = torch.nn.Conv2d(in_channels, out_channels, 3)
+        mod = ConvPlusReLU(in_channels, out_channels)
         mod.eval()
-        print(mod)
         t = torch.randn((1, in_channels, imgsz, imgsz))
         y = mod(t)
         if simplify_weights:
@@ -428,6 +435,7 @@ def make_single_small_cnn(
     out_dir = str(
         root_out_dir / Path(recursivescriptmodule.original_name + f".{out_channels}")
     )
+    os.makedirs(out_dir, exist_ok=True)
     open(f"{out_dir}/mod.txt", "w").write(str(mod))
     put_script_files(
         out_str=out, in_shape=tuple(t.shape), out_shape=tuple(y.shape), out_dir=out_dir
