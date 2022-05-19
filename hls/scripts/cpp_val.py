@@ -82,12 +82,14 @@ class CPPVal:
 
 class ArrayVal(CPPVal):
     def __str__(self):
-        return f"{self.name}{get_array_type(self.var_id, ptr=False, nd=True)}"
+        # return f"{self.name}{get_array_type(self.var_id, ptr=False, nd=True)}"
+        return f"{self.name}{self.var_id}"
 
 
 class GlobalVal(CPPVal):
     def __str__(self):
-        return f"{self.name}{get_array_type(self.var_id, ptr=False, nd=True)}"
+        return f"{self.name}{self.var_id}"
+        # return f"{self.name}{get_array_type(self.var_id, ptr=False, nd=True)}"
 
 
 class CPPConstant(CPPVal):
@@ -203,7 +205,9 @@ class MMul:
             _, arg_name, _ = a.name.split("_", 2)
             arg_name = f"_{arg_name}"
             idx = get_array_type(a.var_id, nd=True)
-            a = f"{arg_name}{idx}"
+            # a = f"{arg_name}{idx}"
+            id = '_'.join(map(str, a.var_id))
+            a = f"{arg_name}_{id}"
 
         if isinstance(b, GlobalVal):
             b = len(self.csts)
@@ -256,7 +260,8 @@ class MDiv:
             _, arg_name, _ = a.name.split("_", 2)
             arg_name = f"_{arg_name}"
             idx = get_array_type(a.var_id, nd=True)
-            a = f"{arg_name}{idx}"
+            # a = f"{arg_name}{idx}"
+            a = f"{arg_name}_{a.var_id}"
 
         if isinstance(b, GlobalVal):
             b = len(self.csts)
@@ -309,7 +314,8 @@ class MUgt:
             _, arg_name, _ = a.name.split("_", 2)
             arg_name = f"_{arg_name}"
             idx = get_array_type(a.var_id, nd=True)
-            a = f"{arg_name}{idx}"
+            # a = f"{arg_name}{idx}"
+            a = f"{arg_name}_{a.var_id}"
 
         if isinstance(b, GlobalVal):
             b = len(self.csts)
@@ -362,7 +368,8 @@ class MSub:
             _, arg_name, _ = a.name.split("_", 2)
             arg_name = f"_{arg_name}"
             idx = get_array_type(a.var_id, nd=True)
-            a = f"{arg_name}{idx}"
+            # a = f"{arg_name}{idx}"
+            a = f"{arg_name}_{a.var_id}"
 
         if isinstance(b, GlobalVal):
             b = len(self.csts)
@@ -415,8 +422,9 @@ class MAdd:
             _, arg_name, _ = a.name.split("_", 2)
             arg_name = f"_{arg_name}"
             idx = get_array_type(a.var_id, nd=True)
-            a = f"{arg_name}{idx}"
-
+            # a = f"{arg_name}{idx}"
+            a = f"{arg_name}_{a.var_id}"
+        #
         # if isinstance(b, GlobalVal):
         #     b = len(self.csts)
 
@@ -469,8 +477,13 @@ def make_args_globals(Args):
     globals = []
     for _arg_name, arg in Args.items():
         if isinstance(arg, ArrayDecl):
-            typ = get_array_type(arg.curr_shape, nd=True, ptr=False)
-            args.append(f"float {arg.var_name}{typ}")
+            # typ = get_array_type(arg.curr_shape, nd=True, ptr=False)
+            for idx in itertools.product(*[range(s) for s in arg.curr_shape]):
+                id = "_".join(map(str, idx))
+                if arg.input:
+                    args.append(f"float {arg.var_name}_{id}")
+                elif arg.output:
+                    args.append(f"float* {arg.var_name}_{id}")
         elif isinstance(arg, Global):
             typ = get_array_type(arg.curr_shape, nd=True, ptr=False)
             globals.append(f"float {arg.var_name}{typ}")
@@ -479,142 +492,18 @@ def make_args_globals(Args):
     return args, globals
 
 
-def make_fmul_json(id):
-    return {
-        "c_function_name": f"fmul_{id}",
-        "rtl_top_module_name": f"fmul_{id}",
-        "c_files": [
-            {
-                "c_file": f"jsons/fmul_{id}.cpp",
-                "cflag": ""
-            }
-        ],
-        "rtl_files": [
-            f"jsons/fmul_{id}.v"
-        ],
-        "c_parameters": [
-            {
-                "c_name": "a1",
-                "c_port_direction": "in",
-                "rtl_ports": {
-                    "data_read_in": "a1"
-                }
-            },
-            {
-                "c_name": "idx",
-                "c_port_direction": "in",
-                "rtl_ports": {
-                    "data_read_in": "idx"
-                }
-            },
-            {
-                "c_name": "z1",
-                "c_port_direction": "out",
-                "rtl_ports": {
-                    "data_write_out": "z1",
-                    "data_write_valid": "z1_ap_vld"
-                }
-            }
-        ],
-        "rtl_common_signal": {
-            "module_clock": "ap_clk",
-            "module_reset": "ap_rst",
-            "module_clock_enable": "ap_ce",
-            "ap_ctrl_chain_protocol_idle": "ap_idle",
-            "ap_ctrl_chain_protocol_start": "ap_start",
-            "ap_ctrl_chain_protocol_ready": "ap_ready",
-            "ap_ctrl_chain_protocol_done": "ap_done",
-            "ap_ctrl_chain_protocol_continue": "ap_continue"
-        },
-        "rtl_performance": {
-            "latency": "2",
-            "II": "1"
-        },
-        "rtl_resource_usage": {
-            "FF": "0",
-            "LUT": "0",
-            "BRAM": "1",
-            "URAM": "0",
-            "DSP": "1"
-        }
-    }
-
-
-def make_fadd_json(id):
-    return {
-        "c_function_name": f"fadd_{id}",
-        "rtl_top_module_name": f"fadd_{id}",
-        "c_files": [
-            {
-                "c_file": f"jsons/fadd_{id}.cpp",
-                "cflag": ""
-            }
-        ],
-        "rtl_files": [
-            f"jsons/fadd_{id}.v"
-        ],
-        "c_parameters": [
-            {
-                "c_name": "a1",
-                "c_port_direction": "in",
-                "rtl_ports": {
-                    "data_read_in": "a1"
-                }
-            },
-            {
-                "c_name": "b1",
-                "c_port_direction": "in",
-                "rtl_ports": {
-                    "data_read_in": "b1"
-                }
-            },
-            {
-                "c_name": "z1",
-                "c_port_direction": "out",
-                "rtl_ports": {
-                    "data_write_out": "z1",
-                    "data_write_valid": "z1_ap_vld"
-                }
-            }
-        ],
-        "rtl_common_signal": {
-            "module_clock": "ap_clk",
-            "module_reset": "ap_rst",
-            "module_clock_enable": "ap_ce",
-            "ap_ctrl_chain_protocol_idle": "ap_idle",
-            "ap_ctrl_chain_protocol_start": "ap_start",
-            "ap_ctrl_chain_protocol_ready": "ap_ready",
-            "ap_ctrl_chain_protocol_done": "ap_done",
-            "ap_ctrl_chain_protocol_continue": "ap_continue"
-        },
-        "rtl_performance": {
-            "latency": "2",
-            "II": "1"
-        },
-        "rtl_resource_usage": {
-            "FF": "0",
-            "LUT": "0",
-            "BRAM": "1",
-            "URAM": "0",
-            "DSP": "1"
-        }
-    }
-
-
 def make_op_json(op_name, id):
     return {
         "c_function_name": f"f{op_name}_{id}",
         "rtl_top_module_name": f"f{op_name}_{id}",
         "c_files": [
             {
-                # "c_file": f"jsons/total_f{op_name}.cpp",
                 "c_file": f"jsons/f{op_name}_{id}.cpp",
                 "cflag": ""
             }
         ],
         "rtl_files": [
             f"jsons/f{op_name}_{id}.v"
-            # f"jsons/total_f{op_name}.v"
         ],
         "c_parameters": [
             {
@@ -651,7 +540,7 @@ def make_op_json(op_name, id):
             "ap_ctrl_chain_protocol_continue": "ap_continue"
         },
         "rtl_performance": {
-            "latency": "2",
+            "latency": "1",
             "II": "1"
         },
         "rtl_resource_usage": {
@@ -670,13 +559,11 @@ def make_single_arg_op_json(op_name, id):
         "c_files": [
             {
                 "c_file": f"jsons/f{op_name}_{id}.cpp",
-                # "c_file": f"jsons/total_f{op_name}.cpp",
                 "cflag": ""
             }
         ],
         "rtl_files": [
             f"jsons/f{op_name}_{id}.v"
-            # f"jsons/total_f{op_name}.v"
         ],
         "c_parameters": [
             {
@@ -706,7 +593,7 @@ def make_single_arg_op_json(op_name, id):
             "ap_ctrl_chain_protocol_continue": "ap_continue"
         },
         "rtl_performance": {
-            "latency": "2",
+            "latency": "1",
             "II": "1"
         },
         "rtl_resource_usage": {
@@ -744,6 +631,12 @@ entry:
 
 def make_llvm_prefix():
     return """
+    
+; ModuleID = 'forward.cpp'
+source_filename = "forward.cpp"
+target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
+target triple = "x86_64-pc-linux-gnu"
+
 @0 = private unnamed_addr constant [10 x i8] c"ap_memory\\00"
 @1 = private unnamed_addr constant [1 x i8] zeroinitializer
 @2 = private unnamed_addr constant [8 x i8] c"forward\\00"
@@ -808,7 +701,9 @@ def CPPForward(Args, OUTPUT_ARRAYS, forward):
 
     for arr in OUTPUT_ARRAYS:
         for index, value in arr.registers.items():
-            print(f"{arr.var_name}{get_array_type(index, nd=True)} = {value};", file=OLD_FILE)
+            # print(f"{arr.var_name}{get_array_type(index, nd=True)} = {value};", file=OLD_FILE)
+            id = "_".join(map(str, index))
+            print(f"*{arr.var_name}_{id} = {value};", file=OLD_FILE)
 
     print("return;", file=OLD_FILE)
     print("}", file=OLD_FILE)
