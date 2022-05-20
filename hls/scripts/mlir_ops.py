@@ -1,3 +1,4 @@
+from __future__ import annotations
 # from ast_tools.passes import apply_passes
 # from llvm_val import LLVMForward, LLVMVal, LLVMConstant
 # from verilog_val import VerilogWire, VerilogConstant, VerilogForward
@@ -5,8 +6,6 @@ import ast
 import inspect
 import itertools
 from ast import Assign, Mult, Add, BinOp, Name, Call, keyword, Str, IfExp, Compare
-from collections import deque
-from itertools import product
 from typing import Tuple, Union, Dict, Any
 
 import astor
@@ -20,7 +19,7 @@ MAC_IDX = None
 
 OUTPUT_ARRAYS = []
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 class Val:
@@ -28,19 +27,14 @@ class Val:
         self.name = name
         self.val_id = val_id
 
-    def __str__(self):
-        # return f"{self.name}_{self.val_id}"
-        # return f"{self.name}"
-        return f"val"
-
     def __repr__(self):
-        return str(self)
+        return str(self.__class__.__name__)
 
     def __mul__(self, other):
         global PES
         if isinstance(other, (float, int, bool)):
             other = Constant(other)
-        m = Mul(self, other)
+        m = MulInst(self, other)
         v = Val(f"(* {self} {other})", m)
         PES[CURRENT_PE].push_instructions(m)
         return v
@@ -49,7 +43,7 @@ class Val:
         global PES
         if isinstance(other, (float, int, bool)):
             other = Constant(other)
-        d = Div(self, other)
+        d = DivInst(self, other)
         v = Val(f"(/ {self} {other})", d)
         PES[CURRENT_PE].push_instructions(d)
         return v
@@ -58,7 +52,7 @@ class Val:
         global PES
         if isinstance(other, (float, int, bool)):
             other = Constant(other)
-        a = Add(self, other)
+        a = AddInst(self, other)
         v = Val(f"(+ {self} {other})", a)
         PES[CURRENT_PE].push_instructions(a)
         return v
@@ -67,7 +61,7 @@ class Val:
         global PES
         if isinstance(other, (float, int, bool)):
             other = Constant(other)
-        s = Sub(self, other)
+        s = SubInst(self, other)
         v = Val(f"(- {self} {other})", s)
         PES[CURRENT_PE].push_instructions(s)
         return v
@@ -76,7 +70,7 @@ class Val:
         global PES
         if isinstance(other, (float, int, bool)):
             other = Constant(other)
-        g = GT(self, other)
+        g = GTInst(self, other)
         v = Val(f"(> {self} {other})", g)
         PES[CURRENT_PE].push_instructions(g)
         return v
@@ -86,8 +80,10 @@ ArrayIndex = Tuple[int]
 
 
 class ArrayVal(Val):
-    def __init__(self, name, val_id: ArrayIndex):
+    array: ArrayDecl
+    def __init__(self, name, val_id: ArrayIndex, array: ArrayDecl):
         super().__init__(name, val_id)
+        self.array = array
 
     def __str__(self):
         return f"array{self.name}"
@@ -98,9 +94,10 @@ class GlobalArrayVal(ArrayVal):
         return f"global{self.name}_{'_'.join(map(str, self.val_id))}"
 
 
+PEIndex = Tuple[int]
 @dataclass(frozen=True)
 class _Instruction:
-    pass
+    pe_id: PEIndex = field(init=False, default_factory=lambda: CURRENT_PE)
 
 
 @dataclass(frozen=True)
@@ -115,33 +112,27 @@ class Bin(_Instruction):
 
 
 @dataclass(frozen=True)
-class Mul(Bin):
-    left: Val
-    right: Val
+class MulInst(Bin):
+    pass
+
+@dataclass(frozen=True)
+class DivInst(Bin):
+    pass
 
 
 @dataclass(frozen=True)
-class Div(Bin):
-    left: Val
-    right: Val
+class AddInst(Bin):
+    pass
 
 
 @dataclass(frozen=True)
-class Add(Bin):
-    left: Val
-    right: Val
+class SubInst(Bin):
+    pass
 
 
 @dataclass(frozen=True)
-class Sub(Bin):
-    left: Val
-    right: Val
-
-
-@dataclass(frozen=True)
-class GT(Bin):
-    left: Val
-    right: Val
+class GTInst(Bin):
+    pass
 
 
 @dataclass(frozen=True)
@@ -149,31 +140,12 @@ class ReLUInst(_Instruction):
     val: Val
 
 
-
 @dataclass(frozen=True)
 class ExpInst(_Instruction):
     val: Val
 
 
-@dataclass(frozen=True)
-class GetArrayItemInst(_Instruction):
-    index: ArrayIndex = None
-    val: ArrayVal = None
-
-
-@dataclass(frozen=True)
-class SetArrayItemInst(_Instruction):
-    index: ArrayIndex = None
-    val: Val = None
-
-
-@dataclass(frozen=True)
-class GetGlobalArrayItemInst(_Instruction):
-    index: ArrayIndex = None
-    val: GlobalArrayVal = None
-
-
-Instruction = Union[NOP]
+Instruction = Union[NOP, ExpInst, ReLUInst, MulInst, AddInst, DivInst, SubInst, GTInst]
 
 # def assert_never(x: NoReturn) -> NoReturn:
 #     raise AssertionError("Unhandled type: {}".format(type(x).__name__))
@@ -186,14 +158,13 @@ Instruction = Union[NOP]
 #     else:
 #         assert_never(r)
 
-PEIndex = Tuple[int]
 CURRENT_PE: PEIndex = None
 
 
 class PE:
     def __init__(self, index):
         self.index = index
-        self._instructions = deque()
+        self._instructions = []
 
     def push_instructions(self, inst):
         self._instructions.append(inst)
@@ -203,7 +174,6 @@ class PE:
 
     def push_nop(self):
         self._instructions.append(NOP())
-
 
 
 PES: Dict[PEIndex, PE] = {}
@@ -218,17 +188,18 @@ def ReLU(*args):
     def op(arg):
         pe = PES[CURRENT_PE]
         r = ReLUInst(arg)
-        v = Val(f"(relu {arg}", r)
+        v = Val(f"(relu {arg})", r)
         pe.push_instructions(r)
         return v
 
     return op
 
+
 def Exp(*args):
     def op(arg):
         pe = PES[CURRENT_PE]
-        r = Exp(arg)
-        v = Val(f"(relu {arg}", r)
+        r = ExpInst(arg)
+        v = Val(f"(exp {arg})", r)
         pe.push_instructions(r)
         return v
 
@@ -241,6 +212,7 @@ def index_map(index, curr_shape, prev_shape):
             np.ravel_multi_index(index, curr_shape), prev_shape
         )
     )
+
 
 class ArrayDecl:
     def __init__(self, arr_name, *shape, input=False, output=False):
@@ -263,11 +235,10 @@ class ArrayDecl:
             if not self.input:
                 v = Constant("0.0")
             else:
-                v = ArrayVal(f"{self.arr_name}", index)
+                v = ArrayVal(f"{self.arr_name}", index, self)
             self.registers[index] = v
 
         v = self.registers[index]
-        PES[CURRENT_PE].push_instructions(GetArrayItemInst(index, v))
         return v
 
     def __setitem__(self, index, value):
@@ -277,7 +248,6 @@ class ArrayDecl:
         except ValueError:
             index = (-1, -1, -1, -1)
         assert not self.input
-        PES[CURRENT_PE].push_instructions(SetArrayItemInst(index, value))
         self.registers[index] = value
 
     def idx_map(self, index):
@@ -299,8 +269,7 @@ class GlobalArray:
 
     def __getitem__(self, index: ArrayIndex):
         global PES
-        v = GlobalArrayVal(self.name, index)
-        PES[CURRENT_PE].push_instructions(GetGlobalArrayItemInst(index=index, val=v))
+        v = GlobalArrayVal(self.name, index, self)
         return v
 
 
@@ -320,7 +289,6 @@ def ParFor(body, ranges):
         if pe_idx not in pes_run:
             for _ in range(num_insts):
                 pe.push_nop()
-
 
 
 def get_default_args(func):
@@ -353,7 +321,13 @@ def Forward(forward, max_range):
         PES[i] = PE(i)
 
     Args = get_default_args(forward)
-    VerilogForward(Args, OUTPUT_ARRAYS, forward, PES)
+    VerilogForward(
+        Args["_arg0"],
+        Args["_arg1"],
+        forward,
+        PES,
+        max_range=max_range,
+    )
 
 
 class RemoveMulAdd(ast.NodeTransformer):
