@@ -1,9 +1,25 @@
+import itertools
 import math
-import pickle
 import struct
 import warnings
 from collections import defaultdict
 from textwrap import dedent, indent
+from hls.scripts.mlir_ops import (
+    ArrayDecl,
+    GlobalArrayVal,
+    ArrayVal,
+    Val,
+    AddInst,
+    MulInst,
+    DivInst,
+    ReLUInst,
+    Constant,
+    ExpInst,
+    SubInst,
+    get_default_args,
+)
+
+import hls.scripts.mlir_ops
 
 import numpy as np
 
@@ -42,14 +58,15 @@ def get_val_from_global(global_name, val_idx):
 
 def make_fsm_states(fsm_states, fsm_idx_width):
     return " | ".join(
-        [f"(1'b1 == ap_CS_fsm_state{str(i).zfill(fsm_idx_width)})" for i in fsm_states]
+        [
+            f"(1'b1 == current_state_fsm_state{str(i).zfill(fsm_idx_width)})"
+            for i in fsm_states
+        ]
     )
 
 
 class Module:
     def __init__(self, input_arr, output_arr, processing_elts, max_range, precision=16):
-        from mlir_ops import MulInst, AddInst
-
         self.input_arr = input_arr
         self.output_arr = output_arr
         self.pes = processing_elts
@@ -57,9 +74,10 @@ class Module:
 
         self.pe_geom_idxs = sorted(np.ndindex(*max_range))
         self.pe_geom_idx_to_idx = {idx: i for i, idx in enumerate(self.pe_geom_idxs)}
-        self.pes_instructions = defaultdict(lambda: defaultdict(list))
+        self.pes_instructions = defaultdict(list)
         self.needed_mult_units = set()
         self.needed_add_units = set()
+        self.needed_relu_units = set()
         self.fsm_steps = 0
 
         for pe_idx, pe in self.pes.items():
@@ -67,19 +85,18 @@ class Module:
 
             pe_geom_idx = self.pe_geom_idxs[pe_idx]
             for i, inst in enumerate(pe._instructions):
-                self.pes_instructions[pe_geom_idx]["all"].append((i, inst))
-
+                self.pes_instructions[pe_geom_idx].append((i, inst))
                 if isinstance(inst, MulInst):
-                    self.pes_instructions[pe_geom_idx]["mul"].append((i, inst))
                     self.needed_mult_units.add(pe_geom_idx)
-                if isinstance(inst, AddInst):
-                    self.pes_instructions[pe_geom_idx]["add"].append((i, inst))
+                elif isinstance(inst, AddInst):
                     self.needed_add_units.add(pe_geom_idx)
+                elif isinstance(inst, ReLUInst):
+                    self.needed_relu_units.add(pe_geom_idx)
 
         self.fsm_idx_width = math.ceil(math.log10(self.fsm_steps))
 
     def make_top_module_decl(self):
-        base_inputs = ["ap_clk", "ap_rst", "ap_start"]
+        base_inputs = ["clock", "reset", "clock_enable"]
         idxs = sorted(np.ndindex(*self.input_arr.curr_shape))
         input_ports = [
             f"[{self.precision - 1}:0] {self.input_arr.arr_name}_{'_'.join(map(str, idx))}"
@@ -102,54 +119,74 @@ class Module:
 
     def make_add_instances(self):
         adds = []
-        for geom_add_idx in self.needed_add_units:
+        for geom_add_idx in sorted(self.needed_add_units):
             add_idx = self.pe_geom_idx_to_idx[geom_add_idx]
             id = "_".join(map(str, geom_add_idx))
             add_s = dedent(
                 f"""\
-                reg   [{self.precision - 1}:0] grp_fadd_{id}_fu_{add_idx}_a;
-                reg   [{self.precision - 1}:0] grp_fadd_{id}_fu_{add_idx}_b;
-                wire   [{self.precision - 1}:0] grp_fadd_{id}_fu_{add_idx}_z;
-                reg   [{self.precision - 1}:0] grp_fadd_{id}_fu_{add_idx}_z_reg;
+                reg   [{self.precision - 1}:0] fadd_{id}_id_{add_idx}_a;
+                reg   [{self.precision - 1}:0] fadd_{id}_id_{add_idx}_b;
+                wire   [{self.precision - 1}:0] fadd_{id}_id_{add_idx}_z;
+                reg   [{self.precision - 1}:0] fadd_{id}_id_{add_idx}_z_reg;
                 
-                always @ (posedge ap_clk) begin
-                    grp_fadd_{id}_fu_{add_idx}_z_reg <= grp_fadd_{id}_fu_{add_idx}_z;
+                always @ (posedge clock) begin
+                    fadd_{id}_id_{add_idx}_z_reg <= fadd_{id}_id_{add_idx}_z;
                 end
                 
-                fadd #({add_idx}) grp_fadd_{id}_fu_{add_idx}(
-                    .ap_clk(ap_clk),
-                    .ap_rst(ap_rst),
-                    .a(grp_fadd_{id}_fu_{add_idx}_a),
-                    .b(grp_fadd_{id}_fu_{add_idx}_b),
-                    .z(grp_fadd_{id}_fu_{add_idx}_z)
+                fadd #({add_idx}) fadd_{id}_id_{add_idx}(
+                    .clock(clock),
+                    .reset(reset),
+                    .clock_enable(clock_enable),
+                    .a(fadd_{id}_id_{add_idx}_a),
+                    .b(fadd_{id}_id_{add_idx}_b),
+                    .z(fadd_{id}_id_{add_idx}_z)
                 );
                 """
             )
             adds.append(add_s)
         return "\n".join(adds)
 
+    def make_relu_instances(self):
+        relus = []
+        for geom_relu_idx in sorted(self.needed_relu_units):
+            relu_idx = self.pe_geom_idx_to_idx[geom_relu_idx]
+            id = "_".join(map(str, geom_relu_idx))
+            relu_s = dedent(
+                f"""\
+                reg   [{self.precision - 1}:0] frelu_{id}_id_{relu_idx}_a;
+                wire   [{self.precision - 1}:0] frelu_{id}_id_{relu_idx}_z;
+                relu #({relu_idx}) relu_{id}_id_{relu_idx}(
+                    .a(frelu_{id}_id_{relu_idx}_a),
+                    .z(frelu_{id}_id_{relu_idx}_z)
+                );
+                """
+            )
+            relus.append(relu_s)
+        return "\n".join(relus)
+
     def make_mul_instances(self):
         muls = []
-        for geom_mul_idx in self.needed_mult_units:
+        for geom_mul_idx in sorted(self.needed_mult_units):
             mul_idx = self.pe_geom_idx_to_idx[geom_mul_idx]
             id = "_".join(map(str, geom_mul_idx))
             mul_s = dedent(
                 f"""\
-                reg   [{self.precision - 1}:0] grp_fmul_{id}_fu_{mul_idx}_a;
-                reg   [{self.precision - 1}:0] grp_fmul_{id}_fu_{mul_idx}_b;
-                wire   [{self.precision - 1}:0] grp_fmul_{id}_fu_{mul_idx}_z;
-                reg   [{self.precision - 1}:0] grp_fmul_{id}_fu_{mul_idx}_z_reg;
+                reg   [{self.precision - 1}:0] fmul_{id}_id_{mul_idx}_a;
+                reg   [{self.precision - 1}:0] fmul_{id}_id_{mul_idx}_b;
+                wire   [{self.precision - 1}:0] fmul_{id}_id_{mul_idx}_z;
+                reg   [{self.precision - 1}:0] fmul_{id}_id_{mul_idx}_z_reg;
                 
-                always @ (posedge ap_clk) begin
-                    grp_fmul_{id}_fu_{mul_idx}_z_reg <= grp_fmul_{id}_fu_{mul_idx}_z;
+                always @ (posedge clock) begin
+                    fmul_{id}_id_{mul_idx}_z_reg <= fmul_{id}_id_{mul_idx}_z;
                 end
                 
-                fmul #({mul_idx}) grp_fmul_{id}_fu_{mul_idx}(
-                    .ap_clk(ap_clk),
-                    .ap_rst(ap_rst),
-                    .a(grp_fmul_{id}_fu_{mul_idx}_a),
-                    .b(grp_fmul_{id}_fu_{mul_idx}_b),
-                    .z(grp_fmul_{id}_fu_{mul_idx}_z)
+                fmul #({mul_idx}) fmul_{id}_id_{mul_idx}(
+                    .clock(clock),
+                    .reset(reset),
+                    .clock_enable(clock_enable),
+                    .a(fmul_{id}_id_{mul_idx}_a),
+                    .b(fmul_{id}_id_{mul_idx}_b),
+                    .z(fmul_{id}_id_{mul_idx}_z)
                 );
                 """
             )
@@ -159,51 +196,50 @@ class Module:
     def make_fsm_params(self):
         params = "\n".join(
             [
-                f"parameter    ap_ST_fsm_state{str(i).zfill(self.fsm_idx_width)} = {self.fsm_steps + 1}'d{1 << i};"
+                f"parameter    fsm_state{str(i).zfill(self.fsm_idx_width)} = {self.fsm_steps + 1}'d{1 << i};"
                 for i in range(1, self.fsm_steps + 1)
             ]
         )
         params += "\n\n"
-        params += f'(* fsm_encoding = "none" *) reg   [{self.fsm_steps}:0] ap_CS_fsm;'
-        params += f"reg   [{self.fsm_steps}:0] ap_NS_fsm;"
+        params += f'(* fsm_encoding = "none" *) reg   [{self.fsm_steps}:0] current_state_fsm;\n'
+        params += f"reg   [{self.fsm_steps}:0] next_state_fsm;"
 
         return params
 
     def make_fsm_wires(self):
         return "\n".join(
             [
-                f"wire    ap_CS_fsm_state{str(i).zfill(self.fsm_idx_width)};"
+                f"wire    current_state_fsm_state{str(i).zfill(self.fsm_idx_width)};"
                 for i in range(0, self.fsm_steps)
-            ] +
-            [
-                f"wire    ap_NS_fsm_state{str(i).zfill(self.fsm_idx_width)};"
+            ]
+            + [
+                f"wire    next_state_fsm_state{str(i).zfill(self.fsm_idx_width)};"
                 for i in range(0, self.fsm_steps)
             ]
         )
 
     def make_fsm(self):
         first_state = str(1).zfill(self.fsm_idx_width)
-        second_state = str(2).zfill(self.fsm_idx_width)
         fsm = dedent(
             f"""\
-            always @ (posedge ap_clk) begin
-                if (ap_rst == 1'b1) begin
-                    ap_CS_fsm <= ap_ST_fsm_state{first_state};
+            always @ (posedge clock) begin
+                if (reset == 1'b1) begin
+                    current_state_fsm <= fsm_state{first_state};
                 end else begin
-                    ap_CS_fsm <= ap_NS_fsm;
+                    current_state_fsm <= next_state_fsm;
                 end
             end
             
             always @ (*) begin
-                case (ap_CS_fsm)
+                case (current_state_fsm)
             """
         )
         for i in range(1, self.fsm_steps):
             fsm += indent(
                 dedent(
                     f"""\
-                ap_ST_fsm_state{str(i).zfill(self.fsm_idx_width)} : begin
-                    ap_NS_fsm = ap_ST_fsm_state{str(i + 1).zfill(self.fsm_idx_width)};
+                fsm_state{str(i).zfill(self.fsm_idx_width)} : begin
+                    next_state_fsm = fsm_state{str(i + 1).zfill(self.fsm_idx_width)};
                 end
                 """
                 ),
@@ -213,8 +249,8 @@ class Module:
         fsm += indent(
             dedent(
                 f"""\
-            ap_ST_fsm_state{str(self.fsm_steps).zfill(self.fsm_idx_width)} : begin
-                ap_NS_fsm = ap_ST_fsm_state{str(1).zfill(self.fsm_idx_width)};
+            fsm_state{str(self.fsm_steps).zfill(self.fsm_idx_width)} : begin
+                next_state_fsm = fsm_state{str(1).zfill(self.fsm_idx_width)};
             end
             """
             ),
@@ -225,7 +261,7 @@ class Module:
             dedent(
                 """\
         default : begin
-            ap_NS_fsm = 'bx;
+            next_state_fsm = 'bx;
         end
         """
             ),
@@ -241,125 +277,167 @@ class Module:
         for i in range(1, self.fsm_steps + 1):
             fsm += dedent(
                 f"""\
-        assign ap_CS_fsm_state{str(i).zfill(self.fsm_idx_width)} = ap_CS_fsm[32'd{i - 1}];
+        assign current_state_fsm_state{str(i).zfill(self.fsm_idx_width)} = current_state_fsm[32'd{i - 1}];
             """
             )
 
         for i in range(1, self.fsm_steps + 1):
             fsm += dedent(
                 f"""\
-        assign ap_NS_fsm_state{str(i).zfill(self.fsm_idx_width)} = ap_NS_fsm[32'd{i - 1}];
+        assign next_state_fsm_state{str(i).zfill(self.fsm_idx_width)} = next_state_fsm[32'd{i - 1}];
             """
             )
 
         return fsm
 
     def make_mul_left_input_case(self, pe_geom_idx):
-        mul_lefts = [(fsm_state, mul.left) for fsm_state, mul in self.pes_instructions[pe_geom_idx]["mul"]]
-        mul_inps_to_fsm_list = self.make_binop_inp_to_fsm_list(mul_lefts)
-        return self.make_inst_input_case("mul", mul_inps_to_fsm_list, pe_geom_idx, "a")
+        mul_lefts = [
+            (fsm_state, inst.left)
+            for fsm_state, inst in self.pes_instructions[pe_geom_idx]
+            if isinstance(inst, MulInst)
+        ]
+        if mul_lefts:
+            mul_inps_to_fsm_list = self.make_binop_inp_to_fsm_list(mul_lefts)
+            return self.make_inst_input_case(
+                "mul", mul_inps_to_fsm_list, pe_geom_idx, "a"
+            )
+        else:
+            return ""
 
     def make_mul_right_input_case(self, pe_geom_idx):
-        mul_rights = [(fsm_state, mul.right) for fsm_state, mul in self.pes_instructions[pe_geom_idx]["mul"]]
-        mul_inps_to_fsm_list = self.make_binop_inp_to_fsm_list(mul_rights)
-        return self.make_inst_input_case("mul", mul_inps_to_fsm_list, pe_geom_idx, "b")
+        mul_rights = [
+            (fsm_state, inst.right)
+            for fsm_state, inst in self.pes_instructions[pe_geom_idx]
+            if isinstance(inst, MulInst)
+        ]
+        if mul_rights:
+            mul_inps_to_fsm_list = self.make_binop_inp_to_fsm_list(mul_rights)
+            return self.make_inst_input_case(
+                "mul", mul_inps_to_fsm_list, pe_geom_idx, "b"
+            )
+        else:
+            return ""
 
     def make_add_left_input_case(self, pe_geom_idx):
-        add_lefts = [(fsm_state, add.left) for fsm_state, add in self.pes_instructions[pe_geom_idx]["add"]]
-        add_inps_to_fsm_list = self.make_binop_inp_to_fsm_list(add_lefts)
-        return self.make_inst_input_case("add", add_inps_to_fsm_list, pe_geom_idx, "a")
+        add_lefts = [
+            (fsm_state, inst.left)
+            for fsm_state, inst in self.pes_instructions[pe_geom_idx]
+            if isinstance(inst, AddInst)
+        ]
+        if add_lefts:
+            add_inps_to_fsm_list = self.make_binop_inp_to_fsm_list(add_lefts)
+            return self.make_inst_input_case(
+                "add", add_inps_to_fsm_list, pe_geom_idx, "a"
+            )
+        else:
+            return ""
 
     def make_add_right_input_case(self, pe_geom_idx):
-        add_rights = [(fsm_state, add.right) for fsm_state, add in self.pes_instructions[pe_geom_idx]["add"]]
-        add_inps_to_fsm_list = self.make_binop_inp_to_fsm_list(add_rights)
-        return self.make_inst_input_case("add", add_inps_to_fsm_list, pe_geom_idx, "b")
+        add_rights = [
+            (fsm_state, inst.right)
+            for fsm_state, inst in self.pes_instructions[pe_geom_idx]
+            if isinstance(inst, AddInst)
+        ]
+        if add_rights:
+            add_inps_to_fsm_list = self.make_binop_inp_to_fsm_list(add_rights)
+            return self.make_inst_input_case(
+                "add", add_inps_to_fsm_list, pe_geom_idx, "b"
+            )
+        else:
+            return ""
 
+    def make_relu_input_case(self, pe_geom_idx):
+        relu_rights = [
+            (fsm_state, inst.val)
+            for fsm_state, inst in self.pes_instructions[pe_geom_idx]
+            if isinstance(inst, ReLUInst)
+        ]
+        if relu_rights:
+            relu_inps_to_fsm_list = self.make_binop_inp_to_fsm_list(relu_rights)
+            return self.make_inst_input_case(
+                "relu", relu_inps_to_fsm_list, pe_geom_idx, "a"
+            )
+        else:
+            return ""
 
     def make_binop_inp_to_fsm_list(self, insts):
-        from mlir_ops import (
-            ArrayDecl,
-            GlobalArrayVal,
-            ArrayVal,
-            Val,
-            AddInst,
-            MulInst,
-            DivInst,
-            ReLUInst,
-            Constant, ExpInst, SubInst,
-        )
-
         inst_inps = defaultdict(list)
         for i, inst_inp in insts:
             if isinstance(inst_inp, GlobalArrayVal):
                 inst_inps[inst_inp.array.global_name, inst_inp.val_id].append(i)
             elif isinstance(inst_inp, ArrayVal) and "_arg" in inst_inp.name:
                 inst_inps[inst_inp.name, inst_inp.val_id].append(i)
-            elif isinstance(inst_inp, Val) and isinstance(inst_inp.val_id, AddInst):
-                inst_inps["Add", self.pe_geom_idxs[inst_inp.val_id.pe_id]].append(i)
-            elif isinstance(inst_inp, Val) and isinstance(inst_inp.val_id, SubInst):
-                inst_inps["Sub", self.pe_geom_idxs[inst_inp.val_id.pe_id]].append(i)
-            elif isinstance(inst_inp, Val) and isinstance(inst_inp.val_id, MulInst):
-                inst_inps["Mul", self.pe_geom_idxs[inst_inp.val_id.pe_id]].append(i)
-            elif isinstance(inst_inp, Val) and isinstance(inst_inp.val_id, DivInst):
-                inst_inps["Div", self.pe_geom_idxs[inst_inp.val_id.pe_id]].append(i)
-            elif isinstance(inst_inp, Val) and isinstance(inst_inp.val_id, ReLUInst):
-                inst_inps["ReLU", self.pe_geom_idxs[inst_inp.val_id.pe_id]].append(i)
-            elif isinstance(inst_inp, Val) and isinstance(inst_inp.val_id, ExpInst):
-                inst_inps["Exp", self.pe_geom_idxs[inst_inp.val_id.pe_id]].append(i)
             elif isinstance(inst_inp, Constant):
                 inst_inps["Constant", inst_inp.val_id].append(i)
+            elif isinstance(inst_inp, Val) and isinstance(
+                inst_inp.val_id, (AddInst, SubInst, MulInst, DivInst, ReLUInst, ExpInst)
+            ):
+                inst_inps[
+                    inst_inp.val_id.__class__.__name__,
+                    self.pe_geom_idxs[inst_inp.val_id.pe_id],
+                ].append(i)
             else:
                 raise Exception(f"wtfbbq {inst_inp}")
 
         return list(inst_inps.items())
 
     def make_inst_input_case(self, inst: str, inst_inps, pe_geom_idx, inp_letter):
-        first_val_id, first_fsm_states = inst_inps[0]
-        first_cst = get_val_from_global(*first_val_id)
-
         this_pe_geom_id = "_".join(map(str, pe_geom_idx))
         this_pe_id = self.pe_geom_idx_to_idx[pe_geom_idx]
+
+
         always = dedent(
             f"""\
             always @ (*) begin
-                if ({make_fsm_states(first_fsm_states, self.fsm_idx_width)}) begin
-                    grp_f{inst}_{this_pe_geom_id}_fu_{this_pe_id}_{inp_letter} = {self.precision}'d{half_to_int(first_cst)};
-                end 
             """
         )
-        for (val_name, val_id), fsm_states in inst_inps[1:]:
+        for i, ((val_name, val_id), fsm_states) in enumerate(inst_inps):
             if "_arg" in val_name:
                 arg_name, arg_id = val_name, val_id
                 arg_id = "_".join(map(str, arg_id))
                 always += indent(
                     dedent(
                         f"""\
-                            else if ({make_fsm_states(fsm_states, self.fsm_idx_width)}) begin
-                                grp_f{inst}_{this_pe_geom_id}_fu_{this_pe_id}_{inp_letter} = {arg_name}_{arg_id};
+                            {'else if' if i > 0 else 'if'} ({make_fsm_states(fsm_states, self.fsm_idx_width)}) begin
+                                f{inst}_{this_pe_geom_id}_id_{this_pe_id}_{inp_letter} = {arg_name}_{arg_id};
                             end 
                         """
                     ),
                     "\t",
                 )
-            elif val_name in ["Add", "Mul"]:
+            elif val_name in ["AddInst", "MulInst"]:
                 other_pe_geom_id = val_id
                 other_pe_id = self.pe_geom_idx_to_idx[other_pe_geom_id]
                 other_pe_geom_id = "_".join(map(str, other_pe_geom_id))
-                if val_name == "Mul":
-                    assert this_pe_geom_id != other_pe_geom_id or inst == 'mul'
 
                 if this_pe_geom_id == other_pe_geom_id:
-                    res = f"grp_f{val_name.lower()}_{other_pe_geom_id}_fu_{other_pe_id}_z_reg"
+                    res = f"f{val_name.lower().replace('inst', '')}_{other_pe_geom_id}_id_{other_pe_id}_z_reg"
                 else:
-                    res = f"grp_f{val_name.lower()}_{other_pe_geom_id}_fu_{other_pe_id}_z"
+                    res = f"f{val_name.lower().replace('inst', '')}_{other_pe_geom_id}_id_{other_pe_id}_z"
 
                 always += indent(
                     dedent(
                         f"""\
-                            else if ({make_fsm_states(fsm_states, self.fsm_idx_width)}) begin
-                                grp_f{inst}_{this_pe_geom_id}_fu_{this_pe_id}_{inp_letter} = {res};
+                            {'else if' if i > 0 else 'if'} ({make_fsm_states(fsm_states, self.fsm_idx_width)}) begin
+                                f{inst}_{this_pe_geom_id}_id_{this_pe_id}_{inp_letter} = {res};
                             end 
                         """
+                    ),
+                    "\t",
+                )
+            elif "ReLUInst" in val_name:
+                other_pe_geom_id = val_id
+                other_pe_id = self.pe_geom_idx_to_idx[other_pe_geom_id]
+                other_pe_geom_id = "_".join(map(str, other_pe_geom_id))
+                res = f"f{val_name.lower().replace('inst', '')}_{other_pe_geom_id}_id_{other_pe_id}_z"
+
+                always += indent(
+                    dedent(
+                        f"""\
+                    {'else if' if i > 0 else 'if'} ({make_fsm_states(fsm_states, self.fsm_idx_width)}) begin
+                        f{inst}_{this_pe_geom_id}_id_{this_pe_id}_{inp_letter} = {res};
+                    end 
+                """
                     ),
                     "\t",
                 )
@@ -368,8 +446,20 @@ class Module:
                 always += indent(
                     dedent(
                         f"""\
-                    else if ({make_fsm_states(fsm_states, self.fsm_idx_width)}) begin
-                        grp_f{inst}_{this_pe_geom_id}_fu_{this_pe_id}_{inp_letter} = {self.precision}'d{half_to_int(cst)};
+                    {'else if' if i > 0 else 'if'} ({make_fsm_states(fsm_states, self.fsm_idx_width)}) begin
+                        f{inst}_{this_pe_geom_id}_id_{this_pe_id}_{inp_letter} = {self.precision}'d{half_to_int(cst)};
+                    end 
+                """
+                    ),
+                    "\t",
+                )
+            elif "Constant" in val_name:
+                cst = float(val_id)
+                always += indent(
+                    dedent(
+                        f"""\
+                    {'else ' if i > 0 else ''}if ({make_fsm_states(fsm_states, self.fsm_idx_width)}) begin
+                        f{inst}_{this_pe_geom_id}_id_{this_pe_id}_{inp_letter} = {self.precision}'d{half_to_int(cst)};
                     end 
                 """
                     ),
@@ -381,7 +471,7 @@ class Module:
         always += dedent(
             f"""\
                 else begin
-                    grp_f{inst}_{this_pe_geom_id}_fu_{this_pe_id}_{inp_letter} = 'bx;
+                    f{inst}_{this_pe_geom_id}_id_{this_pe_id}_{inp_letter} = 'bx;
                 end
             end
             """
@@ -395,65 +485,71 @@ class Module:
             other_pe_id = val.val_id.pe_id
             other_pe_geom_id = self.pe_geom_idxs[other_pe_id]
             other_pe_geom_id = "_".join(map(str, other_pe_geom_id))
-            res = f"grp_f{val.val_id.__class__.__name__.lower().replace('inst', '')}_{other_pe_geom_id}_fu_{other_pe_id}_z"
-            out += dedent(f"""\
-                        assign {output.arr_name +'_' + '_'.join(map(str, idx))} = {res};
-                    """)
+            res = f"f{val.val_id.__class__.__name__.lower().replace('inst', '')}_{other_pe_geom_id}_id_{other_pe_id}_z"
+            out += dedent(
+                f"""\
+                        assign {output.arr_name + '_' + '_'.join(map(str, idx))} = {res};
+                    """
+            )
         return out
 
+
 def VerilogForward(input, output, forward, processing_elts, max_range):
-    # forward()
+    forward()
     module = Module(input, output, processing_elts, max_range)
     module_decl = module.make_top_module_decl()
-    # print(module_decl)
-    # fsm_params = module.make_fsm_params()
-    # print(fsm_params)
-    # fsm_wires = module.make_fsm_wires()
-    # print(fsm_wires)
-    # mul_units = module.make_mul_instances()
-    # print(mul_units)
-    # add_units = module.make_add_instances()
-    # print(add_units)
-    #
-    # for pe_geom_idx in module.pe_geom_idxs:
-    #     always = module.make_mul_right_input_case(pe_geom_idx)
-    #     print(always)
-    #
-    # for pe_geom_idx in module.pe_geom_idxs:
-    #     always = module.make_mul_left_input_case(pe_geom_idx)
-    #     print(always)
-    #
-    # for pe_geom_idx in module.pe_geom_idxs:
-    #     always = module.make_add_left_input_case(pe_geom_idx)
-    #     print(always)
+    print(module_decl, "\n")
+    fsm_params = module.make_fsm_params()
+    print(fsm_params, "\n")
+    fsm_wires = module.make_fsm_wires()
+    print(fsm_wires, "\n")
+    mul_units = module.make_mul_instances()
+    print(mul_units, "\n")
+    add_units = module.make_add_instances()
+    print(add_units, "\n")
+    relu_units = module.make_relu_instances()
+    print(relu_units, "\n")
+
+    for pe_geom_idx in module.pe_geom_idxs:
+        always = module.make_mul_left_input_case(pe_geom_idx)
+        print(always, "\n")
+
+    for pe_geom_idx in module.pe_geom_idxs:
+        always = module.make_mul_right_input_case(pe_geom_idx)
+        print(always, "\n")
+
+    for pe_geom_idx in module.pe_geom_idxs:
+        always = module.make_add_left_input_case(pe_geom_idx)
+        print(always, "\n")
+
+    for pe_geom_idx in module.pe_geom_idxs:
+        always = module.make_add_right_input_case(pe_geom_idx)
+        print(always, "\n")
+
+    for pe_geom_idx in module.pe_geom_idxs:
+        always = module.make_relu_input_case(pe_geom_idx)
+        print(always, "\n")
 
     outs = module.make_outputs(output)
-    print(outs)
+    print(outs, "\n")
 
     fsm = module.make_fsm()
-    print(fsm)
+    print(fsm, "\n")
 
     print("endmodule")
 
 
-if __name__ == "__main__":
-    from mlir_ops import (
-        ArrayDecl,
-        GlobalArrayVal,
-        ArrayVal,
-        Val,
-        AddInst,
-        MulInst,
-        DivInst,
-        ReLUInst,
-        Constant, ExpInst, SubInst,
-    )
+def Forward(forward, max_range):
+    for i, idx in enumerate(
+        sorted(itertools.product(*[list(range(i)) for i in max_range]))
+    ):
+        hls.scripts.mlir_ops.PES[i] = hls.scripts.mlir_ops.PE(i)
 
-    processing_elts = pickle.load(open("pes.pkl", "rb"))
+    Args = get_default_args(forward)
     VerilogForward(
-        ArrayDecl("_arg0", 1, 1, 11, 11, input=True),
-        ArrayDecl("_arg1", 1, 2, output=True),
-        None,
-        processing_elts=pickle.load(open("pes.pkl", "rb")),
-        max_range=(1, 16, 9, 9),
+        Args["_arg0"],
+        Args["_arg1"],
+        forward,
+        hls.scripts.mlir_ops.PES,
+        max_range=max_range,
     )
