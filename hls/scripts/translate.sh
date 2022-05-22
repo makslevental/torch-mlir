@@ -28,10 +28,10 @@ for i, line in enumerate(old_lines):
 open("forward.affine.mlir", "w").writelines(new_lines)
 
 EOF
-sed -i 's/scf\.yield//g' forward.affine.mlir
+sed -i.bak 's/scf\.yield//g' forward.affine.mlir
 
 #torch-mlir-opt forward.affine.mlir -affine-loop-unroll="unroll-full unroll-full-threshold=10000000" -o forward.affine.unrolled.mlir
 scalehls-translate forward.affine.mlir --emit-hlspy --mlir-print-elementsattrs-with-hex-if-larger=-1 -o forward.py
 # black forward.py
-python mlir_ops.py
-python forward_rewritten.py
+python ../../scripts/mlir_ops.py forward.py --max_range 1 16 9 9
+python forward_rewritten.py > forward.v

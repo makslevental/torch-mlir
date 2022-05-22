@@ -1187,7 +1187,7 @@ void ModuleEmitter::emitGlobal(memref::GlobalOp op) {
 void ModuleEmitter::emitGetGlobal(memref::GetGlobalOp op) {
   indent();
   emitValue(op.getResult());
-  os << " = Global('" << getName(op.getResult()) << "', " << "'" << op.name() << "', " << op.name() << ")\n";
+  os << " = GlobalArray('" << getName(op.getResult()) << "', " << "'" << op.name() << "', " << op.name() << ")\n";
 }
 
 void ModuleEmitter::emitTensorStore(memref::TensorStoreOp op) {
@@ -1586,8 +1586,8 @@ void ModuleEmitter::emitFunction(FuncOp func) {
 /// Top-level MLIR module emitter.
 void ModuleEmitter::emitModule(ModuleOp module) {
   os << R"XXX(import numpy as np
-from mlir_ops import ArrayDecl, Global, Forward
-from verilog_val import MAC, ParFor, ReLU
+from hls.scripts.mlir_ops import ArrayDecl, ParFor, ReLU, Exp, GlobalArray
+from hls.scripts.verilog_val import Forward
 )XXX";
   os << "\n\n";
   os << " # fmt: off\n";
