@@ -1,19 +1,16 @@
 from __future__ import annotations
-# from ast_tools.passes import apply_passes
-# from llvm_val import LLVMForward, LLVMVal, LLVMConstant
-# from verilog_val import VerilogWire, VerilogConstant, VerilogForward
+
+import argparse
 import ast
 import inspect
 import itertools
+import sys
 from ast import Assign, Mult, Add, BinOp, Name, Call, keyword, Str, IfExp, Compare
 from typing import Tuple, Union, Dict, Any
 
 import astor
 import numpy as np
 
-# from ast_tools.passes import apply_passes
-# from llvm_val import LLVMForward, LLVMVal, LLVMConstant
-from verilog_val import VerilogForward
 
 MAC_IDX = None
 
@@ -315,19 +312,7 @@ def get_array_type(shape, ptr=True, nd=False):
     return typ
 
 
-def Forward(forward, max_range):
-    global PES
-    for i, idx in enumerate(sorted(itertools.product(*[list(range(i)) for i in max_range]))):
-        PES[i] = PE(i)
 
-    Args = get_default_args(forward)
-    VerilogForward(
-        Args["_arg0"],
-        Args["_arg1"],
-        forward,
-        PES,
-        max_range=max_range,
-    )
 
 
 class RemoveMulAdd(ast.NodeTransformer):
@@ -589,16 +574,23 @@ class SetMaxRange(ast.NodeTransformer):
         return node
 
 
-def transform_forward_py():
-    code_ast = astor.parse_file("forward.py")
+def transform_forward_py(fp, max_range):
+    code_ast = astor.parse_file(fp)
     # new_tree = RemoveMAC().visit(code_ast)
     # new_tree = RemoveMulOrAdd().visit(code_ast)
-    new_tree = SetMaxRange((1, 16, 9, 9)).visit(code_ast)
+    new_tree = SetMaxRange(max_range).visit(code_ast)
     # new_tree = RemoveMul().visit(code_ast)
     new_tree = RemoveIfExp().visit(new_tree)
-    with open("forward_rewritten.py", "w") as f:
+    with open(f"{fp.replace('forward', 'forward_rewritten')}", "w") as f:
         f.write(astor.code_gen.to_source(new_tree))
 
 
 if __name__ == "__main__":
-    transform_forward_py()
+    fp = sys.argv[1]
+    parser = argparse.ArgumentParser()
+    parser.add_argument('fp')
+    parser.add_argument('--max_range', nargs='+', type=int)
+    args = parser.parse_args()
+    print(args)
+    max_range = tuple(args.max_range)
+    transform_forward_py(args.fp, max_range)

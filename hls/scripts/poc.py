@@ -252,33 +252,33 @@ def put_script_files(*, out_str, in_shape, out_shape, out_dir, forward_suffix=""
     os.makedirs(f"{out_dir}", exist_ok=True)
     open(f"{out_dir}/forward{forward_suffix}.mlir", "w").write(out_str)
 
-    wrapper_str = open("wrapper.cpp.fmt", "r").read()
-    wrapper_str = make_wrapper(wrapper_str, in_shape, out_shape)
-    open(f"{out_dir}/wrapper.cpp", "w").write(wrapper_str)
+    # wrapper_str = open("wrapper.cpp.fmt", "r").read()
+    # wrapper_str = make_wrapper(wrapper_str, in_shape, out_shape)
+    # open(f"{out_dir}/wrapper.cpp", "w").write(wrapper_str)
 
-    run_hls = open("run_vitis.tcl", "r").read()
-    run_hls = run_hls.replace("XXX_DIR_XXX", out_dir)
-    run_hls = run_hls.replace("XXX_LL_FILE_XXX", "forward.ll")
-    open(f"{out_dir}/run_vitis.tcl", "w").write(run_hls)
+    # run_hls = open("run_vitis.tcl", "r").read()
+    # run_hls = run_hls.replace("XXX_DIR_XXX", out_dir)
+    # run_hls = run_hls.replace("XXX_LL_FILE_XXX", "forward.ll")
+    # open(f"{out_dir}/run_vitis.tcl", "w").write(run_hls)
 
-    hls_hooks = open("hls_hooks.tcl", "r").read()
-    hls_hooks = hls_hooks.replace("XXX_DIR_XXX", out_dir)
-    hls_hooks = hls_hooks.replace("XXX_LL_FILE_XXX", "forward.ll")
-    open(f"{out_dir}/hls_hooks.tcl", "w").write(hls_hooks)
+    # hls_hooks = open("hls_hooks.tcl", "r").read()
+    # hls_hooks = hls_hooks.replace("XXX_DIR_XXX", out_dir)
+    # hls_hooks = hls_hooks.replace("XXX_LL_FILE_XXX", "forward.ll")
+    # open(f"{out_dir}/hls_hooks.tcl", "w").write(hls_hooks)
 
-    shutil.copyfile("Makefile", f"{out_dir}/Makefile")
-    shutil.copyfile("read_large_file.py", f"{out_dir}/read_large_file.py")
-    shutil.copyfile("run_vitis.sh", f"{out_dir}/run_vitis.sh")
-    st = os.stat(f"{out_dir}/run_vitis.sh")
-    os.chmod(f"{out_dir}/run_vitis.sh", st.st_mode | stat.S_IEXEC)
-    shutil.copyfile("mlir_ops.py", f"{out_dir}/mlir_ops.py")
-    shutil.copyfile("llvm_val.py", f"{out_dir}/llvm_val.py")
-    shutil.copyfile("verilog_val.py", f"{out_dir}/verilog_val.py")
+    # shutil.copyfile("Makefile", f"{out_dir}/Makefile")
+    # shutil.copyfile("read_large_file.py", f"{out_dir}/read_large_file.py")
+    # shutil.copyfile("run_vitis.sh", f"{out_dir}/run_vitis.sh")
+    # st = os.stat(f"{out_dir}/run_vitis.sh")
+    # os.chmod(f"{out_dir}/run_vitis.sh", st.st_mode | stat.S_IEXEC)
+    # shutil.copyfile("mlir_ops.py", f"{out_dir}/mlir_ops.py")
+    # shutil.copyfile("llvm_val.py", f"{out_dir}/llvm_val.py")
+    # shutil.copyfile("verilog_val.py", f"{out_dir}/verilog_val.py")
     shutil.copyfile("translate.sh", f"{out_dir}/translate.sh")
     st = os.stat(f"{out_dir}/translate.sh")
     os.chmod(f"{out_dir}/translate.sh", st.st_mode | stat.S_IEXEC)
 
-    shutil.copyfile("make_schedule.py", f"{out_dir}/make_schedule.py")
+    # shutil.copyfile("make_schedule.py", f"{out_dir}/make_schedule.py")
     shutil.copyfile("run_vivado.tcl", f"{out_dir}/run_vivado.tcl")
     shutil.copyfile("run_vivado.sh", f"{out_dir}/run_vivado.sh")
     st = os.stat(f"{out_dir}/run_vivado.sh")
@@ -400,6 +400,7 @@ def make_whole_braggnn(root_out_dir, scale=4, imgsz=11, simplify_weights=False):
     )
     open(f"{out_dir}/mod.txt", "w").write(str(mod))
 
+
 class ConvPlusReLU(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
@@ -408,6 +409,7 @@ class ConvPlusReLU(nn.Module):
 
     def forward(self, x):
         return self.relu(self.conv(x))
+
 
 def make_single_small_cnn(
     root_out_dir, in_channels=2, out_channels=4, imgsz=11, simplify_weights=False
@@ -445,9 +447,9 @@ def make_single_small_cnn(
 class DoubleCNN(nn.Module):
     def __init__(self, scale):
         super().__init__()
-        self.conv1 = torch.nn.Conv2d(8//scale, 16//scale, 1)
-        self.conv2 = torch.nn.Conv2d(16//scale, 8//scale, 3)
-        self.conv3 = torch.nn.Conv2d(8//scale, 4//scale, 3)
+        self.conv1 = torch.nn.Conv2d(8 // scale, 16 // scale, 1)
+        self.conv2 = torch.nn.Conv2d(16 // scale, 8 // scale, 3)
+        self.conv3 = torch.nn.Conv2d(8 // scale, 4 // scale, 3)
 
     def forward(self, x):
         y = self.conv1(x)
@@ -486,6 +488,48 @@ def make_double_small_cnn(root_out_dir, scale=1, imgsz=11, simplify_weights=Fals
     open(f"{out_dir}/mod.txt", "w").write(str(mod))
 
 
+class Linear(nn.Module):
+    def __init__(self, scale):
+        super().__init__()
+        self.linear1 = torch.nn.Linear(3, 4)
+        # self.linear2 = torch.nn.Linear(4, 2)
+
+    def forward(self, x):
+        y = self.linear1(x)
+        # z = self.linear2(y)
+        return y
+
+
+def make_linear(root_out_dir, scale=1, imgsz=11, simplify_weights=False):
+    mb = ModuleBuilder()
+    with torch.no_grad():
+        mod = Linear(scale)
+        mod.eval()
+        t = torch.randn((2, 3))
+        y = mod(t)
+        if simplify_weights:
+            mod.apply(set_weights)
+        recursivescriptmodule, class_annotator = make_layer(
+            mod, [None, ([2, 3], torch.float32, True)]
+        )
+
+    mb.import_module(recursivescriptmodule._c, class_annotator)
+
+    run_pipeline_with_repro_report(mb.module, ",".join(PIPELINE), "")
+
+    out = mb.module.operation.get_asm(
+        large_elements_limit=100000, enable_debug_info=False
+    )
+
+    out_dir = str(
+        root_out_dir / Path(recursivescriptmodule.original_name + f".{scale}")
+    )
+    put_script_files(
+        out_str=out, in_shape=tuple(t.shape), out_shape=tuple(y.shape), out_dir=out_dir
+    )
+    open(f"{out_dir}/mod.txt", "w").write(str(mod))
+
+
 def main():
     parser = argparse.ArgumentParser(description="make stuff")
     parser.add_argument("--no_whole_braggnn", action="store_false", default=False)
@@ -498,7 +542,12 @@ def main():
     print(args)
     args.out_dir = args.out_dir.resolve()
 
-    make_single_small_cnn(args.out_dir, in_channels=1, out_channels=16, imgsz=11, simplify_weights=False)
+    make_single_small_cnn(
+        args.out_dir, in_channels=1, out_channels=16, imgsz=11, simplify_weights=False
+    )
+    make_linear(
+        args.out_dir, imgsz=5, simplify_weights=False
+    )
     # make_double_small_cnn(args.out_dir, scale=1, imgsz=9, simplify_weights=False)
 
     for i in range(args.low_scale, args.high_scale):
