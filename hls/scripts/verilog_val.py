@@ -423,7 +423,9 @@ class Module:
             """
         )
         for i, ((val_name, val_id), fsm_states) in enumerate(inst_inps):
-            if i == 0:
+            if len(inst_inps) == 1:
+                cond = "begin"
+            elif i == 0:
                 cond = f"if ({make_fsm_states(fsm_states, self.fsm_idx_width)}) begin"
             elif i < len(inst_inps) - 1:
                 cond = (
@@ -435,7 +437,7 @@ class Module:
             _always = indent(
                 dedent(
                     f"""\
-                        {cond}
+                        {cond} // num states: {len(fsm_states)}
                             {{body}}
                         end 
                     """
