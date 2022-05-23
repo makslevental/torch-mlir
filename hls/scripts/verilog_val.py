@@ -3,6 +3,7 @@ import math
 import struct
 import warnings
 from collections import defaultdict
+from functools import reduce
 from textwrap import dedent, indent
 from hls.scripts.mlir_ops import (
     ArrayDecl,
@@ -109,11 +110,15 @@ class Module:
             f"[{self.precision - 1}:0] {self.output_arr.arr_name}_{'_'.join(map(str, idx))}"
             for idx in idxs
         ]
-        mod = "module forward (\n"
-        mod += ",\n".join([f"\tinput {inp}" for inp in base_inputs + input_ports])
+        mod = "`default_nettype none\n"
+        mod += "module forward (\n"
+        mod += ",\n".join([f"\tinput wire {inp}" for inp in base_inputs])
         mod += ",\n"
-        mod += ",\n".join([f"\toutput {outp}" for outp in base_outputs + output_ports])
-        mod += "\n);"
+        mod += ",\n".join([f"\toutput wire {outp}" for outp in base_outputs + output_ports])
+        mod += "\n);\n"
+
+        mod += ";\n".join([f"wire {inp}" for inp in input_ports])
+        mod += ";\n"
 
         return mod
 
@@ -192,6 +197,28 @@ class Module:
             )
             muls.append(mul_s)
         return "\n".join(muls)
+
+    def make_bram_instances(self):
+        brams = []
+        for geom_mul_idx in sorted(self.needed_mult_units):
+            mul_idx = self.pe_geom_idx_to_idx[geom_mul_idx]
+            id = "_".join(map(str, geom_mul_idx))
+            bram_s = dedent(
+                f"""\
+                
+                reg   [{self.precision - 1}:0] bram_{id}_id_{mul_idx}_data_reg;
+                wire   [{self.precision - 1}:0] bram_{id}_id_{mul_idx}_data;
+                bram #({mul_idx}, {self.precision}) bram_{id}_id_{mul_idx}(
+                    .clock(clock),
+                    .data_out(bram_{id}_id_{mul_idx}_data)
+                );
+                always @ (posedge clock) begin
+                    bram_{id}_id_{mul_idx}_data_reg <= bram_{id}_id_{mul_idx}_data;
+                end
+                """
+            )
+            brams.append(bram_s)
+        return "\n".join(brams)
 
     def make_fsm_params(self):
         params = "\n".join(
@@ -274,17 +301,18 @@ class Module:
         """
         )
 
-        for i in range(1, self.fsm_steps + 1):
+        fsm_2bit_width = math.ceil(math.log2(self.fsm_steps))
+        for i in range(1, self.fsm_steps):
             fsm += dedent(
                 f"""\
-        assign current_state_fsm_state{str(i).zfill(self.fsm_idx_width)} = current_state_fsm[32'd{i - 1}];
+        assign current_state_fsm_state{str(i).zfill(self.fsm_idx_width)} = current_state_fsm[{fsm_2bit_width}'d{i - 1}];
             """
             )
 
-        for i in range(1, self.fsm_steps + 1):
+        for i in range(1, self.fsm_steps):
             fsm += dedent(
                 f"""\
-        assign next_state_fsm_state{str(i).zfill(self.fsm_idx_width)} = next_state_fsm[32'd{i - 1}];
+        assign next_state_fsm_state{str(i).zfill(self.fsm_idx_width)} = next_state_fsm[{fsm_2bit_width}'d{i - 1}];
             """
             )
 
@@ -312,8 +340,11 @@ class Module:
         ]
         if mul_rights:
             mul_inps_to_fsm_list = self.make_binop_inp_to_fsm_list(mul_rights)
+            other_vals = [tup for tup in mul_inps_to_fsm_list if "__constant" not in tup[0][0]]
+            global_arr_vals = [tup for tup in mul_inps_to_fsm_list if "__constant" in tup[0][0]]
+            global_arr_vals = reduce(lambda accum, val: [(("__constant", pe_geom_idx), accum[0][1] + val[1])], global_arr_vals, [(("__constant", pe_geom_idx), [])])
             return self.make_inst_input_case(
-                "mul", mul_inps_to_fsm_list, pe_geom_idx, "b"
+                "mul", other_vals + global_arr_vals, pe_geom_idx, "b"
             )
         else:
             return ""
@@ -379,12 +410,12 @@ class Module:
             else:
                 raise Exception(f"wtfbbq {inst_inp}")
 
-        return list(inst_inps.items())
+        # TODO: not the greatest thing - sort here so that most frequent case arm ends up last in if
+        return list(sorted(inst_inps.items(), key=lambda x: len(x[1])))
 
     def make_inst_input_case(self, inst: str, inst_inps, pe_geom_idx, inp_letter):
         this_pe_geom_id = "_".join(map(str, pe_geom_idx))
         this_pe_id = self.pe_geom_idx_to_idx[pe_geom_idx]
-
 
         always = dedent(
             f"""\
@@ -392,18 +423,31 @@ class Module:
             """
         )
         for i, ((val_name, val_id), fsm_states) in enumerate(inst_inps):
+            if i == 0:
+                cond = f"if ({make_fsm_states(fsm_states, self.fsm_idx_width)}) begin"
+            elif i < len(inst_inps) - 1:
+                cond = (
+                    f"else if ({make_fsm_states(fsm_states, self.fsm_idx_width)}) begin"
+                )
+            else:
+                cond = f"else begin"
+
+            _always = indent(
+                dedent(
+                    f"""\
+                        {cond}
+                            {{body}}
+                        end 
+                    """
+                ),
+                "\t",
+            )
+
             if "_arg" in val_name:
                 arg_name, arg_id = val_name, val_id
                 arg_id = "_".join(map(str, arg_id))
-                always += indent(
-                    dedent(
-                        f"""\
-                            {'else if' if i > 0 else 'if'} ({make_fsm_states(fsm_states, self.fsm_idx_width)}) begin
-                                f{inst}_{this_pe_geom_id}_id_{this_pe_id}_{inp_letter} = {arg_name}_{arg_id};
-                            end 
-                        """
-                    ),
-                    "\t",
+                _always = _always.format(
+                    body=f"f{inst}_{this_pe_geom_id}_id_{this_pe_id}_{inp_letter} = {arg_name}_{arg_id};"
                 )
             elif val_name in ["AddInst", "MulInst"]:
                 other_pe_geom_id = val_id
@@ -415,66 +459,39 @@ class Module:
                 else:
                     res = f"f{val_name.lower().replace('inst', '')}_{other_pe_geom_id}_id_{other_pe_id}_z"
 
-                always += indent(
-                    dedent(
-                        f"""\
-                            {'else if' if i > 0 else 'if'} ({make_fsm_states(fsm_states, self.fsm_idx_width)}) begin
-                                f{inst}_{this_pe_geom_id}_id_{this_pe_id}_{inp_letter} = {res};
-                            end 
-                        """
-                    ),
-                    "\t",
+                _always = _always.format(
+                    body=f"f{inst}_{this_pe_geom_id}_id_{this_pe_id}_{inp_letter} = {res};"
                 )
+
             elif "ReLUInst" in val_name:
                 other_pe_geom_id = val_id
                 other_pe_id = self.pe_geom_idx_to_idx[other_pe_geom_id]
                 other_pe_geom_id = "_".join(map(str, other_pe_geom_id))
                 res = f"f{val_name.lower().replace('inst', '')}_{other_pe_geom_id}_id_{other_pe_id}_z"
-
-                always += indent(
-                    dedent(
-                        f"""\
-                    {'else if' if i > 0 else 'if'} ({make_fsm_states(fsm_states, self.fsm_idx_width)}) begin
-                        f{inst}_{this_pe_geom_id}_id_{this_pe_id}_{inp_letter} = {res};
-                    end 
-                """
-                    ),
-                    "\t",
+                _always = _always.format(
+                    body=f"f{inst}_{this_pe_geom_id}_id_{this_pe_id}_{inp_letter} = {res};"
                 )
+
             elif "__constant" in val_name:
-                cst = get_val_from_global(val_name, val_id)
-                always += indent(
-                    dedent(
-                        f"""\
-                    {'else if' if i > 0 else 'if'} ({make_fsm_states(fsm_states, self.fsm_idx_width)}) begin
-                        f{inst}_{this_pe_geom_id}_id_{this_pe_id}_{inp_letter} = {self.precision}'d{half_to_int(cst)};
-                    end 
-                """
-                    ),
-                    "\t",
+                assert inst == "mul", "only muls should be getting global array csts, ie from bram"
+                # cst = get_val_from_global(val_name, val_id)
+                _always = _always.format(
+                    body=f"f{inst}_{this_pe_geom_id}_id_{this_pe_id}_{inp_letter} = bram_{this_pe_geom_id}_id_{this_pe_id}_data;"
                 )
             elif "Constant" in val_name:
                 cst = float(val_id)
-                always += indent(
-                    dedent(
-                        f"""\
-                    {'else ' if i > 0 else ''}if ({make_fsm_states(fsm_states, self.fsm_idx_width)}) begin
-                        f{inst}_{this_pe_geom_id}_id_{this_pe_id}_{inp_letter} = {self.precision}'d{half_to_int(cst)};
-                    end 
-                """
-                    ),
-                    "\t",
+                _always = _always.format(
+                    body=f"f{inst}_{this_pe_geom_id}_id_{this_pe_id}_{inp_letter} = {self.precision}'d{half_to_int(cst)};"
                 )
             else:
                 warnings.warn(f"unhandled inst {val_name, val_id}")
 
+            always += _always
+
         always += dedent(
             f"""\
-                else begin
-                    f{inst}_{this_pe_geom_id}_id_{this_pe_id}_{inp_letter} = 'bx;
-                end
-            end
-            """
+        end
+        """
         )
 
         return always
@@ -503,6 +520,8 @@ def VerilogForward(input, output, forward, processing_elts, max_range):
     print(fsm_params, "\n")
     fsm_wires = module.make_fsm_wires()
     print(fsm_wires, "\n")
+    bram_units = module.make_bram_instances()
+    print(bram_units, "\n")
     mul_units = module.make_mul_instances()
     print(mul_units, "\n")
     add_units = module.make_add_instances()
