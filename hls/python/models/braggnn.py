@@ -1,6 +1,46 @@
 import torch
 from torch import nn
 
+from torch_mlir_e2e_test.torchscript.annotations import export, annotate_args
+
+
+class Exp(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    @export
+    @annotate_args([None, ([-1, -1, -1, 1], torch.float32, True)])
+    def forward(self, x):
+        return (
+            x
+            + (x * x) * 0.5
+            + (x * x * x) * 0.16666666666666666
+            + (x * x * x * x) * 0.041666666666666664
+            + 1
+        )
+
+    # def body(_arg2, _arg3, _arg4, _arg5):
+    #     x = _45[0, _arg3, _arg4, _arg5]
+    #     _80 = x + (x * x) * 0.5 + (x * x * x) * 0.16666666666666666 + (x * x * x * x) * 0.041666666666666664 + 1
+    #     _32[_arg2, _arg3, _arg4, _arg5] = _80
+    # ParFor(body, ranges=(range(0, 1, 1), range(0, 8, 1), range(0, 9, 1),
+    #                      range(0, 9, 1)))
+    # https://dl.acm.org/doi/pdf/10.1145/2851507
+    # https://hal.inria.fr/inria-00071879/document
+
+
+class Softmax(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.exp = Exp()
+
+    @export
+    @annotate_args([None, ([-1, -1, -1, 1], torch.float32, True)])
+    def forward(self, x):
+        y = self.exp(x)
+        z = y.sum()
+        return y / z
+
 
 class NLB(torch.nn.Module):
     def __init__(self, in_ch, relu_a=0.01):
@@ -19,7 +59,7 @@ class NLB(torch.nn.Module):
         self.out_cnn = torch.nn.Conv2d(
             in_channels=self.inter_ch, out_channels=in_ch, kernel_size=1, padding=0
         )
-        self.soft = nn.Softmax(dim=-1)
+        self.soft = Softmax()
 
     def forward(self, x):
         theta = self.theta_layer(x)
