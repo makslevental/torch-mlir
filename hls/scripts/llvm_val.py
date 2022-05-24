@@ -398,6 +398,20 @@ def get_ssas_from_ir_line(line):
     return assign, deps
 
 
+def topological_sort_grouped(G):
+    indegree_map = {v: d for v, d in G.in_degree() if d > 0}
+    zero_indegree = [v for v, d in G.in_degree() if d == 0]
+    while zero_indegree:
+        yield zero_indegree
+        new_zero_indegree = []
+        for v in zero_indegree:
+            for _, child in G.edges(v):
+                indegree_map[child] -= 1
+                if not indegree_map[child]:
+                    new_zero_indegree.append(child)
+        zero_indegree = new_zero_indegree
+
+
 def crawl_graph(fp):
     lines = open(fp).readlines()
     G = nx.DiGraph()
@@ -420,15 +434,17 @@ def crawl_graph(fp):
                     if dep not in G.nodes:
                         G.add_node(dep)
                     G.add_edge(dep, assign)
-    for inp in inputs:
-        for outp in outputs:
-            try:
-                paths = nx.all_simple_paths(G, inp, outp)
-                for path in paths:
-                    print("path", inp, outp, len(path))
-            except nx.exception.NetworkXNoPath:
-                print("no path", inp, outp)
-                continue
+    for stage in topological_sort_grouped(G):
+        print(len(stage))
+    # for inp in inputs:
+    #     for outp in outputs:
+    #         try:
+    #             paths = nx.all_simple_paths(G, inp, outp)
+    #             for path in paths:
+    #                 print("path", inp, outp, len(path))
+    #         except nx.exception.NetworkXNoPath:
+    #             print("no path", inp, outp)
+    #             continue
 
 
 if __name__ == "__main__":
