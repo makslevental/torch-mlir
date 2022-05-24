@@ -161,7 +161,8 @@ class GlobalArray:
             )
         return self.csts[index]
 
-UNIQS = []
+UNIQS = set()
+ALL = []
 
 class ArrayDecl:
     def __init__(self, arr_name, *shape, input=False, output=False):
@@ -181,7 +182,8 @@ class ArrayDecl:
             elif index != WORKER_IDXS[WORKER_ID]:
                 v = ArrayVal(f"other_worker_idx", index, self)
                 if index not in UNIQS:
-                    UNIQS.append(list(index))
+                    UNIQS.add(index)
+                    ALL.append([list(index), self.arr_name])
             else:
                 v = LLVMConstant("-666")
             self.registers[index] = v
@@ -372,7 +374,7 @@ def Forward(forward, max_range, worker_id=0):
     WORKER_ID = worker_id
     Args = get_default_args(forward)
     LLVMForward(Args["_arg0"], Args["_arg1"], forward, [], max_range=max_range)
-    pprint(UNIQS)
+    pprint(ALL)
 
 
 def get_ssas_from_ir_line(line):
