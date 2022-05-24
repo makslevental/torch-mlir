@@ -322,6 +322,7 @@ def LLVMForward(input, output, forward, processing_elts, max_range):
     FILE = open(f"workers/forward_{WORKER_IDX}.ll", "w")
     print('source_filename = "LLVMDialectModule"', file=FILE)
     print("declare float @expf(float)", file=FILE)
+    print("declare void @llvm.donothing() nounwind readnone", file=FILE)
     print("declare void @_ssdm_op_SpecResource(...)", file=FILE)
     print("declare float @relu(float)", file=FILE)
     print("declare float @llvm.fmuladd.f32(float %a, float %b, float %c)", file=FILE)
