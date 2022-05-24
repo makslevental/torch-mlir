@@ -431,7 +431,6 @@ class ConvPlusReLU(nn.Module):
 def make_single_small_cnn(
     root_out_dir, in_channels=2, out_channels=4, imgsz=11, simplify_weights=False
 ):
-    mb = ModuleBuilder()
     with torch.no_grad():
         mod = ConvPlusReLU(in_channels, out_channels)
         mod.eval()
@@ -463,7 +462,6 @@ class DoubleCNN(nn.Module):
 
 
 def make_double_small_cnn(root_out_dir, scale=1, imgsz=11, simplify_weights=False):
-    mb = ModuleBuilder()
     with torch.no_grad():
         mod = DoubleCNN(scale)
         mod.eval()
@@ -475,21 +473,9 @@ def make_double_small_cnn(root_out_dir, scale=1, imgsz=11, simplify_weights=Fals
             mod, [None, ([1, 8, imgsz, imgsz], torch.float32, True)]
         )
 
-    mb.import_module(recursivescriptmodule._c, class_annotator)
-
-    run_pipeline_with_repro_report(mb.module, ",".join(PIPELINE), "")
-
-    out = mb.module.operation.get_asm(
-        large_elements_limit=100000, enable_debug_info=False
+    make_module_artifacts(
+        mod, t, y, recursivescriptmodule, class_annotator, root_out_dir, scale
     )
-
-    out_dir = str(
-        root_out_dir / Path(recursivescriptmodule.original_name + f".{scale}")
-    )
-    put_script_files(
-        out_str=out, in_shape=tuple(t.shape), out_shape=tuple(y.shape), out_dir=out_dir
-    )
-    open(f"{out_dir}/mod.txt", "w").write(str(mod))
 
 
 class Linear(nn.Module):
@@ -501,11 +487,10 @@ class Linear(nn.Module):
     def forward(self, x):
         y = self.linear1(x)
         # z = self.linear2(y)
-        return y
+        return y.sum()
 
 
 def make_linear(root_out_dir, scale=1, imgsz=11, simplify_weights=False):
-    mb = ModuleBuilder()
     with torch.no_grad():
         mod = Linear(scale)
         mod.eval()
@@ -517,21 +502,9 @@ def make_linear(root_out_dir, scale=1, imgsz=11, simplify_weights=False):
             mod, [None, ([2, 3], torch.float32, True)]
         )
 
-    mb.import_module(recursivescriptmodule._c, class_annotator)
-
-    run_pipeline_with_repro_report(mb.module, ",".join(PIPELINE), "")
-
-    out = mb.module.operation.get_asm(
-        large_elements_limit=100000, enable_debug_info=False
+    make_module_artifacts(
+        mod, t, y, recursivescriptmodule, class_annotator, root_out_dir, scale
     )
-
-    out_dir = str(
-        root_out_dir / Path(recursivescriptmodule.original_name + f".{scale}")
-    )
-    put_script_files(
-        out_str=out, in_shape=tuple(t.shape), out_shape=tuple(y.shape), out_dir=out_dir
-    )
-    open(f"{out_dir}/mod.txt", "w").write(str(mod))
 
 
 def main():
@@ -550,7 +523,7 @@ def main():
         args.out_dir, in_channels=1, out_channels=2, imgsz=5, simplify_weights=False
     )
     make_linear(args.out_dir, imgsz=5, simplify_weights=False)
-    # make_double_small_cnn(args.out_dir, scale=1, imgsz=9, simplify_weights=False)
+    make_double_small_cnn(args.out_dir, scale=1, imgsz=9, simplify_weights=False)
 
     for i in range(args.low_scale, args.high_scale):
         # if not args.no_split_braggnn:

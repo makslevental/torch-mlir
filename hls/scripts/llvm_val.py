@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import itertools
+import os
 import re
 import struct
 from collections import defaultdict, deque
@@ -9,15 +10,18 @@ import sys
 from typing import Tuple
 from pprint import pprint
 from llvmlite.ir import (
-    Constant, FloatType, DoubleType, LiteralStructType, IntType,
-    ArrayType, HalfType)
+    Constant,
+    FloatType,
+)
 
 import networkx as nx
 import numpy as np
 from hls.scripts.mlir_ops import get_default_args, get_array_type, index_map
 
+
 def double_to_hex(f):
-    return hex(struct.unpack('<Q', struct.pack('<d', f))[0])
+    return hex(struct.unpack("<Q", struct.pack("<d", f))[0])
+
 
 def float_to_hex(f):
     return hex(struct.unpack("<H", struct.pack("<e", f))[0])
@@ -30,8 +34,10 @@ def format_cst(cst):
     return str(c).replace("double ", "").replace("float ", "")
     # return (handleDoubleToHex(cst)[:11] + "0" * 7).upper().replace("X", "x")
 
+
 def np_to_hex(x):
-    return hex(np.float16(x).view('H'))[2:].zfill(16)
+    return hex(np.float16(x).view("H"))[2:].zfill(16)
+
 
 VAR_COUNT = 0
 
@@ -149,9 +155,13 @@ class GlobalArray:
         if index not in self.csts:
             v = GlobalArrayVal(self.global_name, index, self)
             self.csts[index] = v
-            print(f"{v} = fptrunc double {format_cst(self.global_array[index].view('float64'))} to float", file=FILE)
+            print(
+                f"{v} = fptrunc double {format_cst(self.global_array[index].view('float64'))} to float",
+                file=FILE,
+            )
         return self.csts[index]
 
+UNIQS = []
 
 class ArrayDecl:
     def __init__(self, arr_name, *shape, input=False, output=False):
@@ -164,26 +174,23 @@ class ArrayDecl:
         self.output = output
 
     def __getitem__(self, index: ArrayIndex):
-        try:
-            index = self.idx_map(index)
-        except ValueError:
-            index = (-1, -1, -1, -1)
-
+        index = self.idx_map(index)
         if index not in self.registers:
-            if not self.input:
-                v = LLVMConstant("0.0")
-            else:
+            if self.input:
                 v = ArrayVal(f"{self.arr_name}", index, self)
+            elif index != WORKER_IDXS[WORKER_ID]:
+                v = ArrayVal(f"other_worker_idx", index, self)
+                if index not in UNIQS:
+                    UNIQS.append(list(index))
+            else:
+                v = LLVMConstant("-666")
             self.registers[index] = v
 
         v = self.registers[index]
         return v
 
     def __setitem__(self, index, value):
-        try:
-            index = self.idx_map(index)
-        except ValueError:
-            index = (-1, -1, -1, -1)
+        index = self.idx_map(index)
         assert not self.input
         self.registers[index] = value
 
@@ -283,12 +290,15 @@ def ReLU(*idx):
     return op
 
 
-WORKER_IDX = None
+WORKER_ID = None
+WORKER_IDXS = None
+NUM_OPS_BODY = {}
 
 def ParFor(body, ranges):
-    idxs = list(itertools.product(*ranges))
-    if WORKER_IDX < len(idxs):
-        body(*idxs[WORKER_IDX])
+    task_idxs = sorted(list(itertools.product(*ranges)))
+    if WORKER_ID < len(task_idxs):
+        task_idx = task_idxs[WORKER_ID]
+        body(*task_idx)
     else:
         # TODO: how many no-ops though?
         print("call void @llvm.donothing()", file=FILE)
@@ -301,7 +311,8 @@ def FMulAdd(a, b, c):
             inps[i] = LLVMConstant(v)
     v = LLVMVal(f"(fmuladd ({a}) ({b}) ({c})")
     print(
-        f"{v} = call float @llvm.fmuladd.f32(float {inps[0]}, float {inps[1]}, float {inps[2]})", file=FILE
+        f"{v} = call float @llvm.fmuladd.f32(float {inps[0]}, float {inps[1]}, float {inps[2]})",
+        file=FILE,
     )
     return v
 
@@ -318,8 +329,10 @@ def make_args_globals(Args):
 
 
 def LLVMForward(input, output, forward, processing_elts, max_range):
-    global FILE
-    FILE = open(f"workers/forward_{WORKER_IDX}.ll", "w")
+    global FILE, WORKER_IDXS
+    WORKER_IDXS = list(np.ndindex(*max_range))
+    os.makedirs("workers", exist_ok=True)
+    FILE = open(f"workers/forward_{WORKER_ID}.ll", "w")
     print('source_filename = "LLVMDialectModule"', file=FILE)
     print("declare float @expf(float)", file=FILE)
     print("declare void @llvm.donothing() nounwind readnone", file=FILE)
@@ -354,11 +367,12 @@ def LLVMForward(input, output, forward, processing_elts, max_range):
     print("}", file=OLD_FILE)
 
 
-def Forward(forward, max_range, worker_idx):
-    global WORKER_IDX
-    WORKER_IDX = worker_idx
+def Forward(forward, max_range, worker_id=0):
+    global WORKER_ID
+    WORKER_ID = worker_id
     Args = get_default_args(forward)
     LLVMForward(Args["_arg0"], Args["_arg1"], forward, [], max_range=max_range)
+    pprint(UNIQS)
 
 
 def get_ssas_from_ir_line(line):
@@ -451,7 +465,8 @@ def crawl_graph(fp):
                     G.add_node(assign, op=op)
                 for dep in deps:
                     if dep not in G.nodes:
-                        G.add_node(dep)
+                        assert "other_worker" in dep
+                        G.add_node(dep, op="other_worker")
                     G.add_edge(dep, assign)
     for i, stage in enumerate(topological_sort_grouped(G)):
         print(i, len(stage))
