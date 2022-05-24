@@ -4,37 +4,45 @@ import io
 import itertools
 import re
 import struct
-import sys
 from collections import defaultdict, deque
+import sys
 from typing import Tuple
+from pprint import pprint
+from llvmlite.ir import (
+    Constant, FloatType, DoubleType, LiteralStructType, IntType,
+    ArrayType, HalfType)
 
 import networkx as nx
 import numpy as np
-
 from hls.scripts.mlir_ops import get_default_args, get_array_type, index_map
 
+def double_to_hex(f):
+    return hex(struct.unpack('<Q', struct.pack('<d', f))[0])
 
 def float_to_hex(f):
-    return hex(struct.unpack("<I", struct.pack("<f", f))[0])
+    return hex(struct.unpack("<H", struct.pack("<e", f))[0])
 
 
 def format_cst(cst):
-    # return float_to_hex(float(cst))
-    return float(np.random.randint(1, 100000))
-    # return cst
+    c = Constant(FloatType(), float(cst))
+    # return double_to_hex(float(cst))
+    # return float(np.random.randint(1, 100000))
+    return str(c).replace("double ", "").replace("float ", "")
     # return (handleDoubleToHex(cst)[:11] + "0" * 7).upper().replace("X", "x")
 
+def np_to_hex(x):
+    return hex(np.float16(x).view('H'))[2:].zfill(16)
 
 VAR_COUNT = 0
 
-FILE = open("forward.ll", "w")
+FILE = None
 
 
 class LLVMVal:
     def __init__(self, name):
         global VAR_COUNT
         self.name = f"{name}"
-        self.var_id = f"val_{VAR_COUNT}"
+        self.var_id = f"val_{VAR_COUNT:03}"
         VAR_COUNT += 1
 
     def __mul__(self, other):
@@ -141,7 +149,7 @@ class GlobalArray:
         if index not in self.csts:
             v = GlobalArrayVal(self.global_name, index, self)
             self.csts[index] = v
-            print(f"{v} = fptrunc double {format_cst('')} to float", file=FILE)
+            print(f"{v} = fptrunc double {format_cst(self.global_array[index].view('float64'))} to float", file=FILE)
         return self.csts[index]
 
 
@@ -156,7 +164,6 @@ class ArrayDecl:
         self.output = output
 
     def __getitem__(self, index: ArrayIndex):
-        global PES
         try:
             index = self.idx_map(index)
         except ValueError:
@@ -173,7 +180,6 @@ class ArrayDecl:
         return v
 
     def __setitem__(self, index, value):
-        global PES
         try:
             index = self.idx_map(index)
         except ValueError:
@@ -277,9 +283,15 @@ def ReLU(*idx):
     return op
 
 
+WORKER_IDX = None
+
 def ParFor(body, ranges):
-    for i, idx in enumerate(itertools.product(*ranges)):
-        body(*idx)
+    idxs = list(itertools.product(*ranges))
+    if WORKER_IDX < len(idxs):
+        body(*idxs[WORKER_IDX])
+    else:
+        # TODO: how many no-ops though?
+        print("call void @llvm.donothing()", file=FILE)
 
 
 def FMulAdd(a, b, c):
@@ -289,7 +301,7 @@ def FMulAdd(a, b, c):
             inps[i] = LLVMConstant(v)
     v = LLVMVal(f"(fmuladd ({a}) ({b}) ({c})")
     print(
-        f"{v} = call float @llvm.fmuladd.f32(float {inps[0]}, float {inps[1]}, float {inps[2]})"
+        f"{v} = call float @llvm.fmuladd.f32(float {inps[0]}, float {inps[1]}, float {inps[2]})", file=FILE
     )
     return v
 
@@ -307,6 +319,7 @@ def make_args_globals(Args):
 
 def LLVMForward(input, output, forward, processing_elts, max_range):
     global FILE
+    FILE = open(f"workers/forward_{WORKER_IDX}.ll", "w")
     print('source_filename = "LLVMDialectModule"', file=FILE)
     print("declare float @expf(float)", file=FILE)
     print("declare void @_ssdm_op_SpecResource(...)", file=FILE)
@@ -324,21 +337,6 @@ def LLVMForward(input, output, forward, processing_elts, max_range):
         f"define void @forward({', '.join([f'float %{a}' for a in inputs] + [f'float* %{a}' for a in outputs])}) {{\n",
         file=FILE,
     )
-    # for _arg_name, arg in Args.items():
-    #     if isinstance(arg, ArrayDecl):
-    #         typ = get_array_type(arg.curr_shape, nd=True, ptr=False)
-    #         # shape = arg.curr_shape if len(arg.curr_shape) > 1 else (arg.curr_shape,)
-    #         for idx in itertools.product(*[range(a) for a in arg.curr_shape]):
-    #             idx = list(map(str, idx))
-    #             print(
-    #                 f"%{arg.var_name}_{'_'.join(idx)}_gep = getelementptr {typ}, {typ}* %{arg.var_name}, i32 0, {', '.join([f'i32 {i}' for i in idx])}", file=FILE
-    #                 # f"%mac_{mac.id}_{i}_gep = getelementptr {typ}, {typ}* %mac_{mac.id}, i16 0, i16 {i}", file=OLD_FILE
-    #             )
-    #             if arg.input:
-    #                 print(
-    #                     # f"%glob_{glo.var_name}_idx_{'_'.join(idx)} = load float, float* getelementptr inbounds ({typ}, {typ}* %glob_{glo.var_name}, i64 0, {', '.join([f'i64 {i}' for i in idx])})"
-    #                     f"%{arg.var_name}_{'_'.join(idx)} = load float, float* %{arg.var_name}_{'_'.join(idx)}_gep", file=FILE
-    #                 )
 
     OLD_FILE = FILE
     FILE = io.StringIO()
@@ -355,7 +353,9 @@ def LLVMForward(input, output, forward, processing_elts, max_range):
     print("}", file=OLD_FILE)
 
 
-def Forward(forward, max_range):
+def Forward(forward, max_range, worker_idx):
+    global WORKER_IDX
+    WORKER_IDX = worker_idx
     Args = get_default_args(forward)
     LLVMForward(Args["_arg0"], Args["_arg1"], forward, [], max_range=max_range)
 
@@ -363,9 +363,8 @@ def Forward(forward, max_range):
 def get_ssas_from_ir_line(line):
     line = re.sub(r", align \d+", "", line)
     idents = [f for f, _ in re.findall(r"(%[\d|a-z|_]*|([0-9]*[.])+[0-9]+)", line)]
-    if not idents:
-        print(line)
-        return None, None
+    if not idents or "declare" in line:
+        return None, None, None
 
     if (
         "fmul" in line
@@ -373,15 +372,34 @@ def get_ssas_from_ir_line(line):
         or "fcmp" in line
         or "fsub" in line
         or "fdiv" in line
+        or "fmuladd" in line
     ):
-        assign, *deps = idents
+        assign, *_deps = idents
+        deps = []
+        for d in _deps:
+            # deps.append(d)
+            try:
+                float(d)
+            except:
+                deps.append(d)
+        if "fmuladd" in line:
+            op = "fmuladd"
+        else:
+            op = line.split("=")[1].strip().split(" ")[0]
     elif "store" in line:
         dep, assign = idents
         deps = [dep]
-    elif "expf" in line or "relu" in line:
+        op = "store"
+    elif "expf" in line:
         assign, *deps = idents
+        op = "expf"
+    elif "relu" in line:
+        assign, *deps = idents
+        op = "relu"
     elif "fptrunc" in line:
-        assign, *deps = idents
+        assign, *_deps = idents
+        deps = _deps
+        op = "constant"
     elif "define void @forward" in line:
         inputs = [
             f.replace("float ", "")
@@ -391,11 +409,11 @@ def get_ssas_from_ir_line(line):
             f.replace("float* ", "")
             for f, _ in re.findall(r"(float\* (%[\d|a-z|_]*))", line)
         ]
-        return inputs, outputs
+        return inputs, outputs, ""
     else:
         raise Exception(line)
 
-    return assign, deps
+    return assign, deps, op
 
 
 def topological_sort_grouped(G):
@@ -413,38 +431,43 @@ def topological_sort_grouped(G):
 
 
 def crawl_graph(fp):
-    lines = open(fp).readlines()
+    lines = open(fp, "r").readlines()
     G = nx.DiGraph()
     inputs = None
     outputs = None
     for line in lines:
-        assign, deps = get_ssas_from_ir_line(line)
+        assign, deps, op = get_ssas_from_ir_line(line)
         if "define" in line:
             inputs = assign
             outputs = deps
             for assig in assign:
-                G.add_node(assig)
+                G.add_node(assig, op="input")
             for dep in deps:
-                G.add_node(dep)
+                G.add_node(dep, op="output")
         else:
             if assign is not None:
                 if assign not in G.nodes:
-                    G.add_node(assign)
+                    G.add_node(assign, op=op)
                 for dep in deps:
                     if dep not in G.nodes:
                         G.add_node(dep)
                     G.add_edge(dep, assign)
-    for stage in topological_sort_grouped(G):
-        print(len(stage))
-    # for inp in inputs:
-    #     for outp in outputs:
-    #         try:
-    #             paths = nx.all_simple_paths(G, inp, outp)
-    #             for path in paths:
-    #                 print("path", inp, outp, len(path))
-    #         except nx.exception.NetworkXNoPath:
-    #             print("no path", inp, outp)
-    #             continue
+    for i, stage in enumerate(topological_sort_grouped(G)):
+        print(i, len(stage))
+        print(sorted([(s, G.nodes[s]["op"]) for s in stage]))
+        for s in stage:
+            preds = list(G.predecessors(s))
+            if preds:
+                print(s, preds)
+    print()
+    for inp in inputs:
+        for outp in outputs:
+            try:
+                path = nx.shortest_path(G, inp, outp)
+                print("path", inp, outp, len(path))
+            except nx.exception.NetworkXNoPath:
+                # print("no path", inp, outp)
+                continue
 
 
 if __name__ == "__main__":
@@ -462,4 +485,4 @@ if __name__ == "__main__":
 # int8_t v86[1][3][34][34];	// L71
 # #pragma HLS BIND_STORAGE variable=v86 type=RAM_1P impl=URAM
 # int8_t v87[1][3][34][34];	// L7
-# #pragma HLS BIND_STORAGE variable=v87 type=RAM_2P impl=BRAM latency=2V
+# #pragma HLS BIND_STORAGE variable=v87 type=RAM_2P impl=BRAM latency=2V
