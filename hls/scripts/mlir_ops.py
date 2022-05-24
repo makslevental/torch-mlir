@@ -265,7 +265,6 @@ class GlobalArray:
         self.csts = {}
 
     def __getitem__(self, index: ArrayIndex):
-        global PES
         v = GlobalArrayVal(self.name, index, self)
         return v
 
