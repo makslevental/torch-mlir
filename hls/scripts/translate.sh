@@ -34,4 +34,8 @@ sed -i.bak 's/scf\.yield//g' forward.affine.mlir
 scalehls-translate forward.affine.mlir --emit-hlspy --mlir-print-elementsattrs-with-hex-if-larger=-1 -o forward.py
 # black forward.py
 python ../../scripts/mlir_ops.py forward.py --max_range 1 16 9 9
-python forward_rewritten.py > forward.v
+
+for (( i = 0; i < 16*9*9; i++ )); do
+  python forward_rewritten.py $i > workers/other_workers_$i.json
+  python ../../scripts/llvm_val.py workers/forward_$i.ll > workers/topo_$i.log
+done
