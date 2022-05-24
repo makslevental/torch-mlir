@@ -353,18 +353,15 @@ def make_split_braggnn(root_out_dir, scale=4, imgsz=11, simplify_weights=False):
         # )
 
 
-def make_whole_braggnn(root_out_dir, scale=4, imgsz=11, simplify_weights=False):
-    with torch.no_grad():
-        mod = BraggNN(imgsz=imgsz, scale=scale)
-        mod.eval()
-        t = torch.randn((1, 1, imgsz, imgsz))
-        y = mod(t)
-        if simplify_weights:
-            mod.apply(set_weights)
-        recursivescriptmodule, class_annotator = make_layer(
-            mod, [None, ([1, 1, imgsz, imgsz], torch.float32, True)]
-        )
-
+def make_module_artifacts(
+    mod,
+    example_input,
+    example_output,
+    recursivescriptmodule,
+    class_annotator,
+    root_out_dir,
+    scale,
+):
     out_dir = str(
         root_out_dir / Path(recursivescriptmodule.original_name + f".{scale}")
     )
@@ -396,9 +393,29 @@ def make_whole_braggnn(root_out_dir, scale=4, imgsz=11, simplify_weights=False):
     )
 
     put_script_files(
-        out_str=out, in_shape=tuple(t.shape), out_shape=tuple(y.shape), out_dir=out_dir
+        out_str=out,
+        in_shape=tuple(example_output.shape),
+        out_shape=tuple(example_output.shape),
+        out_dir=out_dir,
     )
     open(f"{out_dir}/mod.txt", "w").write(str(mod))
+
+
+def make_whole_braggnn(root_out_dir, scale=4, imgsz=11, simplify_weights=False):
+    with torch.no_grad():
+        mod = BraggNN(imgsz=imgsz, scale=scale)
+        mod.eval()
+        t = torch.randn((1, 1, imgsz, imgsz))
+        y = mod(t)
+        if simplify_weights:
+            mod.apply(set_weights)
+        recursivescriptmodule, class_annotator = make_layer(
+            mod, [None, ([1, 1, imgsz, imgsz], torch.float32, True)]
+        )
+
+    make_module_artifacts(
+        mod, t, y, recursivescriptmodule, class_annotator, root_out_dir, scale
+    )
 
 
 class ConvPlusReLU(nn.Module):
@@ -426,21 +443,8 @@ def make_single_small_cnn(
             mod, [None, ([1, in_channels, imgsz, imgsz], torch.float32, True)]
         )
 
-    mb.import_module(recursivescriptmodule._c, class_annotator)
-
-    run_pipeline_with_repro_report(mb.module, ",".join(PIPELINE), "")
-
-    out = mb.module.operation.get_asm(
-        large_elements_limit=100000, enable_debug_info=False
-    )
-
-    out_dir = str(
-        root_out_dir / Path(recursivescriptmodule.original_name + f".{out_channels}")
-    )
-    os.makedirs(out_dir, exist_ok=True)
-    open(f"{out_dir}/mod.txt", "w").write(str(mod))
-    put_script_files(
-        out_str=out, in_shape=tuple(t.shape), out_shape=tuple(y.shape), out_dir=out_dir
+    make_module_artifacts(
+        mod, t, y, recursivescriptmodule, class_annotator, root_out_dir, out_channels
     )
 
 
@@ -543,11 +547,9 @@ def main():
     args.out_dir = args.out_dir.resolve()
 
     make_single_small_cnn(
-        args.out_dir, in_channels=1, out_channels=16, imgsz=11, simplify_weights=False
+        args.out_dir, in_channels=1, out_channels=2, imgsz=5, simplify_weights=False
     )
-    make_linear(
-        args.out_dir, imgsz=5, simplify_weights=False
-    )
+    make_linear(args.out_dir, imgsz=5, simplify_weights=False)
     # make_double_small_cnn(args.out_dir, scale=1, imgsz=9, simplify_weights=False)
 
     for i in range(args.low_scale, args.high_scale):
