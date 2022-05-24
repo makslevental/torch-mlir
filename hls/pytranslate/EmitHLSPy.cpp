@@ -169,6 +169,9 @@ void ScaleHLSEmitterBase::removeName(Value val) {
 SmallString<8> ScaleHLSEmitterBase::getName(Value val) {
   // For constant scalar operations, the constant number will be returned rather
   // than the value name.
+//  if (val.getType().dyn_cast<ShapedType>()) {
+//    return {"arr_" + state.nameTable.lookup(val).str().str()};
+//  }
   if (auto defOp = val.getDefiningOp()) {
     if (auto constOp = dyn_cast<arith::ConstantOp>(defOp)) {
       auto constAttr = constOp.getValue();
@@ -1136,10 +1139,13 @@ void ModuleEmitter::emitLoad(memref::LoadOp op) {
   os << " = ";
   emitValue(op.getMemRef());
   os << "[";
-  for (auto index : op.getIndices()) {
-    emitValue(index);
-    os << ",";
-  }
+  if (!op.getIndices().empty())
+    for (auto index : op.getIndices()) {
+      emitValue(index);
+      os << ",";
+    }
+  else
+    os << "0,";
   os << "]\n";
 }
 
@@ -1147,27 +1153,31 @@ void ModuleEmitter::emitStore(memref::StoreOp op) {
   indent();
   emitValue(op.getMemRef());
   os << "[";
-  for (auto index : op.getIndices()) {
-    emitValue(index);
-    os << ",";
-  }
+  if (!op.getIndices().empty())
+    for (auto index : op.getIndices()) {
+      emitValue(index);
+      os << ",";
+    }
+  else
+    os << "0,";
   os << "]";
   os << " = ";
   emitValue(op.getValueToStore());
+  os << "\n";
 }
 
 void ModuleEmitter::emitMemCpy(memref::CopyOp op) {
-  return ;
-  indent() << "memcpy(";
+//  indent() << "memcpy(";
+  indent() << "";
   emitValue(op.target());
-  os << ", ";
+  os << " = ";
   emitValue(op.getSource());
-  os << ", ";
+//  os << ", ";
 
-  auto type = op.target().getType().cast<MemRefType>();
-  os << type.getNumElements() << " * sizeof(" << getTypeName(op.target())
-     << "))";
-  os << "\n";
+//  auto type = op.target().getType().cast<MemRefType>();
+//  os << type.getNumElements() << " * sizeof(" << getTypeName(op.target())
+//     << "))";
+//  os << "\n";
   os << "\n";
 }
 
@@ -1430,8 +1440,12 @@ void ModuleEmitter::emitArrayDecl(Value array, bool input, bool output, bool glo
     os << " = ArrayDecl('";
     os << getName(array);
     os << "', ";
-    for (auto &shape : arrayType.getShape())
-      os << shape << ", ";
+    if (!arrayType.getShape().empty())
+      for (auto &shape : arrayType.getShape()) {
+        os << shape << ", ";
+      }
+    else
+      os << "1";
     if (input)
       os << "input=True";
     else if (output)
@@ -1486,18 +1500,20 @@ void ModuleEmitter::emitNestedLoopFooter(unsigned rank) {
 void ModuleEmitter::emitBlock(Block &block) {
   for (auto &op : block) {
 
-    if (!llvm::dyn_cast<scf::YieldOp>(op) && !llvm::dyn_cast<AffineYieldOp>(op)) {
-      std::string s;
-      llvm::raw_string_ostream rs{s};
-      op.print(rs);
-      std::stringstream ss(s);
-      std::string line;
-      while (std::getline(ss, line, '\n')) {
-        indent();
-        os << "# " << line << "\n";
-        break;
-      }
-    }
+//    if (!llvm::dyn_cast<scf::YieldOp>(op) &&
+//        !llvm::dyn_cast<AffineYieldOp>(op)) {
+//      std::string s;
+//      llvm::raw_string_ostream rs{s};
+//      op.print(rs);
+//      std::stringstream ss(s);
+//      std::string line;
+//      while (std::getline(ss, line, '\n')) {
+//        indent();
+////        os << "# " << line << "\n";
+//        os << "\n";
+//        break;
+//      }
+//    }
 
     if (ExprVisitor(*this).dispatchVisitor(&op)) {
       continue;
@@ -1585,9 +1601,11 @@ void ModuleEmitter::emitFunction(FuncOp func) {
 
 /// Top-level MLIR module emitter.
 void ModuleEmitter::emitModule(ModuleOp module) {
-  os << R"XXX(import numpy as np
-from hls.scripts.mlir_ops import ArrayDecl, ParFor, ReLU, Exp, GlobalArray
-from hls.scripts.verilog_val import Forward
+  os << R"XXX(import sys
+import numpy as np
+# from hls.scripts.mlir_ops import ArrayDecl, ParFor, ReLU, Exp, GlobalArray
+# from hls.scripts.verilog_val import Forward
+from hls.scripts.llvm_val import Forward, FMulAdd, ArrayDecl, ParFor, ReLU, Exp, GlobalArray
 )XXX";
   os << "\n\n";
   os << " # fmt: off\n";
@@ -1610,9 +1628,10 @@ from hls.scripts.verilog_val import Forward
     } else
       emitError(&op, "is unsupported operation.");
   }
-
-  os << "Forward(forward)\n\n";
-
+  os << R"XXX(
+if __name__ == "__main__":
+    Forward(forward, worker_id=int(sys.argv[1]))
+)XXX";
 }
 
 //===----------------------------------------------------------------------===//
