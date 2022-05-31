@@ -33,7 +33,6 @@ from hls.python.models.braggnn import (
     cnn_layers_1,
     cnn_layers_2,
     dense_layers,
-    theta_phi_g,
     theta_phi_g_combine,
 )
 from hls.python.models.layers import make_layer
@@ -366,7 +365,9 @@ def make_module_artifacts(
         root_out_dir / Path(recursivescriptmodule.original_name + f".{scale}")
     )
     os.makedirs(out_dir, exist_ok=True)
-    open(f"{out_dir}/forward.ts.mlir", "w").write(str(recursivescriptmodule.graph))
+    f = open(f"{out_dir}/forward.ts.mlir", "w")
+    f.write(str(recursivescriptmodule.graph))
+    f.close()
 
     mb = ModuleBuilder()
     mb.import_module(recursivescriptmodule._c, class_annotator)
@@ -421,11 +422,12 @@ def make_whole_braggnn(root_out_dir, scale=4, imgsz=11, simplify_weights=False):
 class ConvPlusReLU(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
-        self.conv = torch.nn.Conv2d(in_channels, out_channels, 3)
+        self.conv1 = torch.nn.Conv2d(in_channels, out_channels, 3)
+        self.conv2 = torch.nn.Conv2d(out_channels, in_channels, 3)
         self.relu = torch.nn.ReLU()
 
     def forward(self, x):
-        return self.relu(self.conv(x))
+        return self.relu(self.conv2(self.conv1(x)))
 
 
 def make_single_small_cnn(
@@ -450,27 +452,34 @@ def make_single_small_cnn(
 class DoubleCNN(nn.Module):
     def __init__(self, scale):
         super().__init__()
-        self.conv1 = torch.nn.Conv2d(8 // scale, 16 // scale, 1)
-        self.conv2 = torch.nn.Conv2d(16 // scale, 8 // scale, 3)
-        self.conv3 = torch.nn.Conv2d(8 // scale, 4 // scale, 3)
+        self.conv1 = torch.nn.Conv2d(1, 16 * scale, 3)
+        self.conv2_1 = torch.nn.Conv2d(16 * scale, 8 * scale, 1)
+        self.conv2_2 = torch.nn.Conv2d(16 * scale, 8 * scale, 1)
+        self.conv2_3 = torch.nn.Conv2d(16 * scale, 8 * scale, 1)
+        self.conv3 = torch.nn.Conv2d(8 * scale, 16 * scale, 1)
+        self.conv4 = torch.nn.Conv2d(16 * scale, 8 * scale, 3)
 
     def forward(self, x):
         y = self.conv1(x)
-        z = self.conv2(y)
-        w = self.conv3(z)
-        return w
+        z = self.conv2_1(y)
+        w = self.conv2_2(y)
+        u = self.conv2_3(y)
+
+        uu = self.conv3(z + w + u)
+        ww = self.conv4(uu)
+        return ww
 
 
 def make_double_small_cnn(root_out_dir, scale=1, imgsz=11, simplify_weights=False):
     with torch.no_grad():
         mod = DoubleCNN(scale)
         mod.eval()
-        t = torch.randn((1, 8, imgsz, imgsz))
+        t = torch.randn((1, 1, imgsz, imgsz))
         y = mod(t)
         if simplify_weights:
             mod.apply(set_weights)
         recursivescriptmodule, class_annotator = make_layer(
-            mod, [None, ([1, 8, imgsz, imgsz], torch.float32, True)]
+            mod, [None, ([1, 1, imgsz, imgsz], torch.float32, True)]
         )
 
     make_module_artifacts(
@@ -515,16 +524,16 @@ def main():
     parser.add_argument("--high_scale", type=int, default=5)
     parser.add_argument("--out_dir", type=Path, default=Path("../examples"))
     args = parser.parse_args()
-
-    print(args)
     args.out_dir = args.out_dir.resolve()
 
-    make_single_small_cnn(
-        args.out_dir, in_channels=1, out_channels=2, imgsz=5, simplify_weights=False
-    )
+    # make_single_small_cnn(
+    #     args.out_dir, in_channels=2, out_channels=4, imgsz=7, simplify_weights=False
+    # )
     make_linear(args.out_dir, imgsz=5, simplify_weights=False)
-    make_double_small_cnn(args.out_dir, scale=1, imgsz=9, simplify_weights=False)
-
+    # make_whole_braggnn(args.out_dir, scale=1, imgsz=11, simplify_weights=False)
+    make_double_small_cnn(args.out_dir, scale=1, imgsz=11, simplify_weights=False)
+    make_double_small_cnn(args.out_dir, scale=2, imgsz=11, simplify_weights=False)
+    #
     for i in range(args.low_scale, args.high_scale):
         # if not args.no_split_braggnn:
         #     make_split_braggnn(args.out_dir, scale=i, imgsz=11)
