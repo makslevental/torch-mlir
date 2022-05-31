@@ -1,16 +1,16 @@
 from __future__ import annotations
 
+import _ast
 import argparse
 import ast
 import inspect
-import itertools
 import sys
+from _ast import Subscript
 from ast import Assign, Mult, Add, BinOp, Name, Call, keyword, Str, IfExp, Compare
 from typing import Tuple, Union, Dict, Any
 
 import astor
 import numpy as np
-
 
 MAC_IDX = None
 
@@ -18,80 +18,13 @@ OUTPUT_ARRAYS = []
 
 from dataclasses import dataclass, field
 
-
-class Val:
-    def __init__(self, name, val_id):
-        self.name = name
-        self.val_id = val_id
-
-    def __repr__(self):
-        return str(self.__class__.__name__)
-
-    def __mul__(self, other):
-        global PES
-        if isinstance(other, (float, int, bool)):
-            other = Constant(other)
-        m = MulInst(self, other)
-        v = Val(f"(* {self} {other})", m)
-        PES[CURRENT_PE].push_instructions(m)
-        return v
-
-    def __truediv__(self, other):
-        global PES
-        if isinstance(other, (float, int, bool)):
-            other = Constant(other)
-        d = DivInst(self, other)
-        v = Val(f"(/ {self} {other})", d)
-        PES[CURRENT_PE].push_instructions(d)
-        return v
-
-    def __add__(self, other):
-        global PES
-        if isinstance(other, (float, int, bool)):
-            other = Constant(other)
-        a = AddInst(self, other)
-        v = Val(f"(+ {self} {other})", a)
-        PES[CURRENT_PE].push_instructions(a)
-        return v
-
-    def __sub__(self, other):
-        global PES
-        if isinstance(other, (float, int, bool)):
-            other = Constant(other)
-        s = SubInst(self, other)
-        v = Val(f"(- {self} {other})", s)
-        PES[CURRENT_PE].push_instructions(s)
-        return v
-
-    def __gt__(self, other):
-        global PES
-        if isinstance(other, (float, int, bool)):
-            other = Constant(other)
-        g = GTInst(self, other)
-        v = Val(f"(> {self} {other})", g)
-        PES[CURRENT_PE].push_instructions(g)
-        return v
-
-
 ArrayIndex = Tuple[int]
 
-
-class ArrayVal(Val):
-    array: ArrayDecl
-    def __init__(self, name, val_id: ArrayIndex, array: ArrayDecl):
-        super().__init__(name, val_id)
-        self.array = array
-
-    def __str__(self):
-        return f"array{self.name}"
-
-
-class GlobalArrayVal(ArrayVal):
-    def __str__(self):
-        return f"global{self.name}_{'_'.join(map(str, self.val_id))}"
-
-
 PEIndex = Tuple[int]
+
+DTYPE = "half"
+
+
 @dataclass(frozen=True)
 class _Instruction:
     pe_id: PEIndex = field(init=False, default_factory=lambda: CURRENT_PE)
@@ -104,13 +37,14 @@ class NOP(_Instruction):
 
 @dataclass(frozen=True)
 class Bin(_Instruction):
-    left: Val
-    right: Val
+    left: Any
+    right: Any
 
 
 @dataclass(frozen=True)
 class MulInst(Bin):
     pass
+
 
 @dataclass(frozen=True)
 class DivInst(Bin):
@@ -134,12 +68,12 @@ class GTInst(Bin):
 
 @dataclass(frozen=True)
 class ReLUInst(_Instruction):
-    val: Val
+    val: Any
 
 
 @dataclass(frozen=True)
 class ExpInst(_Instruction):
-    val: Val
+    val: Any
 
 
 Instruction = Union[NOP, ExpInst, ReLUInst, MulInst, AddInst, DivInst, SubInst, GTInst]
@@ -176,115 +110,8 @@ class PE:
 PES: Dict[PEIndex, PE] = {}
 
 
-class Constant(Val):
-    def __init__(self, cst_val):
-        super().__init__("cst", cst_val)
-
-
-def ReLU(*args):
-    def op(arg):
-        pe = PES[CURRENT_PE]
-        r = ReLUInst(arg)
-        v = Val(f"(relu {arg})", r)
-        pe.push_instructions(r)
-        return v
-
-    return op
-
-
-def Exp(*args):
-    def op(arg):
-        pe = PES[CURRENT_PE]
-        r = ExpInst(arg)
-        v = Val(f"(exp {arg})", r)
-        pe.push_instructions(r)
-        return v
-
-    return op
-
-
 def index_map(index, curr_shape, prev_shape):
-    return tuple(
-        np.unravel_index(
-            np.ravel_multi_index(index, curr_shape), prev_shape
-        )
-    )
-
-
-class ArrayDecl:
-    def __init__(self, arr_name, *shape, input=False, output=False):
-        self.arr_name = arr_name
-        self.curr_shape = shape
-        self.prev_shape = shape
-        self.pe_index = shape
-        self.registers = {}
-        self.input = input
-        self.output = output
-
-    def __getitem__(self, index: ArrayIndex):
-        global PES
-        try:
-            index = self.idx_map(index)
-        except ValueError:
-            index = (-1, -1, -1, -1)
-
-        if index not in self.registers:
-            if not self.input:
-                v = Constant("0.0")
-            else:
-                v = ArrayVal(f"{self.arr_name}", index, self)
-            self.registers[index] = v
-
-        v = self.registers[index]
-        return v
-
-    def __setitem__(self, index, value):
-        global PES
-        try:
-            index = self.idx_map(index)
-        except ValueError:
-            index = (-1, -1, -1, -1)
-        assert not self.input
-        self.registers[index] = value
-
-    def idx_map(self, index):
-        return index_map(index, self.curr_shape, self.prev_shape)
-
-    def reshape(self, *shape):
-        self.prev_shape = self.curr_shape
-        self.curr_shape = shape
-        return self
-
-
-class GlobalArray:
-    def __init__(self, name, global_name, global_array):
-        self.name = name
-        self.global_name = global_name
-        self.global_array = global_array
-        self.curr_shape = global_array.shape
-        self.csts = {}
-
-    def __getitem__(self, index: ArrayIndex):
-        v = GlobalArrayVal(self.name, index, self)
-        return v
-
-
-def ParFor(body, ranges):
-    global PES, CURRENT_PE
-    pes_run = set()
-    num_insts = None
-    for i, idx in enumerate(sorted(itertools.product(*ranges))):
-        CURRENT_PE = i
-        cur_num_insts = PES[CURRENT_PE].num_instructions()
-        body(*idx)
-        pes_run.add(i)
-        if num_insts is None:
-            num_insts = PES[CURRENT_PE].num_instructions() - cur_num_insts
-
-    for pe_idx, pe in PES.items():
-        if pe_idx not in pes_run:
-            for _ in range(num_insts):
-                pe.push_nop()
+    return tuple(np.unravel_index(np.ravel_multi_index(index, curr_shape), prev_shape))
 
 
 def get_default_args(func):
@@ -301,17 +128,14 @@ def get_array_type(shape, ptr=True, nd=False):
         typ = ""
         for s in shape:
             typ += f"[{s} x "
-        typ += "float"
+        typ += DTYPE
         for _ in shape:
             typ += "]"
         if ptr:
             typ += "*"
     else:
-        typ = f"{np.prod(shape)} x float"
+        typ = f"{np.prod(shape)} x {DTYPE}"
     return typ
-
-
-
 
 
 class RemoveMulAdd(ast.NodeTransformer):
@@ -325,10 +149,10 @@ class RemoveMulAdd(ast.NodeTransformer):
             for i in range(len(assigns) - 1):
                 assign1, assign2 = assigns[i], assigns[i + 1]
                 if (
-                        isinstance(assign1.value, BinOp)
-                        and isinstance(assign1.value.op, Mult)
-                        and isinstance(assign2.value, BinOp)
-                        and isinstance(assign2.value.op, Add)
+                    isinstance(assign1.value, BinOp)
+                    and isinstance(assign1.value.op, Mult)
+                    and isinstance(assign2.value, BinOp)
+                    and isinstance(assign2.value.op, Add)
                 ):
                     self.dels.add(assign1)
                     self.subs[assign2] = (
@@ -355,6 +179,64 @@ class RemoveMulAdd(ast.NodeTransformer):
         return node
 
 
+class RemoveMulAddAndSubscript(ast.NodeTransformer):
+    subs = {}
+    dels = set()
+
+    def visit_For(self, node):
+        self.generic_visit(node)
+        assigns = [b for b in node.body if isinstance(b, Assign)]
+        for i in range(len(assigns) - 2):
+            assign1, assign2, assign3 = assigns[i : i + 3]
+            if (
+                isinstance(assign1.value, Subscript)
+                and (
+                    (
+                        isinstance(assign2.value, Call)
+                        and assign2.value.func.id == "FMulAdd"
+                    )
+                    or (
+                        isinstance(assign2.value, BinOp)
+                        and isinstance(assign2.value.op, Add)
+                    )
+                )
+                and isinstance(assign3.targets[0], Subscript)
+            ):
+                self.dels.add(assign1)
+                self.dels.add(assign3)
+                keywords = [
+                    keyword(arg="arr", value=assign3.targets[0].value),
+                    keyword(
+                        arg="idx",
+                        value=_ast.Tuple((tuple(e for e in assign1.value.slice.elts))),
+                    ),
+                ]
+                if isinstance(assign2.value, BinOp):
+                    assign2.value = Call(
+                        func=Name(id="Add"),
+                        args=[assign2.value.left],
+                        keywords=[],
+                    )
+                else:
+                    assign2.value = Call(
+                        func=Name(id="FMulAdd"),
+                        args=assign2.value.args[:-1],
+                        keywords=[],
+                    )
+                assign2.value.keywords = keywords
+        self.generic_visit(node)
+        return node
+
+    def visit_Assign(self, node):
+        if node in self.dels:
+            return None
+        else:
+            return node
+
+    def visit_AugAssign(self, node):
+        return node
+
+
 class RemoveMAC(ast.NodeTransformer):
     subs = {}
     dels = set()
@@ -373,10 +255,10 @@ class RemoveMAC(ast.NodeTransformer):
             for i in range(len(assigns) - 1):
                 assign1, assign2 = assigns[i], assigns[i + 1]
                 if (
-                        isinstance(assign1.value, BinOp)
-                        and isinstance(assign1.value.op, Mult)
-                        and isinstance(assign2.value, BinOp)
-                        and isinstance(assign2.value.op, Add)
+                    isinstance(assign1.value, BinOp)
+                    and isinstance(assign1.value.op, Mult)
+                    and isinstance(assign2.value, BinOp)
+                    and isinstance(assign2.value.op, Add)
                 ):
                     self.dels.add(assign1)
                     self.subs[assign2] = (
@@ -418,10 +300,10 @@ class RemoveMulOrAdd(ast.NodeTransformer):
             assigns = [b for b in node.body if isinstance(b, Assign)]
             for assign in assigns:
                 if (
-                        isinstance(assign.value, BinOp)
-                        and isinstance(assign.value.op, Mult)
+                    isinstance(assign.value, BinOp)
+                    and isinstance(assign.value.op, Mult)
                 ) or (
-                        isinstance(assign.value, BinOp) and isinstance(assign.value.op, Add)
+                    isinstance(assign.value, BinOp) and isinstance(assign.value.op, Add)
                 ):
                     self.subs[assign] = (assign.value.left, assign.value.right)
 
@@ -493,7 +375,7 @@ class RemoveIfExp(ast.NodeTransformer):
                 for i in range(len(assigns) - 1):
                     assign1, assign2 = assigns[i], assigns[i + 1]
                     if isinstance(assign1.value, Compare) and isinstance(
-                            assign2.value, IfExp
+                        assign2.value, IfExp
                     ):
                         self.dels.add(assign1)
                         self.subs[assign2] = (assign1.value.left,)
@@ -574,11 +456,12 @@ class SetMaxRange(ast.NodeTransformer):
 
 
 def transform_forward_py(fp, max_range):
-    code_ast = astor.parse_file(fp)
-    # new_tree = RemoveMAC().visit(code_ast)
-    new_tree = RemoveMulAdd().visit(code_ast)
-    new_tree = SetMaxRange(max_range).visit(code_ast)
-    # new_tree = RemoveMul().visit(code_ast)
+    new_tree = astor.parse_file(fp)
+    # new_tree = RemoveMAC().visit(new_tree)
+    new_tree = RemoveMulAdd().visit(new_tree)
+    # new_tree = RemoveMulAddAndSubscript().visit(new_tree)
+    new_tree = SetMaxRange(max_range).visit(new_tree)
+    # new_tree = RemoveMul().visit(new_tree)
     new_tree = RemoveIfExp().visit(new_tree)
     with open(f"{fp.replace('forward', 'forward_rewritten')}", "w") as f:
         f.write(astor.code_gen.to_source(new_tree))
@@ -587,8 +470,8 @@ def transform_forward_py(fp, max_range):
 if __name__ == "__main__":
     fp = sys.argv[1]
     parser = argparse.ArgumentParser()
-    parser.add_argument('fp')
-    parser.add_argument('--max_range', nargs='+', type=int)
+    parser.add_argument("fp")
+    parser.add_argument("--max_range", nargs="+", type=int)
     args = parser.parse_args()
     max_range = tuple(args.max_range)
     transform_forward_py(args.fp, max_range)

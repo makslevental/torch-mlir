@@ -1,56 +1,35 @@
+from __future__ import annotations
+
 import itertools
 import math
-import struct
 import warnings
 from collections import defaultdict
 from functools import reduce
 from textwrap import dedent, indent
+
+import hls.scripts.mlir_ops
 from hls.scripts.mlir_ops import (
-    ArrayDecl,
-    GlobalArrayVal,
-    ArrayVal,
-    Val,
     AddInst,
     MulInst,
     DivInst,
     ReLUInst,
-    Constant,
     ExpInst,
     SubInst,
     get_default_args,
+    GTInst,
+    ArrayIndex,
+    index_map,
 )
 
-import hls.scripts.mlir_ops
+PES = hls.scripts.mlir_ops.PES
 
 import numpy as np
-
-
-def format_cst(cst):
-    return np.random.randint(1, 100000)
-    # return (handleDoubleToHex(cst)[:11] + "0" * 7).upper().replace("X", "x")
-
-
-def float_to_int(f):
-    return struct.unpack("<I", struct.pack("<f", f))[0]
-
-
-def float_to_hex(f):
-    return hex(float_to_int(f))
-
-
-def half_to_int(f):
-    return struct.unpack("<H", struct.pack("<e", f))[0]
-
-
-def half_to_hex(f):
-    return hex(half_to_int(f))
-
 
 FILE = open("forward.v", "w")
 
 
-def test_hex():
-    print(format_cst(1000 + np.random.randn(1)[0]))
+# def test_hex():
+#     print(format_cst(1000 + np.random.randn(1)[0]))
 
 
 def get_val_from_global(global_name, val_idx):
@@ -114,7 +93,9 @@ class Module:
         mod += "module forward (\n"
         mod += ",\n".join([f"\tinput wire {inp}" for inp in base_inputs])
         mod += ",\n"
-        mod += ",\n".join([f"\toutput wire {outp}" for outp in base_outputs + output_ports])
+        mod += ",\n".join(
+            [f"\toutput wire {outp}" for outp in base_outputs + output_ports]
+        )
         mod += "\n);\n"
 
         mod += ";\n".join([f"wire {inp}" for inp in input_ports])
@@ -340,9 +321,19 @@ class Module:
         ]
         if mul_rights:
             mul_inps_to_fsm_list = self.make_binop_inp_to_fsm_list(mul_rights)
-            other_vals = [tup for tup in mul_inps_to_fsm_list if "__constant" not in tup[0][0]]
-            global_arr_vals = [tup for tup in mul_inps_to_fsm_list if "__constant" in tup[0][0]]
-            global_arr_vals = reduce(lambda accum, val: [(("__constant", pe_geom_idx), accum[0][1] + val[1])], global_arr_vals, [(("__constant", pe_geom_idx), [])])
+            other_vals = [
+                tup for tup in mul_inps_to_fsm_list if "__constant" not in tup[0][0]
+            ]
+            global_arr_vals = [
+                tup for tup in mul_inps_to_fsm_list if "__constant" in tup[0][0]
+            ]
+            global_arr_vals = reduce(
+                lambda accum, val: [
+                    (("__constant", pe_geom_idx), accum[0][1] + val[1])
+                ],
+                global_arr_vals,
+                [(("__constant", pe_geom_idx), [])],
+            )
             return self.make_inst_input_case(
                 "mul", other_vals + global_arr_vals, pe_geom_idx, "b"
             )
@@ -475,7 +466,9 @@ class Module:
                 )
 
             elif "__constant" in val_name:
-                assert inst == "mul", "only muls should be getting global array csts, ie from bram"
+                assert (
+                    inst == "mul"
+                ), "only muls should be getting global array csts, ie from bram"
                 # cst = get_val_from_global(val_name, val_id)
                 _always = _always.format(
                     body=f"f{inst}_{this_pe_geom_id}_id_{this_pe_id}_{inp_letter} = bram_{this_pe_geom_id}_id_{this_pe_id}_data;"
@@ -574,3 +567,190 @@ def Forward(forward, max_range):
         hls.scripts.mlir_ops.PES,
         max_range=max_range,
     )
+
+
+class Val:
+    def __init__(self, name, val_id):
+        self.name = name
+        self.val_id = val_id
+
+    def __repr__(self):
+        return str(self.__class__.__name__)
+
+    def __mul__(self, other):
+        global PES
+        if isinstance(other, (float, int, bool)):
+            other = Constant(other)
+        m = MulInst(self, other)
+        v = Val(f"(* {self} {other})", m)
+        PES[CURRENT_PE].push_instructions(m)
+        return v
+
+    def __truediv__(self, other):
+        global PES
+        if isinstance(other, (float, int, bool)):
+            other = Constant(other)
+        d = DivInst(self, other)
+        v = Val(f"(/ {self} {other})", d)
+        PES[CURRENT_PE].push_instructions(d)
+        return v
+
+    def __add__(self, other):
+        global PES
+        if isinstance(other, (float, int, bool)):
+            other = Constant(other)
+        a = AddInst(self, other)
+        v = Val(f"(+ {self} {other})", a)
+        PES[CURRENT_PE].push_instructions(a)
+        return v
+
+    def __sub__(self, other):
+        global PES
+        if isinstance(other, (float, int, bool)):
+            other = Constant(other)
+        s = SubInst(self, other)
+        v = Val(f"(- {self} {other})", s)
+        PES[CURRENT_PE].push_instructions(s)
+        return v
+
+    def __gt__(self, other):
+        global PES
+        if isinstance(other, (float, int, bool)):
+            other = Constant(other)
+        g = GTInst(self, other)
+        v = Val(f"(> {self} {other})", g)
+        PES[CURRENT_PE].push_instructions(g)
+        return v
+
+
+class ArrayVal(Val):
+    array: ArrayDecl
+
+    def __init__(self, name, val_id: ArrayIndex, array: ArrayDecl):
+        super().__init__(name, val_id)
+        self.array = array
+
+    def __str__(self):
+        return f"array{self.name}"
+
+
+class GlobalArrayVal(ArrayVal):
+    def __str__(self):
+        return f"global{self.name}_{'_'.join(map(str, self.val_id))}"
+
+
+class Constant(Val):
+    def __init__(self, cst_val):
+        super().__init__("cst", cst_val)
+
+
+def ReLU(*args):
+    def op(arg):
+        pe = PES[CURRENT_PE]
+        r = ReLUInst(arg)
+        v = Val(f"(relu {arg})", r)
+        pe.push_instructions(r)
+        return v
+
+    return op
+
+
+def Exp(*args):
+    def op(arg):
+        pe = PES[CURRENT_PE]
+        r = ExpInst(arg)
+        v = Val(f"(exp {arg})", r)
+        pe.push_instructions(r)
+        return v
+
+    return op
+
+
+class ArrayDecl:
+    def __init__(self, arr_name, *shape, input=False, output=False):
+        self.arr_name = arr_name
+        self.curr_shape = shape
+        self.prev_shape = shape
+        self.pe_index = shape
+        self.registers = {}
+        self.input = input
+        self.output = output
+
+    def __getitem__(self, index: ArrayIndex):
+        global PES
+        try:
+            index = self.idx_map(index)
+        except ValueError:
+            index = (-1, -1, -1, -1)
+
+        if index not in self.registers:
+            if not self.input:
+                v = Constant("0.0")
+            else:
+                v = ArrayVal(f"{self.arr_name}", index, self)
+            self.registers[index] = v
+
+        v = self.registers[index]
+        return v
+
+    def __setitem__(self, index, value):
+        global PES
+        try:
+            index = self.idx_map(index)
+        except ValueError:
+            index = (-1, -1, -1, -1)
+        assert not self.input
+        self.registers[index] = value
+
+    def idx_map(self, index):
+        return index_map(index, self.curr_shape, self.prev_shape)
+
+    def reshape(self, *shape):
+        self.prev_shape = self.curr_shape
+        self.curr_shape = shape
+        return self
+
+
+class GlobalArray:
+    def __init__(self, name, global_name, global_array):
+        self.name = name
+        self.global_name = global_name
+        self.global_array = global_array
+        self.curr_shape = global_array.shape
+        self.csts = {}
+
+    def __getitem__(self, index: ArrayIndex):
+        v = GlobalArrayVal(self.name, index, self)
+        return v
+
+
+def ParFor(body, ranges):
+    global PES, CURRENT_PE
+    pes_run = set()
+    num_insts = None
+    for i, idx in enumerate(sorted(itertools.product(*ranges))):
+        CURRENT_PE = i
+        cur_num_insts = PES[CURRENT_PE].num_instructions()
+        body(*idx)
+        pes_run.add(i)
+        if num_insts is None:
+            num_insts = PES[CURRENT_PE].num_instructions() - cur_num_insts
+
+    for pe_idx, pe in PES.items():
+        if pe_idx not in pes_run:
+            for _ in range(num_insts):
+                pe.push_nop()
+
+
+from llvmlite import binding as llvm
+
+if __name__ == "__main__":
+    llvm.initialize()
+    llvm.initialize_native_target()
+    llvm.initialize_native_asmprinter()
+    llmod = llvm.parse_assembly(
+        open(
+            "/home/mlevental/dev_projects/torch-mlir/hls/examples/BraggNN.1/forward.opt.ll"
+        ).read()
+    )
+    print(llmod)
