@@ -2,6 +2,8 @@ import enum
 import json
 import math
 import struct
+import sys
+from collections import defaultdict, namedtuple
 from dataclasses import dataclass
 from textwrap import dedent, indent
 from typing import List, Dict
@@ -70,8 +72,9 @@ class Op(enum.Enum):
 
 
 INTERVAL_BETWEEN_MUL_AND_ADD = 1
-MUL_LATENCY = 2
-ADD_LATENCY = 2
+MUL_LATENCY = 1
+ADD_LATENCY = 1
+FSM_STAGE_INTERVAL = 2
 
 
 def make_mul_or_add(precision, idx, op_name, a_reg, b_reg, res_wire, add_or_mul):
@@ -108,7 +111,13 @@ class FAddOrMulOp:
 
     def make(self):
         return make_mul_or_add(
-            self.precision, self.idx, self.name, self.a_reg, self.b_reg, self.res_wire, self.add_or_mul
+            self.precision,
+            self.idx,
+            self.name,
+            self.a_reg,
+            self.b_reg,
+            self.res_wire,
+            self.add_or_mul,
         )
 
 
@@ -154,8 +163,9 @@ def make_always_tree(left, rights, comb_or_seq, fsm_idx_width):
 
 
 class Module:
-    def __init__(self, max_stage_len, precision=16):
-        self.max_stage_len = max_stage_len
+    def __init__(self, fsm_stages, precision=16):
+        self._fsm_stages = fsm_stages
+        self.max_stage_len = max(len(fs) for fs in fsm_stages)
         self.precision = precision
         self.val_graph = nx.MultiDiGraph()
         self.mul_instances: Dict[int, FMul] = {}
@@ -164,7 +174,7 @@ class Module:
         self.register_ids = set()
         self.wire_ids = set()
 
-        for idx in range(max_stage_len):
+        for idx in range(self.max_stage_len):
             mul = FMul(idx, precision)
             self.mul_instances[idx] = mul
             self.add_vals(mul.registers)
@@ -178,17 +188,26 @@ class Module:
         self._fsm_idx_width = 0
 
     @property
-    def max_fsm_stage(self):
-        return self._max_fsm_stage
-
-    @property
     def fsm_idx_width(self):
         return self._fsm_idx_width
+
+    @property
+    def max_fsm_stage(self):
+        return self._max_fsm_stage
 
     @max_fsm_stage.setter
     def max_fsm_stage(self, value):
         self._max_fsm_stage = value
         self._fsm_idx_width = math.ceil(math.log10(self.max_fsm_stage))
+
+    @property
+    def next_fsm_stage(self):
+        return self.max_fsm_stage + 1
+
+    @property
+    def fsm_stages(self):
+        for i, stage in enumerate(self._fsm_stages):
+            yield 1 + FSM_STAGE_INTERVAL * i, stage
 
     def add_vals(self, vals: List[Val]):
         self.val_graph.add_nodes_from(vals)
@@ -202,23 +221,27 @@ class Module:
     def make_assign_wire_to_reg(self):
         assigns = []
         for wire_reg in self.wire_ids.intersection(self.register_ids):
-            assigns.append(dedent(f"""\
+            assigns.append(
+                dedent(
+                    f"""\
             always @ (posedge clock) begin
                 {wire_reg}_reg <= {wire_reg}_wire;
             end
-            """))
+            """
+                )
+            )
 
         return "\n".join(assigns)
 
     def add_add_mul_transfer(
-            self,
-            stage,
-            op_idx,
-            op_type,
-            inp_a: Val = None,
-            inp_b: Val = None,
-            res: Val = None,
-            res_latency: int = None,
+        self,
+        stage,
+        op_idx,
+        op_type,
+        inp_a: Val = None,
+        inp_b: Val = None,
+        res: Val = None,
+        res_latency: int = None,
     ):
         op = (
             self.mul_instances[op_idx]
@@ -398,148 +421,121 @@ class Module:
             )
         return "\n".join(res)
 
-    def make_outputs(self, outputs, ssa_graph):
+    def make_outputs(self, outputs, program_graph):
         rets = []
         for output in outputs:
-            last_reg = list(ssa_graph.reverse()[output.id].keys())[0]
+            last_reg = list(program_graph.reverse()[output.id].keys())[0]
             assert last_reg in self.register_ids, last_reg
             rets.append(f"assign {output} = {last_reg}_reg;")
         return "\n".join(rets)
 
 
-def collect_op_design(op, op_idx, stages, G):
-    op_subG = G.subgraph([n for n, attrdict in G.nodes.items() if attrdict["op"] == op])
+def collect_op_design(mod, op_idx, op_edges):
     stage_inputs, stage_outputs, constants = {}, {}, {}
-    for i, stage in enumerate(stages, start=1):
-        if op_idx < len(stage) and stage[op_idx] in op_subG:
-            val = stage[op_idx]
-            preds = list(G.predecessors(val))
-            stage_inputs[i] = preds
-            stage_outputs[i] = val
-            constants[i] = [p for p in preds if "constant" in p]
-
+    for i, stage in mod.fsm_stages:
+        if op_idx < len(stage) and stage[op_idx] in op_edges:
+            op = stage[op_idx]
+            edges = op_edges[op]
+            stage_inputs[i] = [
+                namedtuple("inp", ["u", "pos"])(u, pos) for u, _v, pos in edges
+            ]
+            output = [v for _u, v, _pos in edges]
+            assert len(set(output)) == 1
+            stage_outputs[i] = output[0]
         else:
             stage_inputs[i] = None
             stage_outputs[i] = None
-            constants[i] = None
 
-    return stage_inputs, stage_outputs, constants
+    return stage_inputs, stage_outputs
 
 
-def split_mul_add(stage_inputs, stage_outputs, ssa_graph, var_val_to_arr_idx):
+def split_mul_add(stage_inputs, stage_outputs):
     input_a, input_b, input_c = {}, {}, {}
-    outputs = {}
+    mul_outputs = {}
     for stage, inputs in stage_inputs.items():
         if inputs is not None:
             output = stage_outputs[stage]
-            positions = dict(ssa_graph.reverse().adj[output])
+            mul_outputs[stage] = output
 
-            if output in var_val_to_arr_idx:
-                output = make_var_val_reg(var_val_to_arr_idx[output])
-            outputs[stage] = output
-
-            inputs_in_position = {positions[inp]["pos"]: inp for inp in inputs}
+            inputs_in_position = {inp.pos: inp.u for inp in inputs}
             input_a[stage] = inputs_in_position[0]
             input_b[stage] = inputs_in_position[1]
-            inp_c = inputs_in_position[2]
-            if inp_c in var_val_to_arr_idx:
-                inp_c = make_var_val_reg(var_val_to_arr_idx[inp_c])
-            input_c[stage] = inp_c
+            input_c[stage] = inputs_in_position[2]
 
     mul_inputs_a = input_a
     mul_inputs_b = input_b
-
-    add_inputs_b = []
-    for stage, inp in input_c.items():
-        if "constant" in inp:
-            add_inputs_b.append([(stage, inp)])
-        else:
-            add_inputs_b[-1].append((stage, inp))
-
-    return mul_inputs_a, mul_inputs_b, add_inputs_b
+    add_inputs_b = input_c
+    return mul_inputs_a, mul_inputs_b, mul_outputs, add_inputs_b
 
 
-def build_module(mod, ssa_graph, var_val_to_arr_idx):
+def build_module(mod, program_graph):
+    fmuladd_edges = defaultdict(list)
+    for (u, v, _key), attr in program_graph.edges.items():
+        if "fmuladd" not in attr["op"]:
+            continue
+        fmuladd_edges[attr["op"]].append((u, v, attr["pos"]))
+    fadd_edges = defaultdict(list)
+    for (u, v, _key), attr in program_graph.edges.items():
+        if "fadd" not in attr["op"]:
+            continue
+        fadd_edges[attr["op"]].append((u, v, attr["pos"]))
+
     for op_idx in range(mod.max_stage_len):
-        stage_inputs, stage_outputs, _constants = collect_op_design(
-            "fmuladd", op_idx, design["topo_sort"][1:], ssa_graph
+
+        stage_inputs, stage_outputs = collect_op_design(mod, op_idx, fmuladd_edges)
+        mul_inputs_a, mul_inputs_b, _mul_outputs, add_inputs_bs = split_mul_add(
+            stage_inputs, stage_outputs
         )
-        mul_inputs_a, mul_inputs_b, add_inputs_bs = split_mul_add(
-            stage_inputs, stage_outputs, ssa_graph, var_val_to_arr_idx
-        )
-        for (stage, a), (stage, b) in zip(mul_inputs_a.items(), mul_inputs_b.items()):
+        mul_res_reg = mod.mul_instances[op_idx].res_reg
+        for (stage, a), (stage, b), (stage, add_b) in zip(
+            mul_inputs_a.items(), mul_inputs_b.items(), add_inputs_bs.items()
+        ):
             a = Val(RegOrWire.REG, a)
             b = Val(RegOrWire.REG, b)
+            add_b = Val(RegOrWire.REG, add_b)
             mod.add_add_mul_transfer(stage, op_idx, Op.MUL, a, b)
-
-        mul_res_reg = mod.mul_instances[op_idx].res_reg
-        for add_inputs_b in add_inputs_bs:
-            first_stage, first_input = add_inputs_b[0]
-            assert "constant" in first_input
-            first_input = Val(RegOrWire.REG, first_input)
             mod.add_add_mul_transfer(
-                first_stage, op_idx, op_type=Op.ADD, inp_b=first_input
+                stage + MUL_LATENCY,
+                op_idx,
+                op_type=Op.ADD,
+                inp_a=mul_res_reg,
+                inp_b=add_b,
+                res=add_b,
+                res_latency=1,
             )
-            for stage, b in add_inputs_b[1:]:
-                b = Val(RegOrWire.REG, b)
-                mod.add_add_mul_transfer(
-                    stage + MUL_LATENCY,
-                    op_idx,
-                    op_type=Op.ADD,
-                    inp_a=mul_res_reg,
-                    inp_b=b,
-                )
-    for op_idx in range(mod.max_stage_len):
-        stage_inputs, stage_outputs, _constants = collect_op_design(
-            "fadd", op_idx, design["topo_sort"][1:], ssa_graph
-        )
+
+        stage_inputs, stage_outputs = collect_op_design(mod, op_idx, fadd_edges)
         for stage, stage_inputs in stage_inputs.items():
             if stage_inputs is None:
                 continue
-            a, b = stage_inputs
+            a, b = [inp.u for inp in stage_inputs]
             a = Val(RegOrWire.REG, a)
             b = Val(RegOrWire.REG, b)
-            if stage_outputs[stage] not in var_val_to_arr_idx:
-                res = Val(RegOrWire.REG, stage_outputs[stage])
-                mod.add_add_mul_transfer(
-                    stage, op_idx, Op.ADD, a, b, res=res, res_latency=ADD_LATENCY
-                )
-            else:
-                mod.add_add_mul_transfer(stage, op_idx, Op.ADD, a, b)
+            res = Val(RegOrWire.REG, stage_outputs[stage])
+            mod.add_add_mul_transfer(
+                stage, op_idx, Op.ADD, a, b, res=res, res_latency=1
+            )
 
 
 def main(design):
-    ssa_graph = nx.jit_graph(design["G"], create_using=nx.DiGraph())
-    fsm_stages = design["topo_sort"][1:]
-    var_val_to_arr_idx = design["var_val_to_arr_idx"]
-    # remove the last one, because it needs to produce a result
-    to_delete = set()
-    for i, (var, idx) in enumerate(var_val_to_arr_idx.items()):
-        if i == len(var_val_to_arr_idx) - 1:
-            to_delete.add(var)
-            continue
-
-        next_var, next_idx = list(var_val_to_arr_idx.items())[i + 1]
-        if next_idx != idx:
-            to_delete.add(var)
-    for var in to_delete:
-        del var_val_to_arr_idx[var]
-
-    max_stage_len = max([len(s) for s in fsm_stages])
-    registers = [v for v in ssa_graph.nodes if "var_val" in v] + list(
-        set([make_var_val_reg(idx) for idx in var_val_to_arr_idx.values()])
-    )
-    inputs = [n for n, attrdict in ssa_graph.nodes.items() if attrdict["op"] == "input"]
+    program_graph = nx.json_graph.node_link_graph(design["G"])
+    fsm_stages = design["topo_sort"]
+    inputs = [
+        n for n, attrdict in program_graph.nodes.items() if attrdict["op"] == "input"
+    ]
     outputs = [
-        n for n, attrdict in ssa_graph.nodes.items() if attrdict["op"] == "output"
+        n for n, attrdict in program_graph.nodes.items() if attrdict["op"] == "output"
+    ]
+    constants = [
+        n for n, attrdict in program_graph.nodes.items() if attrdict["op"] == "constant"
     ]
 
-    mod = Module(max_stage_len, precision=16)
-    mod.add_vals([Val(RegOrWire.REG, r) for r in registers])
+    mod = Module(fsm_stages, precision=16)
+    mod.add_vals([Val(RegOrWire.REG, r) for r in program_graph.nodes])
     input_wires = [Val(RegOrWire.WIRE, v) for v in inputs]
     input_regs = [Val(RegOrWire.REG, v) for v in inputs]
     output_wires = [Val(RegOrWire.WIRE, v) for v in outputs]
-    # output_regs = [Val(RegOrWire.REG, v) for v in outputs]
+    output_regs = [Val(RegOrWire.REG, v) for v in outputs]
     mod.add_vals(input_wires + input_regs + output_wires)
     constants = [
         Val(RegOrWire.WIRE, v) for v in design["topo_sort"][0] if "constant" in v
@@ -547,7 +543,7 @@ def main(design):
     mod.add_vals(constants)
     mod.add_vals([Val(RegOrWire.REG, v.id) for v in constants])
 
-    build_module(mod, ssa_graph, var_val_to_arr_idx)
+    build_module(mod, program_graph)
 
     print(mod.make_top_module_decl(input_wires, output_wires))
     print()
@@ -565,12 +561,12 @@ def main(design):
     print()
     print(mod.make_fsm())
     print()
-    print(mod.make_outputs(output_wires, ssa_graph))
+    print(mod.make_outputs(output_wires, program_graph))
     print()
     print("endmodule")
 
 
 if __name__ == "__main__":
-    fp = "/Users/mlevental/dev_projects/torch-mlir/hls/examples/Linear.1/design.json"
+    fp = sys.argv[1]
     design = json.load(open(fp))
     main(design)
