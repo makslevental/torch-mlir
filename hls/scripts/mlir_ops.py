@@ -219,7 +219,7 @@ class RemoveMulAddAndSubscript(ast.NodeTransformer):
                     )
                 else:
                     assign2.value = Call(
-                        func=Name(id="FMulAdd"),
+                        func=Name(id="FMac"),
                         args=assign2.value.args[:-1],
                         keywords=[],
                     )
@@ -455,12 +455,13 @@ class SetMaxRange(ast.NodeTransformer):
         return node
 
 
-def transform_forward_py(fp, max_range):
+def transform_forward_py(fp, max_range=None, macs=False):
     new_tree = astor.parse_file(fp)
     # new_tree = RemoveMAC().visit(new_tree)
     new_tree = RemoveMulAdd().visit(new_tree)
-    # new_tree = RemoveMulAddAndSubscript().visit(new_tree)
-    new_tree = SetMaxRange(max_range).visit(new_tree)
+    if macs:
+        new_tree = RemoveMulAddAndSubscript().visit(new_tree)
+    # new_tree = SetMaxRange(max_range).visit(new_tree)
     # new_tree = RemoveMul().visit(new_tree)
     new_tree = RemoveIfExp().visit(new_tree)
     with open(f"{fp.replace('forward', 'forward_rewritten')}", "w") as f:
@@ -468,10 +469,13 @@ def transform_forward_py(fp, max_range):
 
 
 if __name__ == "__main__":
-    fp = sys.argv[1]
     parser = argparse.ArgumentParser()
     parser.add_argument("fp")
     parser.add_argument("--max_range", nargs="+", type=int)
+    parser.add_argument("--macs", action='store_true', default=False)
     args = parser.parse_args()
-    max_range = tuple(args.max_range)
-    transform_forward_py(args.fp, max_range)
+    if args.max_range:
+        max_range = tuple(args.max_range)
+    else:
+        max_range = None
+    transform_forward_py(args.fp, max_range, args.macs)

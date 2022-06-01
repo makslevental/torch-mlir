@@ -1169,9 +1169,11 @@ void ModuleEmitter::emitStore(memref::StoreOp op) {
 void ModuleEmitter::emitMemCpy(memref::CopyOp op) {
 //  indent() << "memcpy(";
   indent() << "";
+  os << "Copy(";
   emitValue(op.target());
-  os << " = ";
+  os << ", ";
   emitValue(op.getSource());
+  os << ")";
 //  os << ", ";
 
 //  auto type = op.target().getType().cast<MemRefType>();
@@ -1445,7 +1447,7 @@ void ModuleEmitter::emitArrayDecl(Value array, bool input, bool output, bool glo
         os << shape << ", ";
       }
     else
-      os << "1";
+      os << "1,";
     if (input)
       os << "input=True";
     else if (output)
@@ -1605,7 +1607,8 @@ void ModuleEmitter::emitModule(ModuleOp module) {
 import numpy as np
 # from hls.scripts.mlir_ops import ArrayDecl, ParFor, ReLU, Exp, GlobalArray
 # from hls.scripts.verilog_val import Forward
-from hls.scripts.llvm_val import Forward, FMulAdd, ArrayDecl, ParFor, ReLU, Exp, GlobalArray
+# from hls.scripts.llvm_val import Forward, FMulAdd, ArrayDecl, ParFor, ReLU, Exp, GlobalArray
+from hls.scripts.cpp_val import Forward, FMulAdd, ArrayDecl, ParFor, FMac, Add, GlobalArray, Copy
 )XXX";
   os << "\n\n";
   os << " # fmt: off\n";
@@ -1630,7 +1633,7 @@ from hls.scripts.llvm_val import Forward, FMulAdd, ArrayDecl, ParFor, ReLU, Exp,
   }
   os << R"XXX(
 if __name__ == "__main__":
-    Forward(forward, worker_id=int(sys.argv[1]))
+    Forward(forward, worker_id=None)
 )XXX";
 }
 
