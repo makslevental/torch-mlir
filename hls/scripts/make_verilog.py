@@ -77,6 +77,24 @@ ADD_LATENCY = 1
 FSM_STAGE_INTERVAL = 2
 
 
+def latency_for_op(op):
+    if "fmuladd" in op:
+        return MUL_LATENCY + 1 + ADD_LATENCY + 1
+    if "fmul" in op:
+        return MUL_LATENCY + 1
+    if "fadd" in op:
+        return ADD_LATENCY + 1
+    raise Exception(f"unknown op {op}")
+
+
+def max_latency_per_fsm_stage(fsm_stages):
+    stage_latencies = {}
+    for i, stage in fsm_stages.items():
+        stage_latencies[i] = max([latency_for_op(op) for op in stage])
+
+    return stage_latencies
+
+
 def make_mul_or_add(precision, idx, op_name, a_reg, b_reg, res_wire, add_or_mul):
     op = dedent(
         f"""\
@@ -164,8 +182,6 @@ def make_always_tree(left, rights, comb_or_seq, fsm_idx_width):
 
 class Module:
     def __init__(self, fsm_stages, precision=16):
-        self._fsm_stages = fsm_stages
-        self.max_stage_len = max(len(fs) for fs in fsm_stages)
         self.precision = precision
         self.val_graph = nx.MultiDiGraph()
         self.mul_instances: Dict[int, FMul] = {}
@@ -173,6 +189,10 @@ class Module:
         self.name_to_val = {}
         self.register_ids = set()
         self.wire_ids = set()
+
+        self.max_stage_len = max(len(fs) for fs in fsm_stages)
+        self._fsm_stages = dict(enumerate(fsm_stages))
+        self._stage_latencies = max_latency_per_fsm_stage(self._fsm_stages)
 
         for idx in range(self.max_stage_len):
             mul = FMul(idx, precision)
@@ -201,13 +221,13 @@ class Module:
         self._fsm_idx_width = math.ceil(math.log10(self.max_fsm_stage))
 
     @property
-    def next_fsm_stage(self):
-        return self.max_fsm_stage + 1
-
-    @property
     def fsm_stages(self):
-        for i, stage in enumerate(self._fsm_stages):
-            yield 1 + FSM_STAGE_INTERVAL * i, stage
+        next_fsm_stage = 0
+        for i, stage in self._fsm_stages.items():
+            yield next_fsm_stage, stage
+            next_fsm_stage += self._stage_latencies[i] + 1
+
+        self.max_fsm_stage = next_fsm_stage
 
     def add_vals(self, vals: List[Val]):
         self.val_graph.add_nodes_from(vals)
@@ -261,9 +281,7 @@ class Module:
             assert res in self.val_graph.nodes
             assert res_latency is not None
             self.val_graph.add_edge(op.res_reg, res, stage=stage + res_latency)
-            self.max_fsm_stage = max(self.max_fsm_stage, stage + res_latency)
 
-        self.max_fsm_stage = max(self.max_fsm_stage, stage)
 
     def make_top_module_decl(self, inputs: List[Val], outputs: List[Val]):
         base_inputs = ["clock", "reset", "clock_enable"]
