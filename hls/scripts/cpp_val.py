@@ -36,7 +36,10 @@ class CPPVal:
         if isinstance(other, (float, int, bool)):
             other = CPPConstant(other)
         v = CPPVal(f"(* ({self}) ({other}))")
-        print(f"float {v} = fmul{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({self}, {other});", file=FILE)
+        print(
+            f"float {v} = fmul{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({self}, {other});",
+            file=FILE,
+        )
 
         return v
 
@@ -47,7 +50,10 @@ class CPPVal:
         if isinstance(other, (float, int, bool)):
             other = CPPConstant(other)
         v = CPPVal(f"(+ ({self}) ({other}))")
-        print(f"float {v} = fadd{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({self}, {other});", file=FILE)
+        print(
+            f"float {v} = fadd{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({self}, {other});",
+            file=FILE,
+        )
         return v
 
     def __sub__(self, other):
@@ -57,7 +63,10 @@ class CPPVal:
         if isinstance(other, (float, int, bool)):
             other = CPPConstant(other)
         v = CPPVal(f"(- ({self}) ({other}))")
-        print(f"float {v} = fsub{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({self}, {other});", file=FILE)
+        print(
+            f"float {v} = fsub{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({self}, {other});",
+            file=FILE,
+        )
         return v
 
     def __truediv__(self, other):
@@ -67,7 +76,10 @@ class CPPVal:
         if isinstance(other, (float, int, bool)):
             other = CPPConstant(other)
         v = CPPVal(f"(/ ({self}) ({other}))")
-        print(f"float {v} = fdiv{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({self}, {other});", file=FILE)
+        print(
+            f"float {v} = fdiv{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({self}, {other});",
+            file=FILE,
+        )
         return v
 
     def __floordiv__(self, other):
@@ -80,7 +92,10 @@ class CPPVal:
         if isinstance(other, (float, int, bool)):
             other = CPPConstant(other)
         v = CPPVal(f"(> ({self}) ({other}))")
-        print(f"float {v} = fcmpugt{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({self}, {other});", file=FILE)
+        print(
+            f"float {v} = fcmpugt{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({self}, {other});",
+            file=FILE,
+        )
         return v
 
     def __str__(self):
@@ -187,7 +202,10 @@ def FMulAdd(a, b, c):
             inps[i] = CPPConstant(v)
     a, b, c = inps
     v = CPPVal(f"(fmuladd {a} {b} {c})")
-    print(f"float {v} = fmuladd{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({a}, {b}, {c});", file=FILE)
+    print(
+        f"float {v} = fmuladd{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({a}, {b}, {c});",
+        file=FILE,
+    )
     return v
 
 
@@ -205,7 +223,10 @@ def FMac(a, b, arr, idx):
     # handle the first time you process a constant of input
     if isinstance(c, GlobalArrayVal):
         cc = arr[idx] = arr.make_val(idx)
-    print(f"float {cc} = fmuladd{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({a}, {b}, {c});", file=FILE)
+    print(
+        f"float {cc} = fmuladd{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({a}, {b}, {c});",
+        file=FILE,
+    )
     return cc
 
 
@@ -220,8 +241,24 @@ def Add(a, arr, idx):
     b = bb = arr[idx]
     if isinstance(b, (GlobalArrayVal, CPPConstant)):
         bb = arr[idx] = arr.make_val(idx)
-    print(f"float {bb} = fadd{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({a}, {b});", file=FILE)
+    print(
+        f"float {bb} = fadd{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({a}, {b});", file=FILE
+    )
     return bb
+
+
+def ReduceAdd(src_arr: ArrayDecl, dst_arr: ArrayDecl):
+    prev_sums = list(src_arr.registers.values())
+    while len(prev_sums) > 1:
+        next_sums = []
+        while len(prev_sums) > 1:
+            next_sums.append(prev_sums.pop() + prev_sums.pop())
+        if len(prev_sums) == 1:
+            next_sums[-1] = next_sums[-1] + prev_sums[0]
+        prev_sums = next_sums
+    dst_arr[
+        0,
+    ] = prev_sums[0]
 
 
 def Copy(a: ArrayDecl, b: ArrayDecl):
@@ -232,6 +269,14 @@ def Copy(a: ArrayDecl, b: ArrayDecl):
 def ParFor(body, ranges):
     for i, idx in enumerate(itertools.product(*ranges)):
         body(*idx)
+
+
+def ReLU(x):
+    global OP_COUNT
+    OP_COUNT += 1
+    v = CPPVal(f"(relu {x})")
+    print(f"float {v} = relu{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({x});", file=FILE)
+    return v
 
 
 def make_args_globals(Args):
@@ -303,11 +348,20 @@ def Forward(forward, max_range=None, worker_id=None):
 def get_ssas_from_ir_line(line):
     line = re.sub(r", align \d+", "", line)
 
-    idents = list(filter(lambda x: len(x.strip()) and "mul" not in x and "add" not in x, [
-        f
-        for f, _ in re.findall(r"([\d|a-z|_]*|([0-9]*[.])+[0-9]+)", line)
-        if len(f.strip()) and f.strip() not in {"void", "forward", "float", "extern", "return"}
-    ]))
+    idents = list(
+        filter(
+            lambda x: len(x.strip())
+            and "mul" not in x
+            and "add" not in x
+            and "relu" not in x,
+            [
+                f
+                for f, _ in re.findall(r"([\d|a-z|_]*|([0-9]*[.])+[0-9]+)", line)
+                if len(f.strip())
+                and f.strip() not in {"void", "forward", "float", "extern", "return"}
+            ],
+        )
+    )
 
     if not idents or "declare" in line or "//" in line:
         return None, None, None
@@ -318,6 +372,7 @@ def get_ssas_from_ir_line(line):
         or "fcmp" in line
         or "fsub" in line
         or "fdiv" in line
+        or "relu" in line
         or "fmuladd" in line
     ):
         assign, *_deps = idents
@@ -335,9 +390,6 @@ def get_ssas_from_ir_line(line):
     elif "expf" in line:
         assign, *deps = idents
         op = "expf"
-    elif "relu" in line:
-        assign, *deps = idents
-        op = "relu"
     elif "forward" in line:
         inputs = [
             f.replace("float ", "")
