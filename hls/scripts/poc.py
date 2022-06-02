@@ -377,10 +377,10 @@ class ConvPlusReLU(nn.Module):
         super().__init__()
         self.conv1 = torch.nn.Conv2d(in_channels, out_channels, 3)
         self.conv2 = torch.nn.Conv2d(out_channels, in_channels, 3)
-        # self.relu = torch.nn.ReLU()
+        self.relu = torch.nn.ReLU()
 
     def forward(self, x):
-        return self.conv2(self.conv1(x))
+        return self.relu(self.conv2(self.conv1(x)))
 
 
 def make_single_small_cnn(
@@ -417,8 +417,8 @@ class DoubleCNN(nn.Module):
         z = self.conv2_1(y)
         w = self.conv2_2(y)
         u = self.conv2_3(y)
-
-        uu = self.conv3(z + w + u)
+        uuu = z + w + u
+        uu = self.conv3(uuu * uuu.sum())
         ww = self.conv4(uu)
         return ww
 
@@ -477,9 +477,9 @@ def main():
     args = parser.parse_args()
     args.out_dir = args.out_dir.resolve()
 
-    # make_single_small_cnn(
-    #     args.out_dir, in_channels=2, out_channels=4, imgsz=7, simplify_weights=False
-    # )
+    make_single_small_cnn(
+        args.out_dir, in_channels=2, out_channels=4, imgsz=7, simplify_weights=False
+    )
     # make_linear(args.out_dir, imgsz=5, simplify_weights=False)
     make_double_small_cnn(args.out_dir, scale=1, imgsz=11, simplify_weights=False)
     # for i in range(args.low_scale, args.high_scale):

@@ -75,6 +75,7 @@ class Op(enum.Enum):
 INTERVAL_BETWEEN_MUL_AND_ADD = 1
 MUL_LATENCY = 1
 ADD_LATENCY = 1
+RELU_LATENCY = 0
 FSM_STAGE_INTERVAL = 2
 COLLAPSE_TREES = True
 
@@ -86,6 +87,8 @@ def latency_for_op(op):
         return MUL_LATENCY + 1
     if "fadd" in op:
         return ADD_LATENCY + 1
+    if "relu" in op:
+        return RELU_LATENCY
     raise Exception(f"unknown op {op}")
 
 
@@ -107,6 +110,22 @@ def make_mul_or_add(precision, idx, op_name, a_reg, b_reg, res_wire, add_or_mul)
                 .clock_enable(clock_enable),
                 .a({a_reg}),
                 .b({b_reg}),
+                .res({res_wire})
+            );
+            """
+    )
+    return op
+
+
+def make_relu(precision, idx, op_name, a_wire, res_wire):
+    op = dedent(
+        f"""\
+            wire   [{precision - 1}:0] {res_wire};
+            relu #({idx}) {op_name}(
+                .clock(clock),
+                .reset(reset),
+                .clock_enable(clock_enable),
+                .a({a_wire}),
                 .res({res_wire})
             );
             """
@@ -149,6 +168,28 @@ class FAdd(FAddOrMulOp):
 class FMul(FAddOrMulOp):
     def __init__(self, idx, precision) -> None:
         super().__init__(idx, precision, "mul")
+
+
+class ReLU:
+    def __init__(self, idx, precision) -> None:
+        self.idx = idx
+        self.precision = precision
+        self.a_wire = Val(RegOrWire.WIRE, f"relu_{idx}_a")
+        self.res_wire = Val(RegOrWire.WIRE, f"relu_{idx}_res")
+        self.registers = [self.a_wire, self.res_wire]
+
+    @property
+    def name(self):
+        return f"relu_{self.idx}"
+
+    def make(self):
+        return make_relu(
+            self.precision,
+            self.idx,
+            self.name,
+            self.a_wire,
+            self.res_wire,
+        )
 
 
 def make_always_tree(left, rights, comb_or_seq, fsm_idx_width):
@@ -198,6 +239,7 @@ class Module:
         self.val_graph = nx.MultiDiGraph()
         self.mul_instances: Dict[int, FMul] = {}
         self.add_instances: Dict[int, FAdd] = {}
+        self.relu_instances: Dict[int, ReLU] = {}
         self.name_to_val = {}
         self.register_ids = set()
         self.wire_ids = set()
@@ -215,6 +257,14 @@ class Module:
             self.add_instances[idx] = add
             self.add_vals(add.registers)
             self.add_vals([add.res_wire])
+
+        num_relus = 0
+        for _, stage in self._fsm_stages.items():
+            num_relus = max(num_relus, len(list(filter(lambda x: "relu" in x, stage))))
+        for idx in range(num_relus):
+            relu = ReLU(idx, precision)
+            self.relu_instances[idx] = relu
+            self.add_vals([relu.a_wire, relu.res_wire])
 
         self._max_fsm_stage = 0
         self._fsm_idx_width = 0
@@ -294,6 +344,25 @@ class Module:
             assert res_latency is not None
             self.val_graph.add_edge(op.res_reg, res, stage=stage + res_latency)
 
+    def add_relu_transfer(
+            self,
+            stage,
+            op_idx,
+            inp_a: Val = None,
+            res: Val = None,
+            res_latency: int = None,
+    ):
+        op = self.relu_instances[op_idx]
+
+        if inp_a is not None:
+            assert inp_a in self.val_graph.nodes, inp_a
+            self.val_graph.add_edge(inp_a, op.a_wire, stage=stage)
+
+        if res is not None:
+            assert res in self.val_graph.nodes
+            assert res_latency is not None
+            self.val_graph.add_edge(op.res_wire, res, stage=stage + res_latency)
+
     def make_top_module_decl(self, inputs: List[Val], outputs: List[Val]):
         base_inputs = ["clock", "reset", "clock_enable"]
         input_ports = [f"[{self.precision - 1}:0] {i.name}" for i in inputs]
@@ -314,24 +383,24 @@ class Module:
     def make_fsm_params(self):
         params = "\n".join(
             [
-                f"parameter    fsm_state{str(i).zfill(self.fsm_idx_width)} = {self.max_fsm_stage + 1}'d{1 << i};"
+                f"parameter fsm_state{str(i).zfill(self.fsm_idx_width)} = {self.max_fsm_stage + 1}'d{1 << i};"
                 for i in range(1, self.max_fsm_stage + 1)
             ]
         )
         params += "\n\n"
-        params += f'(* fsm_encoding = "none" *) reg   [{self.max_fsm_stage}:0] current_state_fsm;\n'
-        params += f"reg   [{self.max_fsm_stage}:0] next_state_fsm;"
+        params += f'(* fsm_encoding = "none" *) reg [{self.max_fsm_stage}:0] current_state_fsm;\n'
+        params += f"reg [{self.max_fsm_stage}:0] next_state_fsm;"
 
         return params
 
     def make_fsm_wires(self):
         wires = "\n".join(
             [
-                f"wire    current_state_fsm_state{str(i).zfill(self.fsm_idx_width)};"
+                f"wire current_state_fsm_state{str(i).zfill(self.fsm_idx_width)};"
                 for i in range(0, self.max_fsm_stage + 1)
             ]
             + [
-                f"wire    next_state_fsm_state{str(i).zfill(self.fsm_idx_width)};"
+                f"wire next_state_fsm_state{str(i).zfill(self.fsm_idx_width)};"
                 for i in range(0, self.max_fsm_stage)
             ]
         )
@@ -427,11 +496,13 @@ class Module:
                 )
                 yield tree
 
-    def make_add_or_mul_instances(self):
+    def make_op_instances(self):
         for mul in self.mul_instances.values():
             yield mul.make()
         for add in self.add_instances.values():
             yield add.make()
+        for relu in self.relu_instances.values():
+            yield relu.make()
 
     def make_registers(self):
         res = []
@@ -439,7 +510,7 @@ class Module:
             if reg.reg_or_wire == RegOrWire.WIRE:
                 continue
             res.append(
-                f"(* max_fanout = 50 *) reg   [{self.precision - 1}:0] {reg.name};"
+                f"(* max_fanout = 50 *) reg [{self.precision - 1}:0] {reg.name};"
             )
         return "\n".join(res)
 
@@ -452,7 +523,9 @@ class Module:
             rets.append(f"assign {output} = {last_reg}_reg;")
         return "\n".join(rets)
 
+
 Inp = namedtuple("inp", ["u", "pos"])
+
 
 def collect_op_design(mod, op_idx, op_edges):
     stage_inputs, stage_outputs, constants = {}, {}, {}
@@ -460,9 +533,7 @@ def collect_op_design(mod, op_idx, op_edges):
         if op_idx < len(stage) and stage[op_idx] in op_edges:
             op = stage[op_idx]
             edges = op_edges[op]
-            stage_inputs[i] = [
-                Inp(u, pos) for u, _v, pos in edges
-            ]
+            stage_inputs[i] = [Inp(u, pos) for u, _v, pos in edges]
             output = [v for _u, v, _pos in edges]
             assert len(set(output)) == 1
             stage_outputs[i] = output[0]
@@ -503,9 +574,13 @@ def build_module(mod, program_graph):
         if "fadd" not in attr["op"]:
             continue
         fadd_edges[attr["op"]].append((u, v, attr["pos"]))
+    relu_edges = defaultdict(list)
+    for (u, v, _key), attr in program_graph.edges.items():
+        if "relu" not in attr["op"]:
+            continue
+        relu_edges[attr["op"]].append((u, v, attr["pos"]))
 
     for op_idx in range(mod.max_stage_len):
-
         stage_inputs, stage_outputs = collect_op_design(mod, op_idx, fmuladd_edges)
         mul_inputs_a, mul_inputs_b, _mul_outputs, add_inputs_bs = split_mul_add(
             stage_inputs, stage_outputs
@@ -538,6 +613,17 @@ def build_module(mod, program_graph):
             res = Val(RegOrWire.REG, stage_outputs[stage])
             mod.add_add_mul_transfer(
                 stage, op_idx, Op.ADD, a, b, res=res, res_latency=1
+            )
+
+        stage_inputs, stage_outputs = collect_op_design(mod, op_idx, relu_edges)
+        for stage, stage_inputs in stage_inputs.items():
+            if stage_inputs is None:
+                continue
+            a, = [inp.u for inp in stage_inputs]
+            a = Val(RegOrWire.REG, a)
+            res = Val(RegOrWire.REG, stage_outputs[stage])
+            mod.add_relu_transfer(
+                stage, op_idx, a, res=res, res_latency=0
             )
 
 
@@ -580,7 +666,7 @@ def main(design, fp):
     print(file=verilog_file)
     print(mod.make_registers(), file=verilog_file)
     print(file=verilog_file)
-    for inst in mod.make_add_or_mul_instances():
+    for inst in mod.make_op_instances():
         print(inst, file=verilog_file)
     print(file=verilog_file)
     print(mod.make_assign_wire_to_reg(), file=verilog_file)
