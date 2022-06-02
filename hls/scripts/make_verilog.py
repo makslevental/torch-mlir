@@ -1,6 +1,7 @@
 import enum
 import json
 import math
+import os
 import struct
 import sys
 from collections import defaultdict, namedtuple
@@ -75,6 +76,7 @@ INTERVAL_BETWEEN_MUL_AND_ADD = 1
 MUL_LATENCY = 1
 ADD_LATENCY = 1
 FSM_STAGE_INTERVAL = 2
+COLLAPSE_TREES = True
 
 
 def latency_for_op(op):
@@ -155,21 +157,31 @@ def make_always_tree(left, rights, comb_or_seq, fsm_idx_width):
         always @ ({'*' if comb_or_seq == 'seq' else 'posedge clock'}) begin
         """
     )
+    if COLLAPSE_TREES:
+        _rights = defaultdict(list)
+        for stage, inp in rights:
+            _rights[inp].append(stage)
+
+        for inp in _rights:
+            _rights[inp] = sorted(_rights[inp])
+        rights = [(stages, inp) for inp, stages in _rights.items()]
+
+    rights = sorted(rights, key=lambda x: len(x[0]))
     for i, (stage, inp_a) in enumerate(rights):
-        # if len(rights) == 1:
-        #     cond = "begin"
-        if i == 0:
-            cond = f"if ({make_fsm_states([stage], fsm_idx_width)}) begin"
-        else:
-            cond = f"else if ({make_fsm_states([stage], fsm_idx_width)}) begin"
-        # elif i < len(rights) - 1:
+        if len(rights) == 1:
+            cond = "begin"
+        elif i == 0:
+            cond = f"if ({make_fsm_states(stage, fsm_idx_width)}) begin"
         # else:
-        #     cond = f"else begin"
+        elif i < len(rights) - 1:
+            cond = f"else if ({make_fsm_states(stage, fsm_idx_width)}) begin"
+        else:
+            cond = f"else begin"
 
         always_a += indent(
             dedent(
                 f"""\
-                    {cond} // num states: {len([stage])}
+                    {cond} // num states: {len(stage)}
                         {left} = {inp_a};
                     end
                 """
@@ -281,7 +293,6 @@ class Module:
             assert res in self.val_graph.nodes
             assert res_latency is not None
             self.val_graph.add_edge(op.res_reg, res, stage=stage + res_latency)
-
 
     def make_top_module_decl(self, inputs: List[Val], outputs: List[Val]):
         base_inputs = ["clock", "reset", "clock_enable"]
@@ -400,9 +411,9 @@ class Module:
         return fsm
 
     def make_trees(self):
-        trees = []
+        adj = self.val_graph.reverse().adj
         for val in self.val_graph.nodes:
-            edges = self.val_graph.reverse().adj[val]
+            edges = adj[val]
             if edges:
                 arms = sorted(
                     [
@@ -412,22 +423,15 @@ class Module:
                     ]
                 )
                 tree = make_always_tree(
-                    val.name,
-                    arms,
-                    comb_or_seq="seq",
-                    fsm_idx_width=self.fsm_idx_width,
+                    val.name, arms, comb_or_seq="seq", fsm_idx_width=self.fsm_idx_width
                 )
-                trees.append(tree)
-        return "\n".join(trees)
+                yield tree
 
     def make_add_or_mul_instances(self):
-        ops = []
         for mul in self.mul_instances.values():
-            ops.append(mul.make())
+            yield mul.make()
         for add in self.add_instances.values():
-            ops.append(add.make())
-
-        return "\n".join(ops)
+            yield add.make()
 
     def make_registers(self):
         res = []
@@ -441,12 +445,14 @@ class Module:
 
     def make_outputs(self, outputs, program_graph):
         rets = []
+        rev = program_graph.reverse()
         for output in outputs:
-            last_reg = list(program_graph.reverse()[output.id].keys())[0]
+            last_reg = list(rev[output.id].keys())[0]
             assert last_reg in self.register_ids, last_reg
             rets.append(f"assign {output} = {last_reg}_reg;")
         return "\n".join(rets)
 
+Inp = namedtuple("inp", ["u", "pos"])
 
 def collect_op_design(mod, op_idx, op_edges):
     stage_inputs, stage_outputs, constants = {}, {}, {}
@@ -455,7 +461,7 @@ def collect_op_design(mod, op_idx, op_edges):
             op = stage[op_idx]
             edges = op_edges[op]
             stage_inputs[i] = [
-                namedtuple("inp", ["u", "pos"])(u, pos) for u, _v, pos in edges
+                Inp(u, pos) for u, _v, pos in edges
             ]
             output = [v for _u, v, _pos in edges]
             assert len(set(output)) == 1
@@ -518,7 +524,7 @@ def build_module(mod, program_graph):
                 op_type=Op.ADD,
                 inp_a=mul_res_reg,
                 inp_b=add_b,
-                res=add_b,
+                res=add_b if program_graph.nodes[add_b.id]["op"] != "input" else None,
                 res_latency=1,
             )
 
@@ -535,7 +541,7 @@ def build_module(mod, program_graph):
             )
 
 
-def main(design):
+def main(design, fp):
     program_graph = nx.json_graph.node_link_graph(design["G"])
     fsm_stages = design["topo_sort"]
     inputs = [
@@ -563,28 +569,33 @@ def main(design):
 
     build_module(mod, program_graph)
 
-    print(mod.make_top_module_decl(input_wires, output_wires))
-    print()
-    print(mod.make_fsm_params())
-    print()
-    print(mod.make_fsm_wires())
-    print()
-    print(mod.make_registers())
-    print()
-    print(mod.make_add_or_mul_instances())
-    print()
-    print(mod.make_assign_wire_to_reg())
-    print()
-    print(mod.make_trees())
-    print()
-    print(mod.make_fsm())
-    print()
-    print(mod.make_outputs(output_wires, program_graph))
-    print()
-    print("endmodule")
+    verilog_fp = os.path.split(fp)[0]
+    verilog_file = open(f"{verilog_fp}/forward.v", "w")
+
+    print(mod.make_top_module_decl(input_wires, output_wires), file=verilog_file)
+    print(file=verilog_file)
+    print(mod.make_fsm_params(), file=verilog_file)
+    print(file=verilog_file)
+    print(mod.make_fsm_wires(), file=verilog_file)
+    print(file=verilog_file)
+    print(mod.make_registers(), file=verilog_file)
+    print(file=verilog_file)
+    for inst in mod.make_add_or_mul_instances():
+        print(inst, file=verilog_file)
+    print(file=verilog_file)
+    print(mod.make_assign_wire_to_reg(), file=verilog_file)
+    print(file=verilog_file)
+    for tree in mod.make_trees():
+        print(tree, file=verilog_file)
+    print(file=verilog_file)
+    print(mod.make_fsm(), file=verilog_file)
+    print(file=verilog_file)
+    print(mod.make_outputs(output_wires, program_graph), file=verilog_file)
+    print(file=verilog_file)
+    print("endmodule", file=verilog_file)
 
 
 if __name__ == "__main__":
     fp = sys.argv[1]
     design = json.load(open(fp))
-    main(design)
+    main(design, fp)
