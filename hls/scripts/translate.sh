@@ -30,18 +30,14 @@ open("forward.affine.mlir", "w").writelines(new_lines)
 EOF
 sed -i.bak 's/scf\.yield//g' forward.affine.mlir
 
-#torch-mlir-opt forward.affine.mlir -affine-loop-unroll="unroll-full unroll-full-threshold=10000000" -o forward.affine.unrolled.mlir
-#scalehls-translate forward.affine.mlir --emit-hlspy --mlir-print-elementsattrs-with-hex-if-larger=-1 -o forward.py
-# black forward.py
+scalehls-translate forward.affine.mlir --emit-hlspy --mlir-print-elementsattrs-with-hex-if-larger=-1 -o forward.py
+
 python ../../scripts/mlir_ops.py forward.py --macs
 FN=macs python forward_rewritten.py
 
 python ../../scripts/mlir_ops.py forward.py
 FN=regular python forward_rewritten.py
-#
+
 python ../../scripts/cpp_val.py "$PWD"/forward_regular.cpp
 
-#for (( i = 0; i < 16*9*9; i++ )); do
-#  python forward_rewritten.py $i > workers/other_workers_$i.json
-#  python ../../scripts/llvm_val.py workers/forward_$i.ll > workers/topo_$i.log
-#done
+python ../../scripts/make_verilog.py "$PWD"/design.json

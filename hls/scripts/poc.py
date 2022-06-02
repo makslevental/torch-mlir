@@ -305,53 +305,6 @@ def make_sub_layer(mod, in_shapes, out_shape, scale, root_out_dir):
     )
 
 
-def make_split_braggnn(root_out_dir, scale=4, imgsz=11, simplify_weights=False):
-    class mods:
-        cnn_layers_1 = cnn_layers_1(scale=scale, imgsz=imgsz)
-        theta = theta_phi_g(scale=scale, imgsz=imgsz)
-        theta_phi_g_combine = theta_phi_g_combine(scale=scale, imgsz=imgsz)
-        cnn_layers_2 = cnn_layers_2(scale=scale, imgsz=imgsz)
-        dense_layers = dense_layers(scale=scale, imgsz=imgsz)
-
-    attributes = inspect.getmembers(mods, lambda a: not (inspect.isroutine(a)))
-    for attr in [
-        attr for attr_name, attr in attributes if isinstance(attr, torch.nn.Module)
-    ]:
-        attr.eval()
-        if simplify_weights:
-            attr.apply(set_weights)
-
-    with torch.no_grad():
-        x1 = torch.randn(1, 1, imgsz, imgsz)
-        cnn1 = mods.cnn_layers_1(x1)
-        make_sub_layer(mods.cnn_layers_1, [x1.shape], cnn1.shape, scale, root_out_dir)
-        return
-
-        # # nlb
-        # theta = mods.theta(cnn1)
-        # make_sub_layer(mods.theta, [cnn1.shape], theta.shape, scale, root_out_dir)
-        # phi = mods.theta(cnn1)
-        # g = mods.theta(cnn1)
-        # nlb = mods.theta_phi_g_combine(cnn1, theta, phi, g)
-        # make_sub_layer(
-        #     mods.theta_phi_g_combine,
-        #     [cnn1.shape, theta.shape, phi.shape, g.shape],
-        #     nlb.shape,
-        #     scale,
-        #     root_out_dir,
-        # )
-        #
-        # # cnn2
-        # cnn2 = mods.cnn_layers_2(nlb)
-        # make_sub_layer(mods.cnn_layers_2, [nlb.shape], cnn2.shape, scale, root_out_dir)
-        #
-        # # dense layers
-        # dense = mods.dense_layers(cnn2)
-        # make_sub_layer(
-        #     mods.dense_layers, [cnn2.shape], dense.shape, scale, root_out_dir
-        # )
-
-
 def make_module_artifacts(
     mod,
     example_input,
@@ -424,10 +377,10 @@ class ConvPlusReLU(nn.Module):
         super().__init__()
         self.conv1 = torch.nn.Conv2d(in_channels, out_channels, 3)
         self.conv2 = torch.nn.Conv2d(out_channels, in_channels, 3)
-        self.relu = torch.nn.ReLU()
+        # self.relu = torch.nn.ReLU()
 
     def forward(self, x):
-        return self.relu(self.conv2(self.conv1(x)))
+        return self.conv2(self.conv1(x))
 
 
 def make_single_small_cnn(
@@ -518,8 +471,6 @@ def make_linear(root_out_dir, scale=1, imgsz=11, simplify_weights=False):
 
 def main():
     parser = argparse.ArgumentParser(description="make stuff")
-    parser.add_argument("--no_whole_braggnn", action="store_false", default=False)
-    parser.add_argument("--no_split_braggnn", action="store_false", default=False)
     parser.add_argument("--low_scale", type=int, default=1)
     parser.add_argument("--high_scale", type=int, default=5)
     parser.add_argument("--out_dir", type=Path, default=Path("../examples"))
@@ -529,16 +480,10 @@ def main():
     # make_single_small_cnn(
     #     args.out_dir, in_channels=2, out_channels=4, imgsz=7, simplify_weights=False
     # )
-    make_linear(args.out_dir, imgsz=5, simplify_weights=False)
-    # make_whole_braggnn(args.out_dir, scale=1, imgsz=11, simplify_weights=False)
+    # make_linear(args.out_dir, imgsz=5, simplify_weights=False)
     make_double_small_cnn(args.out_dir, scale=1, imgsz=11, simplify_weights=False)
-    make_double_small_cnn(args.out_dir, scale=2, imgsz=11, simplify_weights=False)
-    #
-    for i in range(args.low_scale, args.high_scale):
-        # if not args.no_split_braggnn:
-        #     make_split_braggnn(args.out_dir, scale=i, imgsz=11)
-        if not args.no_whole_braggnn:
-            make_whole_braggnn(args.out_dir, scale=i, imgsz=11, simplify_weights=False)
+    # for i in range(args.low_scale, args.high_scale):
+    #     make_whole_braggnn(args.out_dir, scale=i, imgsz=11, simplify_weights=False)
 
 
 if __name__ == "__main__":
