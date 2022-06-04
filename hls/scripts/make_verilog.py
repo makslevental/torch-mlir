@@ -117,15 +117,13 @@ def make_mul_or_add(precision, idx, op_name, a_reg, b_reg, res_wire, add_or_mul)
     return op
 
 
-def make_relu(precision, idx, op_name, a_wire, res_wire):
+def make_relu(precision, idx, op_name, a_reg, res_wire):
     op = dedent(
         f"""\
+            reg   [{precision - 1}:0] {a_reg};
             wire   [{precision - 1}:0] {res_wire};
             relu #({idx}) {op_name}(
-                .clock(clock),
-                .reset(reset),
-                .clock_enable(clock_enable),
-                .a({a_wire}),
+                .a({a_reg}),
                 .res({res_wire})
             );
             """
@@ -174,9 +172,9 @@ class ReLU:
     def __init__(self, idx, precision) -> None:
         self.idx = idx
         self.precision = precision
-        self.a_wire = Val(RegOrWire.WIRE, f"relu_{idx}_a")
+        self.a_reg = Val(RegOrWire.REG, f"relu_{idx}_a")
         self.res_wire = Val(RegOrWire.WIRE, f"relu_{idx}_res")
-        self.registers = [self.a_wire, self.res_wire]
+        self.registers = [self.a_reg]
 
     @property
     def name(self):
@@ -184,18 +182,14 @@ class ReLU:
 
     def make(self):
         return make_relu(
-            self.precision,
-            self.idx,
-            self.name,
-            self.a_wire,
-            self.res_wire,
+            self.precision, self.idx, self.name, self.a_reg, self.res_wire
         )
 
 
 def make_always_tree(left, rights, comb_or_seq, fsm_idx_width):
     always_a = dedent(
         f"""\
-        always @ ({'*' if comb_or_seq == 'seq' else 'posedge clock'}) begin
+        always @ ({'*' if comb_or_seq == 'comb' else 'posedge clock'}) begin
         """
     )
     if COLLAPSE_TREES:
@@ -264,7 +258,7 @@ class Module:
         for idx in range(num_relus):
             relu = ReLU(idx, precision)
             self.relu_instances[idx] = relu
-            self.add_vals([relu.a_wire, relu.res_wire])
+            self.add_vals([relu.a_reg, relu.res_wire])
 
         self._max_fsm_stage = 0
         self._fsm_idx_width = 0
@@ -345,18 +339,13 @@ class Module:
             self.val_graph.add_edge(op.res_reg, res, stage=stage + res_latency)
 
     def add_relu_transfer(
-            self,
-            stage,
-            op_idx,
-            inp_a: Val = None,
-            res: Val = None,
-            res_latency: int = None,
+        self, stage, op_idx, inp_a: Val = None, res: Val = None, res_latency: int = None
     ):
         op = self.relu_instances[op_idx]
 
         if inp_a is not None:
             assert inp_a in self.val_graph.nodes, inp_a
-            self.val_graph.add_edge(inp_a, op.a_wire, stage=stage)
+            self.val_graph.add_edge(inp_a, op.a_reg, stage=stage)
 
         if res is not None:
             assert res in self.val_graph.nodes
@@ -484,17 +473,31 @@ class Module:
         for val in self.val_graph.nodes:
             edges = adj[val]
             if edges:
-                arms = sorted(
-                    [
-                        (edge_attr["stage"], v.name)
-                        for v, edge_attrs in edges.items()
-                        for _, edge_attr in edge_attrs.items()
-                    ]
-                )
-                tree = make_always_tree(
-                    val.name, arms, comb_or_seq="seq", fsm_idx_width=self.fsm_idx_width
-                )
-                yield tree
+                if "fmul" in val.name and "_b" in val.name:
+                    arms = sorted(
+                        [
+                            (edge_attr["stage"], v.name)
+                            for v, edge_attrs in edges.items()
+                            for _, edge_attr in edge_attrs.items()
+                            if "constant" not in v.name
+                        ]
+                    )
+                else:
+                    arms = sorted(
+                        [
+                            (edge_attr["stage"], v.name)
+                            for v, edge_attrs in edges.items()
+                            for _, edge_attr in edge_attrs.items()
+                        ]
+                    )
+                if arms:
+                    comb_or_seq = "comb"
+                    tree = make_always_tree(
+                        val.name, arms, comb_or_seq=comb_or_seq, fsm_idx_width=self.fsm_idx_width
+                    )
+                    yield tree
+                else:
+                    yield ""
 
     def make_op_instances(self):
         for mul in self.mul_instances.values():
@@ -509,9 +512,28 @@ class Module:
         for reg in self.val_graph:
             if reg.reg_or_wire == RegOrWire.WIRE:
                 continue
-            res.append(
-                f"(* max_fanout = 50 *) reg [{self.precision - 1}:0] {reg.name};"
-            )
+            if "constant" in reg.name:
+                res.append(
+                    f"(* max_fanout = 10 *) reg [{self.precision - 1}:0] {reg.name};"
+                )
+            else:
+                res.append(
+                    f'(* keep = "true", max_fanout = 10 *) reg [{self.precision - 1}:0] {reg.name};'
+                )
+            if "fmul" in reg.name and "b_reg" in reg.name:
+                res.extend(
+                    [
+                        f'(* keep = "true", max_fanout = 10 *) reg [{self.precision - 1}:0] {reg.name}_bram_reg;',
+                        dedent(
+                            f"""\
+                                always @ (posedge clock) begin
+                                    {reg.name} <= {reg.name}_bram_reg;
+                                end
+                                """
+                        ),
+                    ]
+                )
+
         return "\n".join(res)
 
     def make_outputs(self, outputs, program_graph):
@@ -622,9 +644,7 @@ def build_module(mod, program_graph):
             a, = [inp.u for inp in stage_inputs]
             a = Val(RegOrWire.REG, a)
             res = Val(RegOrWire.REG, stage_outputs[stage])
-            mod.add_relu_transfer(
-                stage, op_idx, a, res=res, res_latency=0
-            )
+            mod.add_relu_transfer(stage, op_idx, a, res=res, res_latency=0)
 
 
 def main(design, fp):
@@ -650,7 +670,7 @@ def main(design, fp):
     constants = [
         Val(RegOrWire.WIRE, v) for v in design["topo_sort"][0] if "constant" in v
     ]
-    mod.add_vals(constants)
+    # mod.add_vals(constants)
     mod.add_vals([Val(RegOrWire.REG, v.id) for v in constants])
 
     build_module(mod, program_graph)
