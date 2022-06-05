@@ -21,6 +21,7 @@ VAR_COUNT = 0
 OP_COUNT = 0
 OP_COUNT_ZFILL = 5
 FILE = None
+OP_LAYER_PREFIX = "layer0"
 
 
 class CPPVal:
@@ -37,7 +38,7 @@ class CPPVal:
             other = CPPConstant(other)
         v = CPPVal(f"(* ({self}) ({other}))")
         print(
-            f"float {v} = fmul{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({self}, {other});",
+            f"float {v} = fmul_{OP_LAYER_PREFIX}_{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({self}, {other});",
             file=FILE,
         )
 
@@ -51,7 +52,7 @@ class CPPVal:
             other = CPPConstant(other)
         v = CPPVal(f"(+ ({self}) ({other}))")
         print(
-            f"float {v} = fadd{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({self}, {other});",
+            f"float {v} = fadd_{OP_LAYER_PREFIX}_{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({self}, {other});",
             file=FILE,
         )
         return v
@@ -64,7 +65,7 @@ class CPPVal:
             other = CPPConstant(other)
         v = CPPVal(f"(- ({self}) ({other}))")
         print(
-            f"float {v} = fsub{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({self}, {other});",
+            f"float {v} = fsub_{OP_LAYER_PREFIX}_{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({self}, {other});",
             file=FILE,
         )
         return v
@@ -77,7 +78,7 @@ class CPPVal:
             other = CPPConstant(other)
         v = CPPVal(f"(/ ({self}) ({other}))")
         print(
-            f"float {v} = fdiv{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({self}, {other});",
+            f"float {v} = fdiv_{OP_LAYER_PREFIX}_{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({self}, {other});",
             file=FILE,
         )
         return v
@@ -93,7 +94,18 @@ class CPPVal:
             other = CPPConstant(other)
         v = CPPVal(f"(> ({self}) ({other}))")
         print(
-            f"float {v} = fcmpugt{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({self}, {other});",
+            f"float {v} = fcmpugt_{OP_LAYER_PREFIX}_{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({self}, {other});",
+            file=FILE,
+        )
+        return v
+
+    def __neg__(self):
+        # <result> = fcmp ugt float 4.0, 5.0
+        global OP_COUNT
+        OP_COUNT += 1
+        v = CPPVal(f"(- {self})")
+        print(
+            f"float {v} = fneg_{OP_LAYER_PREFIX}_{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({self});",
             file=FILE,
         )
         return v
@@ -203,7 +215,7 @@ def FMulAdd(a, b, c):
     a, b, c = inps
     v = CPPVal(f"(fmuladd {a} {b} {c})")
     print(
-        f"float {v} = fmuladd{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({a}, {b}, {c});",
+        f"float {v} = fmuladd_{OP_LAYER_PREFIX}_{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({a}, {b}, {c});",
         file=FILE,
     )
     return v
@@ -224,7 +236,7 @@ def FMac(a, b, arr, idx):
     if isinstance(c, GlobalArrayVal):
         cc = arr[idx] = arr.make_val(idx)
     print(
-        f"float {cc} = fmuladd{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({a}, {b}, {c});",
+        f"float {cc} = fmuladd_{OP_LAYER_PREFIX}_{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({a}, {b}, {c});",
         file=FILE,
     )
     return cc
@@ -242,7 +254,7 @@ def Add(a, arr, idx):
     if isinstance(b, (GlobalArrayVal, CPPConstant)):
         bb = arr[idx] = arr.make_val(idx)
     print(
-        f"float {bb} = fadd{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({a}, {b});", file=FILE
+        f"float {bb} = fadd_{OP_LAYER_PREFIX}_{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({a}, {b});", file=FILE
     )
     return bb
 
@@ -275,7 +287,7 @@ def ReLU(x):
     global OP_COUNT
     OP_COUNT += 1
     v = CPPVal(f"(relu {x})")
-    print(f"float {v} = relu{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({x});", file=FILE)
+    print(f"float {v} = relu_{OP_LAYER_PREFIX}_{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}({x});", file=FILE)
     return v
 
 
@@ -353,7 +365,8 @@ def get_ssas_from_ir_line(line):
             lambda x: len(x.strip())
             and "mul" not in x
             and "add" not in x
-            and "relu" not in x,
+            and "relu" not in x
+            and "neg" not in x,
             [
                 f
                 for f, _ in re.findall(r"([\d|a-z|_]*|([0-9]*[.])+[0-9]+)", line)
@@ -369,6 +382,7 @@ def get_ssas_from_ir_line(line):
     if (
         "fmul" in line
         or "fadd" in line
+        or "fneg" in line
         or "fcmp" in line
         or "fsub" in line
         or "fdiv" in line
