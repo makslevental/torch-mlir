@@ -2,12 +2,13 @@ import enum
 import json
 import math
 import os
+import random
 import struct
 import sys
 from collections import defaultdict, namedtuple
 from dataclasses import dataclass
 from textwrap import dedent, indent
-from typing import List, Dict
+from typing import List, Dict, Tuple
 
 import networkx as nx
 import numpy as np
@@ -76,8 +77,10 @@ INTERVAL_BETWEEN_MUL_AND_ADD = 1
 MUL_LATENCY = 1
 ADD_LATENCY = 1
 RELU_LATENCY = 0
+NEG_LATENCY = 0
 FSM_STAGE_INTERVAL = 2
 COLLAPSE_TREES = True
+MAX_FANOUT = 10
 
 
 def latency_for_op(op):
@@ -89,6 +92,8 @@ def latency_for_op(op):
         return ADD_LATENCY + 1
     if "relu" in op:
         return RELU_LATENCY
+    if "neg" in op:
+        return NEG_LATENCY
     raise Exception(f"unknown op {op}")
 
 
@@ -117,12 +122,12 @@ def make_mul_or_add(precision, idx, op_name, a_reg, b_reg, res_wire, add_or_mul)
     return op
 
 
-def make_relu(precision, idx, op_name, a_reg, res_wire):
+def make_relu_or_neg(precision, idx, op_name, a_reg, res_wire, relu_or_neg):
     op = dedent(
         f"""\
             reg   [{precision - 1}:0] {a_reg};
             wire   [{precision - 1}:0] {res_wire};
-            relu #({idx}) {op_name}(
+            {relu_or_neg} #({idx}) {op_name}(
                 .a({a_reg}),
                 .res({res_wire})
             );
@@ -131,20 +136,42 @@ def make_relu(precision, idx, op_name, a_reg, res_wire):
     return op
 
 
+def make_shift_rom(precision, idx, op_name, data_out_wire, addr_width):
+    res = []
+    res.append(
+        dedent(
+            f"""\
+            wire   [{precision - 1}:0] {data_out_wire};
+            shift_rom #({idx}, {precision}, {addr_width}) {op_name}(
+                .clock(clock),
+                .data_out({data_out_wire})
+            );
+            """
+        )
+    )
+    return "\n".join(res)
+
+
 class FAddOrMulOp:
     def __init__(self, idx, precision, add_or_mul) -> None:
+        if not isinstance(idx, (tuple, list)):
+            idx = [idx]
+        idx = "_".join(map(str, idx))
         self.idx = idx
         self.add_or_mul = add_or_mul
         self.precision = precision
-        self.a_reg = Val(RegOrWire.REG, f"f{add_or_mul}_{idx}_a")
-        self.b_reg = Val(RegOrWire.REG, f"f{add_or_mul}_{idx}_b")
-        self.res_reg = Val(RegOrWire.REG, f"f{add_or_mul}_{idx}_res")
-        self.res_wire = Val(RegOrWire.WIRE, f"f{add_or_mul}_{idx}_res")
+        self.a_reg = Val(RegOrWire.REG, f"f{self.name}_a")
+        self.b_reg = Val(RegOrWire.REG, f"f{self.name}_b")
+        self.res_reg = Val(RegOrWire.REG, f"f{self.name}_res")
+        self.res_wire = Val(RegOrWire.WIRE, f"f{self.name}_res")
         self.registers = [self.a_reg, self.b_reg, self.res_reg]
 
     @property
     def name(self):
         return f"{self.add_or_mul}_{self.idx}"
+
+    def __str__(self):
+        return self.name
 
     def make(self):
         return make_mul_or_add(
@@ -168,22 +195,58 @@ class FMul(FAddOrMulOp):
         super().__init__(idx, precision, "mul")
 
 
-class ReLU:
-    def __init__(self, idx, precision) -> None:
-        self.idx = idx
+class ShiftROM:
+    def __init__(self, idx, precision, num_csts):
+        if not isinstance(idx, (tuple, list)):
+            idx = [idx]
+        self.idx = "_".join(map(str, idx))
         self.precision = precision
-        self.a_reg = Val(RegOrWire.REG, f"relu_{idx}_a")
-        self.res_wire = Val(RegOrWire.WIRE, f"relu_{idx}_res")
+        self.data_out_wire = Val(RegOrWire.WIRE, f"{self.name}_data_out")
+        self.num_csts = num_csts
+        self.addr_width = math.ceil(math.log2(num_csts))
+
+    @property
+    def name(self):
+        return f"shift_rom_{self.idx}"
+
+    def make(self):
+        return make_shift_rom(
+            self.precision, self.idx, self.name, self.data_out_wire, self.addr_width
+        )
+
+
+class ReLUOrNeg:
+    def __init__(self, idx, precision, relu_or_neg) -> None:
+        self.idx = idx
+        self.relu_or_neg = relu_or_neg
+        self.precision = precision
+        self.a_reg = Val(RegOrWire.REG, f"{relu_or_neg}_{idx}_a")
+        self.res_wire = Val(RegOrWire.WIRE, f"{relu_or_neg}_{idx}_res")
         self.registers = [self.a_reg]
 
     @property
     def name(self):
-        return f"relu_{self.idx}"
+        return f"{self.relu_or_neg}_{self.idx}"
 
     def make(self):
-        return make_relu(
-            self.precision, self.idx, self.name, self.a_reg, self.res_wire
+        return make_relu_or_neg(
+            self.precision,
+            self.idx,
+            self.name,
+            self.a_reg,
+            self.res_wire,
+            self.relu_or_neg,
         )
+
+
+class ReLU(ReLUOrNeg):
+    def __init__(self, idx, precision) -> None:
+        super().__init__(idx, precision, "relu")
+
+
+class Neg(ReLUOrNeg):
+    def __init__(self, idx, precision) -> None:
+        super().__init__(idx, precision, "neg")
 
 
 def make_always_tree(left, rights, comb_or_seq, fsm_idx_width):
@@ -228,37 +291,62 @@ def make_always_tree(left, rights, comb_or_seq, fsm_idx_width):
 
 
 class Module:
-    def __init__(self, fsm_stages, precision=16):
+    def __init__(self, fsm_stages, precision=16, num_layers=1):
         self.precision = precision
         self.val_graph = nx.MultiDiGraph()
-        self.mul_instances: Dict[int, FMul] = {}
-        self.add_instances: Dict[int, FAdd] = {}
+        self.mul_instances: Dict[Tuple[int, int], FMul] = {}
+        self.rom_instances: Dict[Tuple[int, int], ShiftROM] = {}
+        self.add_instances: Dict[Tuple[int, int], FAdd] = {}
         self.relu_instances: Dict[int, ReLU] = {}
+        self.neg_instances: Dict[int, Neg] = {}
+
+        self.max_layer_stage_lens: Dict[int, int] = {}
         self.name_to_val = {}
         self.register_ids = set()
         self.wire_ids = set()
 
-        self.max_stage_len = max(len(fs) for fs in fsm_stages)
         self._fsm_stages = dict(enumerate(fsm_stages))
         self._stage_latencies = max_latency_per_fsm_stage(self._fsm_stages)
 
-        for idx in range(self.max_stage_len):
-            mul = FMul(idx, precision)
-            self.mul_instances[idx] = mul
-            self.add_vals(mul.registers)
-            self.add_vals([mul.res_wire])
-            add = FAdd(idx, precision)
-            self.add_instances[idx] = add
-            self.add_vals(add.registers)
-            self.add_vals([add.res_wire])
+        for layer in range(0, num_layers):
+            self.max_layer_stage_lens[layer] = max(
+                [
+                    len(list(filter(lambda x: f"layer{layer}" in x, fs)))
+                    for fs in fsm_stages
+                ]
+            )
 
-        num_relus = 0
-        for _, stage in self._fsm_stages.items():
-            num_relus = max(num_relus, len(list(filter(lambda x: "relu" in x, stage))))
-        for idx in range(num_relus):
-            relu = ReLU(idx, precision)
-            self.relu_instances[idx] = relu
-            self.add_vals([relu.a_reg, relu.res_wire])
+            for idx in range(self.max_layer_stage_lens[layer]):
+                idx = (layer, idx)
+                mul = FMul(idx, precision)
+                self.mul_instances[idx] = mul
+                self.add_vals(mul.registers)
+                self.add_vals([mul.res_wire])
+                add = FAdd(idx, precision)
+                self.add_instances[idx] = add
+                self.add_vals(add.registers)
+                self.add_vals([add.res_wire])
+                rom = ShiftROM(idx, precision, num_csts=512)
+                self.rom_instances[idx] = rom
+                self.add_vals([rom.data_out_wire])
+
+            num_relus = 0
+            for _, stage in self._fsm_stages.items():
+                num_relus = max(
+                    num_relus, len(list(filter(lambda x: "relu" in x, stage)))
+                )
+            for idx in range(num_relus):
+                relu = ReLU(idx, precision)
+                self.relu_instances[idx] = relu
+                self.add_vals([relu.a_reg, relu.res_wire])
+
+            num_negs = 0
+            for _, stage in self._fsm_stages.items():
+                num_negs = max(num_negs, len(list(filter(lambda x: "neg" in x, stage))))
+            for idx in range(num_negs):
+                neg = Neg(idx, precision)
+                self.neg_instances[idx] = neg
+                self.add_vals([neg.a_reg, neg.res_wire])
 
         self._max_fsm_stage = 0
         self._fsm_idx_width = 0
@@ -297,6 +385,8 @@ class Module:
     def make_assign_wire_to_reg(self):
         assigns = []
         for wire_reg in self.wire_ids.intersection(self.register_ids):
+            if "constant" in wire_reg: continue
+
             assigns.append(
                 dedent(
                     f"""\
@@ -342,6 +432,20 @@ class Module:
         self, stage, op_idx, inp_a: Val = None, res: Val = None, res_latency: int = None
     ):
         op = self.relu_instances[op_idx]
+
+        if inp_a is not None:
+            assert inp_a in self.val_graph.nodes, inp_a
+            self.val_graph.add_edge(inp_a, op.a_reg, stage=stage)
+
+        if res is not None:
+            assert res in self.val_graph.nodes
+            assert res_latency is not None
+            self.val_graph.add_edge(op.res_wire, res, stage=stage + res_latency)
+
+    def add_neg_transfer(
+        self, stage, op_idx, inp_a: Val = None, res: Val = None, res_latency: int = None
+    ):
+        op = self.neg_instances[op_idx]
 
         if inp_a is not None:
             assert inp_a in self.val_graph.nodes, inp_a
@@ -493,11 +597,30 @@ class Module:
                 if arms:
                     comb_or_seq = "comb"
                     tree = make_always_tree(
-                        val.name, arms, comb_or_seq=comb_or_seq, fsm_idx_width=self.fsm_idx_width
+                        val.name,
+                        arms,
+                        comb_or_seq=comb_or_seq,
+                        fsm_idx_width=self.fsm_idx_width,
                     )
                     yield tree
                 else:
                     yield ""
+
+    # def make_shift_rom_fmul_connections(self):
+    #     rev = self.val_graph.reverse().adj
+    #     for idx, mul in self.mul_instances.items():
+    #         occupied_stages = rev[mul.b_reg]
+    #         for i in range(self.max_fsm_stage):
+    #             if True:
+    #                 print()
+    #         rom = self.rom_instances[idx]
+    #         dedent(
+    #             f"""\
+    #             always @ (posedge clock) begin
+    #                 {mul.b_reg} = {rom.data_out_reg};
+    #             end
+    #             """
+    #         )
 
     def make_op_instances(self):
         for mul in self.mul_instances.values():
@@ -506,6 +629,10 @@ class Module:
             yield add.make()
         for relu in self.relu_instances.values():
             yield relu.make()
+        for neg in self.neg_instances.values():
+            yield neg.make()
+        for rom in self.rom_instances.values():
+            yield rom.make()
 
     def make_registers(self):
         res = []
@@ -513,25 +640,14 @@ class Module:
             if reg.reg_or_wire == RegOrWire.WIRE:
                 continue
             if "constant" in reg.name:
-                res.append(
-                    f"(* max_fanout = 10 *) reg [{self.precision - 1}:0] {reg.name};"
+                res.extend([
+                    f"(* max_fanout = {MAX_FANOUT} *) reg [{self.precision - 1}:0] {reg.name};",
+                    f"initial {reg.name} = 16'd{random.randint(0,2**self.precision-1)};"
+                    ]
                 )
             else:
                 res.append(
-                    f'(* keep = "true", max_fanout = 10 *) reg [{self.precision - 1}:0] {reg.name};'
-                )
-            if "fmul" in reg.name and "b_reg" in reg.name:
-                res.extend(
-                    [
-                        f'(* keep = "true", max_fanout = 10 *) reg [{self.precision - 1}:0] {reg.name}_bram_reg;',
-                        dedent(
-                            f"""\
-                                always @ (posedge clock) begin
-                                    {reg.name} <= {reg.name}_bram_reg;
-                                end
-                                """
-                        ),
-                    ]
+                    f'(* keep = "true", max_fanout = {MAX_FANOUT} *) reg [{self.precision - 1}:0] {reg.name};'
                 )
 
         return "\n".join(res)
@@ -550,6 +666,8 @@ Inp = namedtuple("inp", ["u", "pos"])
 
 
 def collect_op_design(mod, op_idx, op_edges):
+    if isinstance(op_idx, tuple):
+        layer, op_idx = op_idx
     stage_inputs, stage_outputs, constants = {}, {}, {}
     for i, stage in mod.fsm_stages:
         if op_idx < len(stage) and stage[op_idx] in op_edges:
@@ -585,24 +703,44 @@ def split_mul_add(stage_inputs, stage_outputs):
     return mul_inputs_a, mul_inputs_b, mul_outputs, add_inputs_b
 
 
-def build_module(mod, program_graph):
+def build_module(mod, program_graph, layer):
     fmuladd_edges = defaultdict(list)
-    for (u, v, _key), attr in program_graph.edges.items():
-        if "fmuladd" not in attr["op"]:
-            continue
+    for (u, v, _key), attr in filter(
+        lambda x: "fmuladd" in x[1]["op"] and f"layer{layer}" in x[1]["op"],
+        program_graph.edges.items(),
+    ):
         fmuladd_edges[attr["op"]].append((u, v, attr["pos"]))
+
+    fmul_edges = defaultdict(list)
+    for (u, v, _key), attr in filter(
+        lambda x: "fmul_" in x[1]["op"] and f"layer{layer}" in x[1]["op"],
+        program_graph.edges.items(),
+    ):
+        fmul_edges[attr["op"]].append((u, v, attr["pos"]))
+
     fadd_edges = defaultdict(list)
-    for (u, v, _key), attr in program_graph.edges.items():
-        if "fadd" not in attr["op"]:
-            continue
+    for (u, v, _key), attr in filter(
+        lambda x: "fadd" in x[1]["op"] and f"layer{layer}" in x[1]["op"],
+        program_graph.edges.items(),
+    ):
         fadd_edges[attr["op"]].append((u, v, attr["pos"]))
+
     relu_edges = defaultdict(list)
-    for (u, v, _key), attr in program_graph.edges.items():
-        if "relu" not in attr["op"]:
-            continue
+    for (u, v, _key), attr in filter(
+        lambda x: "relu" in x[1]["op"] and f"layer{layer}" in x[1]["op"],
+        program_graph.edges.items(),
+    ):
         relu_edges[attr["op"]].append((u, v, attr["pos"]))
 
-    for op_idx in range(mod.max_stage_len):
+    neg_edges = defaultdict(list)
+    for (u, v, _key), attr in filter(
+        lambda x: "neg" in x[1]["op"] and f"layer{layer}" in x[1]["op"],
+        program_graph.edges.items(),
+    ):
+        neg_edges[attr["op"]].append((u, v, attr["pos"]))
+
+    for op_idx in range(mod.max_layer_stage_lens[layer]):
+        op_idx = layer, op_idx
         stage_inputs, stage_outputs = collect_op_design(mod, op_idx, fmuladd_edges)
         mul_inputs_a, mul_inputs_b, _mul_outputs, add_inputs_bs = split_mul_add(
             stage_inputs, stage_outputs
@@ -612,7 +750,10 @@ def build_module(mod, program_graph):
             mul_inputs_a.items(), mul_inputs_b.items(), add_inputs_bs.items()
         ):
             a = Val(RegOrWire.REG, a)
-            b = Val(RegOrWire.REG, b)
+            if "constant" in b or "cst" in b:
+                b = mod.rom_instances[op_idx].data_out_wire
+            else:
+                b = Val(RegOrWire.REG, b)
             add_b = Val(RegOrWire.REG, add_b)
             mod.add_add_mul_transfer(stage, op_idx, Op.MUL, a, b)
             mod.add_add_mul_transfer(
@@ -623,6 +764,18 @@ def build_module(mod, program_graph):
                 inp_b=add_b,
                 res=add_b if program_graph.nodes[add_b.id]["op"] != "input" else None,
                 res_latency=1,
+            )
+
+        stage_inputs, stage_outputs = collect_op_design(mod, op_idx, fmul_edges)
+        for stage, stage_inputs in stage_inputs.items():
+            if stage_inputs is None:
+                continue
+            a, b = [inp.u for inp in stage_inputs]
+            a = Val(RegOrWire.REG, a)
+            b = Val(RegOrWire.REG, b)
+            res = Val(RegOrWire.REG, stage_outputs[stage])
+            mod.add_add_mul_transfer(
+                stage, op_idx, Op.MUL, a, b, res=res, res_latency=0
             )
 
         stage_inputs, stage_outputs = collect_op_design(mod, op_idx, fadd_edges)
@@ -637,43 +790,57 @@ def build_module(mod, program_graph):
                 stage, op_idx, Op.ADD, a, b, res=res, res_latency=1
             )
 
-        stage_inputs, stage_outputs = collect_op_design(mod, op_idx, relu_edges)
+        relu_op_idx = op_idx[1]
+        stage_inputs, stage_outputs = collect_op_design(mod, relu_op_idx, relu_edges)
         for stage, stage_inputs in stage_inputs.items():
             if stage_inputs is None:
                 continue
             a, = [inp.u for inp in stage_inputs]
             a = Val(RegOrWire.REG, a)
             res = Val(RegOrWire.REG, stage_outputs[stage])
-            mod.add_relu_transfer(stage, op_idx, a, res=res, res_latency=0)
+            mod.add_relu_transfer(stage, relu_op_idx, a, res=res, res_latency=0)
+
+        neg_op_idx = op_idx[1]
+        stage_inputs, stage_outputs = collect_op_design(mod, neg_op_idx, neg_edges)
+        for stage, stage_inputs in stage_inputs.items():
+            if stage_inputs is None:
+                continue
+            a, = [inp.u for inp in stage_inputs]
+            a = Val(RegOrWire.REG, a)
+            res = Val(RegOrWire.REG, stage_outputs[stage])
+            mod.add_neg_transfer(stage, neg_op_idx, a, res=res, res_latency=0)
 
 
-def main(design, fp):
+def main(design, fp, num_layers=1):
     program_graph = nx.json_graph.node_link_graph(design["G"])
     fsm_stages = design["topo_sort"]
     inputs = [
-        n for n, attrdict in program_graph.nodes.items() if attrdict["op"] == "input"
+        n for n, attrdict in program_graph.nodes.items() if attrdict["op"] == "input" and "constant" not in n
     ]
     outputs = [
         n for n, attrdict in program_graph.nodes.items() if attrdict["op"] == "output"
     ]
-    constants = [
-        n for n, attrdict in program_graph.nodes.items() if attrdict["op"] == "constant"
-    ]
 
-    mod = Module(fsm_stages, precision=16)
+    mod = Module(fsm_stages, precision=16, num_layers=num_layers)
     mod.add_vals([Val(RegOrWire.REG, r) for r in program_graph.nodes])
     input_wires = [Val(RegOrWire.WIRE, v) for v in inputs]
     input_regs = [Val(RegOrWire.REG, v) for v in inputs]
     output_wires = [Val(RegOrWire.WIRE, v) for v in outputs]
-    output_regs = [Val(RegOrWire.REG, v) for v in outputs]
     mod.add_vals(input_wires + input_regs + output_wires)
-    constants = [
-        Val(RegOrWire.WIRE, v) for v in design["topo_sort"][0] if "constant" in v
-    ]
-    # mod.add_vals(constants)
-    mod.add_vals([Val(RegOrWire.REG, v.id) for v in constants])
 
-    build_module(mod, program_graph)
+    program_graph: nx.MultiDiGraph
+    for layer in range(num_layers):
+        build_module(
+            mod,
+            program_graph.edge_subgraph(
+                [
+                    (u, v, k)
+                    for (u, v, k), attr in program_graph.edges.items()
+                    if f"layer{layer}" in attr["op"]
+                ]
+            ),
+            layer=layer,
+        )
 
     verilog_fp = os.path.split(fp)[0]
     verilog_file = open(f"{verilog_fp}/forward.v", "w")
