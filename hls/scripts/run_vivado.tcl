@@ -25,6 +25,9 @@ import_files -norecurse neg.v -force
 add_files -norecurse -scan_for_includes rom.v -force
 import_files -norecurse rom.v -force
 
+add_files -norecurse -scan_for_includes simple_dual_rw_ram.v -force
+import_files -norecurse simple_dual_rw_ram.v -force
+
 source half_fadd.tcl
 source half_fmul.tcl
 
