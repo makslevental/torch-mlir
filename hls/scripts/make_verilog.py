@@ -109,7 +109,7 @@ def make_mul_or_add(precision, idx, op_name, a_reg, b_reg, res_wire, add_or_mul)
     op = dedent(
         f"""\
             wire   [{precision - 1}:0] {res_wire};
-            f{add_or_mul} #({idx}) f{op_name}(
+            (* keep = "true" *) f{add_or_mul} #({idx[0]}, {idx[1]}) f{op_name}(
                 .clock(clock),
                 .reset(reset),
                 .clock_enable(clock_enable),
@@ -125,7 +125,6 @@ def make_mul_or_add(precision, idx, op_name, a_reg, b_reg, res_wire, add_or_mul)
 def make_relu_or_neg(precision, idx, op_name, a_reg, res_wire, relu_or_neg):
     op = dedent(
         f"""\
-            reg   [{precision - 1}:0] {a_reg};
             wire   [{precision - 1}:0] {res_wire};
             {relu_or_neg} #({idx}) {op_name}(
                 .a({a_reg}),
@@ -138,13 +137,30 @@ def make_relu_or_neg(precision, idx, op_name, a_reg, res_wire, relu_or_neg):
 
 def make_shift_rom(precision, idx, op_name, data_out_wire, addr_width):
     res = []
+    # waddr = ','.join([f"0'b0"] * addr_width)
+    # write_data = ','.join([f"0'b0"] * precision)
+    addr_width = 1
     res.append(
         dedent(
             f"""\
+            reg[RAM_SIZE-1:0] {op_name}_raddr;
+            always @(posedge clock) begin
+                if ({op_name}_raddr == RAM_SIZE) begin
+                    {op_name}_raddr = 0;
+                end else begin
+                    {op_name}_raddr <= {op_name}_raddr+1'b1;
+                end
+            end
+        
             wire   [{precision - 1}:0] {data_out_wire};
-            shift_rom #({idx}, {precision}, {addr_width}) {op_name}(
-                .clock(clock),
-                .data_out({data_out_wire})
+            simple_dual_rw_ram #({idx}, {precision}, {2**addr_width}) {op_name}(
+                .wclk(clock),
+                .waddr({addr_width}'b0),
+                .write_data({op_name}_raddr),
+                .write_en(1'b0),
+                .rclk(clock),
+                .raddr({op_name}_raddr),
+                .read_data({data_out_wire})
             );
             """
         )
@@ -156,8 +172,8 @@ class FAddOrMulOp:
     def __init__(self, idx, precision, add_or_mul) -> None:
         if not isinstance(idx, (tuple, list)):
             idx = [idx]
-        idx = "_".join(map(str, idx))
         self.idx = idx
+        self.idx_str = "_".join(map(str, idx))
         self.add_or_mul = add_or_mul
         self.precision = precision
         self.a_reg = Val(RegOrWire.REG, f"f{self.name}_a")
@@ -168,7 +184,7 @@ class FAddOrMulOp:
 
     @property
     def name(self):
-        return f"{self.add_or_mul}_{self.idx}"
+        return f"{self.add_or_mul}_{self.idx_str}"
 
     def __str__(self):
         return self.name
@@ -348,6 +364,8 @@ class Module:
                 self.neg_instances[idx] = neg
                 self.add_vals([neg.a_reg, neg.res_wire])
 
+        print("max_stage_lens", self.max_layer_stage_lens)
+
         self._max_fsm_stage = 0
         self._fsm_idx_width = 0
 
@@ -385,7 +403,8 @@ class Module:
     def make_assign_wire_to_reg(self):
         assigns = []
         for wire_reg in self.wire_ids.intersection(self.register_ids):
-            if "constant" in wire_reg: continue
+            if "constant" in wire_reg:
+                continue
 
             assigns.append(
                 dedent(
@@ -463,7 +482,7 @@ class Module:
         base_outputs = []
         output_ports = [f"[{self.precision - 1}:0] {o.name}" for o in outputs]
         mod = "`default_nettype none\n"
-        mod += "module forward (\n"
+        mod += "module forward #(RAM_SIZE = 512) (\n"
         mod += ",\n".join([f"\tinput wire {inp}" for inp in base_inputs + input_ports])
         mod += ",\n"
         mod += ",\n".join(
@@ -640,9 +659,10 @@ class Module:
             if reg.reg_or_wire == RegOrWire.WIRE:
                 continue
             if "constant" in reg.name:
-                res.extend([
-                    f"(* max_fanout = {MAX_FANOUT} *) reg [{self.precision - 1}:0] {reg.name};",
-                    f"initial {reg.name} = 16'd{random.randint(0,2**self.precision-1)};"
+                res.extend(
+                    [
+                        f"(* max_fanout = {MAX_FANOUT} *) reg [{self.precision - 1}:0] {reg.name};",
+                        f"initial {reg.name} = 16'd{random.randint(0,2**self.precision-1)};",
                     ]
                 )
             else:
@@ -815,7 +835,9 @@ def main(design, fp, num_layers=1):
     program_graph = nx.json_graph.node_link_graph(design["G"])
     fsm_stages = design["topo_sort"]
     inputs = [
-        n for n, attrdict in program_graph.nodes.items() if attrdict["op"] == "input" and "constant" not in n
+        n
+        for n, attrdict in program_graph.nodes.items()
+        if attrdict["op"] == "input" and "constant" not in n
     ]
     outputs = [
         n for n, attrdict in program_graph.nodes.items() if attrdict["op"] == "output"
@@ -871,4 +893,4 @@ def main(design, fp, num_layers=1):
 if __name__ == "__main__":
     fp = sys.argv[1]
     design = json.load(open(fp))
-    main(design, fp)
+    main(design, fp, num_layers=2)
