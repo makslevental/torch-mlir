@@ -16,16 +16,28 @@ import_files -fileset constrs_1 alveo-u280-xdc.xdc
 add_files -norecurse -scan_for_includes forward.v -force
 import_files -norecurse forward.v -force
 
+add_files -norecurse -scan_for_includes relu.v -force
+import_files -norecurse relu.v -force
+
+add_files -norecurse -scan_for_includes neg.v -force
+import_files -norecurse neg.v -force
+
+add_files -norecurse -scan_for_includes rom.v -force
+import_files -norecurse rom.v -force
+
 source half_fadd.tcl
 source half_fmul.tcl
 
 update_compile_order -fileset sources_1
 
 set_property top forward [current_fileset]
-set_property strategy Flow_AreaOptimized_high [get_runs synth_1]
-set_property STEPS.SYNTH_DESIGN.ARGS.RETIMING true [get_runs synth_1]
-set_property STEPS.SYNTH_DESIGN.ARGS.FLATTEN_HIERARCHY full [get_runs synth_1]
-set_property STEPS.SYNTH_DESIGN.ARGS.RESOURCE_SHARING on [get_runs synth_1]
+set_property top forward [current_fileset]
+set_property strategy Flow_AlternateRoutability [get_runs synth_1]
+#set_property STEPS.SYNTH_DESIGN.ARGS.FLATTEN_HIERARCHY full [get_runs synth_1]
+set_property STEPS.SYNTH_DESIGN.ARGS.FLATTEN_HIERARCHY none [get_runs synth_1]
+set_property STEPS.SYNTH_DESIGN.ARGS.RESOURCE_SHARING off [get_runs synth_1]
+#set_property strategy Congestion_SSI_SpreadLogic_high [get_runs impl_1]
+set_property strategy Performance_WLBlockPlacementFanoutOpt [get_runs impl_1]
 
 launch_runs synth_1 -jobs 16
 wait_on_run synth_1

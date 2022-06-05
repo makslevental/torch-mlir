@@ -8,8 +8,8 @@ class Exp(nn.Module):
     def __init__(self):
         super().__init__()
 
-    @export
-    @annotate_args([None, ([-1, -1, -1, 1], torch.float32, True)])
+    # https://dl.acm.org/doi/pdf/10.1145/2851507
+    # https://hal.inria.fr/inria-00071879/document
     def forward(self, x):
         return (
             x
@@ -19,27 +19,28 @@ class Exp(nn.Module):
             + 1
         )
 
-    # def body(_arg2, _arg3, _arg4, _arg5):
-    #     x = _45[0, _arg3, _arg4, _arg5]
-    #     _80 = x + (x * x) * 0.5 + (x * x * x) * 0.16666666666666666 + (x * x * x * x) * 0.041666666666666664 + 1
-    #     _32[_arg2, _arg3, _arg4, _arg5] = _80
-    # ParFor(body, ranges=(range(0, 1, 1), range(0, 8, 1), range(0, 9, 1),
-    #                      range(0, 9, 1)))
-    # https://dl.acm.org/doi/pdf/10.1145/2851507
-    # https://hal.inria.fr/inria-00071879/document
+
+
+class Div(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        return 0x5F3759DF - x
 
 
 class Softmax(nn.Module):
     def __init__(self):
         super().__init__()
         self.exp = Exp()
+        self.div = Div()
 
     @export
     @annotate_args([None, ([-1, -1, -1, 1], torch.float32, True)])
     def forward(self, x):
         y = self.exp(x)
         z = y.sum()
-        return y / z
+        return y * self.div(z)
 
 
 class NLB(torch.nn.Module):
