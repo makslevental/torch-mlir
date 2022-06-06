@@ -153,7 +153,7 @@ def make_shift_rom(precision, idx, op_name, data_out_wire, addr_width):
             end
         
             wire   [{precision - 1}:0] {data_out_wire};
-            simple_dual_rw_ram #({idx}, {precision}, {2**addr_width}) {op_name}(
+            simple_dual_rw_ram #({idx}, {precision}, {2 ** addr_width}) {op_name}(
                 .wclk(clock),
                 .waddr({addr_width}'b0),
                 .write_data({op_name}_raddr),
@@ -499,19 +499,19 @@ class Module:
         mod_top += indent(
             dedent(
                 ",\n".join(
-                    [
-                        f"input wire {inp}"
-                        for inp in base_inputs + input_ports[:2] + output_ports
-                    ]
+                    [f"input wire {inp}" for inp in base_inputs + input_ports[:2]]
                 )
             ),
             "\t",
+        )
+        mod_top += indent(
+            dedent(",\n".join([f"output wire {inp}" for inp in output_ports])), "\t"
         )
         mod_top += "\n);\n\n"
         mod_top += dedent(
             "\n".join(
                 [
-                    f"""(* keep = "true" *) reg {inp} = {self.precision}'d{random.randint(0, 2**self.precision - 1)};"""
+                    f"""(* keep = "true" *) reg {inp} = {self.precision}'d{random.randint(0, 2 ** self.precision - 1)};"""
                     for inp in input_ports[2:]
                 ]
             )
@@ -563,10 +563,6 @@ class Module:
             [
                 f"wire current_state_fsm_state{str(i).zfill(self.fsm_idx_width)};"
                 for i in range(1, self.max_fsm_stage + 1)
-            ]
-            + [
-                f"wire next_state_fsm_state{str(i).zfill(self.fsm_idx_width)};"
-                for i in range(1, self.max_fsm_stage)
             ]
         )
         return wires
@@ -635,13 +631,6 @@ class Module:
             """
             )
 
-        for i in range(1, self.max_fsm_stage):
-            fsm += dedent(
-                f"""\
-        assign next_state_fsm_state{str(i).zfill(self.fsm_idx_width)} = next_state_fsm[{fsm_2bit_width}'d{i - 1}];
-            """
-            )
-
         return fsm
 
     def make_trees(self):
@@ -699,7 +688,7 @@ class Module:
                 res.extend(
                     [
                         f"(* max_fanout = {MAX_FANOUT} *) reg [{self.precision - 1}:0] {reg.name};",
-                        f"initial {reg.name} = 16'd{random.randint(0,2**self.precision-1)};",
+                        f"initial {reg.name} = 16'd{random.randint(0, 2 ** self.precision - 1)};",
                     ]
                 )
             else:
