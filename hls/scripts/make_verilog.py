@@ -387,7 +387,7 @@ class Module:
 
     @property
     def fsm_stages(self):
-        next_fsm_stage = 0
+        next_fsm_stage = 1
         for i, stage in self._fsm_stages.items():
             yield next_fsm_stage, stage
             next_fsm_stage += self._stage_latencies[i] + 1
