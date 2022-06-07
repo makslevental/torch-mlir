@@ -4,7 +4,6 @@ import io
 import itertools
 import os
 import re
-import struct
 import sys
 from collections import defaultdict, deque
 from textwrap import dedent
@@ -12,35 +11,16 @@ from typing import Tuple
 
 import networkx as nx
 import numpy as np
-from llvmlite.ir import Constant, FloatType
 
-from hls.scripts.mlir_ops import get_default_args, get_array_type, index_map
-
-
-def double_to_hex(f):
-    return hex(struct.unpack("<Q", struct.pack("<d", f))[0])
-
-
-def float_to_hex(f):
-    return hex(struct.unpack("<H", struct.pack("<e", f))[0])
-
-
-def format_cst(cst):
-    c = Constant(FloatType(), float(cst))
-    # return double_to_hex(float(cst))
-    # return float(np.random.randint(1, 100000))
-    return str(c).replace("double ", "").replace("half ", "")
-    # return (handleDoubleToHex(cst)[:11] + "0" * 7).upper().replace("X", "x")
-
-
-def np_to_hex(x):
-    return hex(np.float16(x).view("H"))[2:].zfill(16)
-
+from hls.python.interpreter import DTYPE
+from hls.python.interpreter.util import (
+    get_default_args,
+    index_map,
+    format_cst, DTYPE,
+)
 
 VAR_COUNT = 0
-
 FILE = None
-# DTYPE = "float"
 DTYPE = "half"
 
 
@@ -271,7 +251,7 @@ MACS = {}
 def MAC(*idx):
     if len(idx) < 4:
         _idx = 4 * [0]
-        _idx[0: len(idx)] = idx
+        _idx[0 : len(idx)] = idx
         idx = tuple(_idx)
 
     if idx not in MACS:
@@ -468,121 +448,6 @@ def Forward(forward, max_range, worker_id=None):
     LLVMForward(Args, Args["_arg1"], forward, max_range=max_range)
 
 
-def get_ssas_from_ir_line(line):
-    line = re.sub(r", align \d+", "", line)
-    idents = [f for f, _ in re.findall(r"(%[\d|a-z|_]*|([0-9]*[.])+[0-9]+)", line)]
-    if not idents or "declare" in line:
-        return None, None, None
-
-    if (
-            "fmul" in line
-            or "fadd" in line
-            or "fcmp" in line
-            or "fsub" in line
-            or "fdiv" in line
-            or "fmuladd" in line
-    ):
-        assign, *_deps = idents
-        deps = []
-        for d in _deps:
-            # deps.append(d)
-            try:
-                float(d)
-            except:
-                deps.append(d)
-        if "fmuladd" in line:
-            op = "fmuladd"
-        else:
-            op = line.split("=")[1].strip().split(" ")[0]
-    elif "store" in line:
-        dep, assign = idents
-        deps = [dep]
-        op = "store"
-    elif "expf" in line:
-        assign, *deps = idents
-        op = "expf"
-    elif "relu" in line:
-        assign, *deps = idents
-        op = "relu"
-    elif "fptrunc" in line:
-        assign, *_deps = idents
-        deps = _deps
-        op = "constant"
-    elif "define void @forward" in line:
-        inputs = [
-            f.replace(f"{DTYPE} ", "")
-            for f, _ in re.findall(rf"({DTYPE} (%[\d|a-z|_]*))", line)
-        ]
-        outputs = [
-            f.replace(f"{DTYPE}* ", "")
-            for f, _ in re.findall(rf"({DTYPE}\* (%[\d|a-z|_]*))", line)
-        ]
-        return inputs, outputs, ""
-    else:
-        raise Exception(line)
-
-    return assign, deps, op
-
-
-def topological_sort_grouped(G):
-    indegree_map = {v: d for v, d in G.in_degree() if d > 0}
-    zero_indegree = [v for v, d in G.in_degree() if d == 0]
-    while zero_indegree:
-        yield zero_indegree
-        new_zero_indegree = []
-        for v in zero_indegree:
-            for _, child in G.edges(v):
-                indegree_map[child] -= 1
-                if not indegree_map[child]:
-                    new_zero_indegree.append(child)
-        zero_indegree = new_zero_indegree
-
-
-def crawl_graph(fp):
-    lines = open(fp, "r").readlines()
-    G = nx.DiGraph()
-    inputs = None
-    outputs = None
-    for line in lines:
-        assign, deps, op = get_ssas_from_ir_line(line)
-        if "define" in line:
-            inputs = assign
-            outputs = deps
-            for assig in assign:
-                G.add_node(assig, op="input")
-            for dep in deps:
-                G.add_node(dep, op="output")
-        else:
-            if assign is not None:
-                if assign not in G.nodes:
-                    G.add_node(assign, op=op)
-                for dep in deps:
-                    if dep not in G.nodes:
-                        assert "other_worker" in dep
-                        G.add_node(dep, op="other_worker")
-                    G.add_edge(dep, assign)
-    for i, stage in enumerate(topological_sort_grouped(G)):
-        print(i, len(stage))
-        print(sorted([(s, G.nodes[s]["op"]) for s in stage]))
-        for s in stage:
-            preds = list(G.predecessors(s))
-            if preds:
-                print(s, preds)
-    print()
-    for inp in inputs:
-        for outp in outputs:
-            try:
-                path = nx.shortest_path(G, inp, outp)
-                print("path", inp, outp, len(path))
-            except nx.exception.NetworkXNoPath:
-                # print("no path", inp, outp)
-                continue
-
-
-if __name__ == "__main__":
-    fp = sys.argv[1]
-    crawl_graph(fp)
-
 # declare void @_ssdm_op_SpecResource(...)
 #
 #   call void @_Z12fmul_0_8_0_6ffPf({DTYPE} %v123110, {DTYPE} 6.000000e+00, {DTYPE}* %v5891)
@@ -596,3 +461,16 @@ if __name__ == "__main__":
 # #pragma HLS BIND_STORAGE variable=v86 type=RAM_1P impl=URAM
 # int8_t v87[1][3][34][34];	// L7
 # #pragma HLS BIND_STORAGE variable=v87 type=RAM_2P impl=BRAM latency=2V
+def get_array_type(shape, ptr=True, nd=False):
+    if nd:
+        typ = ""
+        for s in shape:
+            typ += f"[{s} x "
+        typ += DTYPE
+        for _ in shape:
+            typ += "]"
+        if ptr:
+            typ += "*"
+    else:
+        typ = f"{np.prod(shape)} x {DTYPE}"
+    return typ

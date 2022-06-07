@@ -1,15 +1,15 @@
 //===----------------------------------------------------------------------===//
 //
-// Copyright 2020-2021 The ScaleHLS Authors.
+// Forked/modified from https://github.com/hanchenye/scalehls/
 //
 //===----------------------------------------------------------------------===//
 
+#include "EmitBraggHLSPy.h"
 #include "mlir/Tools/mlir-translate/MlirTranslateMain.h"
-#include "EmitHLSPy.h"
 
 int main(int argc, char **argv) {
-  mlir::scalehls::registerEmitHLSPyTranslation();
+  mlir::bragghls::registerEmitHLSPyTranslation();
 
   return mlir::failed(
-      mlir::mlirTranslateMain(argc, argv, "ScaleHLS Translation Tool"));
+      mlir::mlirTranslateMain(argc, argv, "BraggHLS Translation Tool"));
 }

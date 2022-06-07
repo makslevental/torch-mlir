@@ -4,33 +4,45 @@ import itertools
 import math
 import warnings
 from collections import defaultdict
+from dataclasses import dataclass, field
 from functools import reduce
 from textwrap import dedent, indent
+from typing import Any, Tuple, Union
 
-import hls.scripts.mlir_ops
-from hls.scripts.mlir_ops import (
-    AddInst,
-    MulInst,
-    DivInst,
-    ReLUInst,
-    ExpInst,
-    SubInst,
-    get_default_args,
-    GTInst,
-    ArrayIndex,
-    index_map,
-)
+import hls.python.interpreter.mlir_ops
+from hls.python.interpreter.util import get_default_args, index_map
+from hls.python.interpreter.mlir_ops import ArrayIndex
 
-PES = hls.scripts.mlir_ops.PES
+PES = hls.python.interpreter.mlir_ops.PES
 
 import numpy as np
 
 FILE = open("forward.v", "w")
 
+PEIndex = Tuple[int]
 
-# def test_hex():
-#     print(format_cst(1000 + np.random.randn(1)[0]))
 
+
+
+CURRENT_PE: PEIndex = None
+
+
+class PE:
+    def __init__(self, index):
+        self.index = index
+        self._instructions = []
+
+    def push_instructions(self, inst):
+        self._instructions.append(inst)
+
+    def num_instructions(self):
+        return len(self._instructions)
+
+    def push_nop(self):
+        self._instructions.append(NOP())
+
+
+PES: Dict[PEIndex, PE] = {}
 
 def get_val_from_global(global_name, val_idx):
     return int(str(hash((global_name, val_idx)))[:4])
@@ -391,7 +403,7 @@ class Module:
                 inst_inps[inst_inp.name, inst_inp.val_id].append(i)
             elif isinstance(inst_inp, Constant):
                 inst_inps["Constant", inst_inp.val_id].append(i)
-            elif isinstance(inst_inp, Val) and isinstance(
+            elif isinstance(inst_inp, VerilogVal) and isinstance(
                 inst_inp.val_id, (AddInst, SubInst, MulInst, DivInst, ReLUInst, ExpInst)
             ):
                 inst_inps[
@@ -557,19 +569,19 @@ def Forward(forward, max_range):
     for i, idx in enumerate(
         sorted(itertools.product(*[list(range(i)) for i in max_range]))
     ):
-        hls.scripts.mlir_ops.PES[i] = hls.scripts.mlir_ops.PE(i)
+        hls.python.interpreter.mlir_ops.PES[i] = hls.python.interpreter.mlir_ops.PE(i)
 
     Args = get_default_args(forward)
     VerilogForward(
         Args["_arg0"],
         Args["_arg1"],
         forward,
-        hls.scripts.mlir_ops.PES,
+        hls.python.interpreter.mlir_ops.PES,
         max_range=max_range,
     )
 
 
-class Val:
+class VerilogVal:
     def __init__(self, name, val_id):
         self.name = name
         self.val_id = val_id
@@ -582,7 +594,7 @@ class Val:
         if isinstance(other, (float, int, bool)):
             other = Constant(other)
         m = MulInst(self, other)
-        v = Val(f"(* {self} {other})", m)
+        v = VerilogVal(f"(* {self} {other})", m)
         PES[CURRENT_PE].push_instructions(m)
         return v
 
@@ -591,7 +603,7 @@ class Val:
         if isinstance(other, (float, int, bool)):
             other = Constant(other)
         d = DivInst(self, other)
-        v = Val(f"(/ {self} {other})", d)
+        v = VerilogVal(f"(/ {self} {other})", d)
         PES[CURRENT_PE].push_instructions(d)
         return v
 
@@ -600,7 +612,7 @@ class Val:
         if isinstance(other, (float, int, bool)):
             other = Constant(other)
         a = AddInst(self, other)
-        v = Val(f"(+ {self} {other})", a)
+        v = VerilogVal(f"(+ {self} {other})", a)
         PES[CURRENT_PE].push_instructions(a)
         return v
 
@@ -609,7 +621,7 @@ class Val:
         if isinstance(other, (float, int, bool)):
             other = Constant(other)
         s = SubInst(self, other)
-        v = Val(f"(- {self} {other})", s)
+        v = VerilogVal(f"(- {self} {other})", s)
         PES[CURRENT_PE].push_instructions(s)
         return v
 
@@ -618,12 +630,12 @@ class Val:
         if isinstance(other, (float, int, bool)):
             other = Constant(other)
         g = GTInst(self, other)
-        v = Val(f"(> {self} {other})", g)
+        v = VerilogVal(f"(> {self} {other})", g)
         PES[CURRENT_PE].push_instructions(g)
         return v
 
 
-class ArrayVal(Val):
+class ArrayVal(VerilogVal):
     array: ArrayDecl
 
     def __init__(self, name, val_id: ArrayIndex, array: ArrayDecl):
@@ -639,7 +651,7 @@ class GlobalArrayVal(ArrayVal):
         return f"global{self.name}_{'_'.join(map(str, self.val_id))}"
 
 
-class Constant(Val):
+class Constant(VerilogVal):
     def __init__(self, cst_val):
         super().__init__("cst", cst_val)
 
@@ -648,7 +660,7 @@ def ReLU(*args):
     def op(arg):
         pe = PES[CURRENT_PE]
         r = ReLUInst(arg)
-        v = Val(f"(relu {arg})", r)
+        v = VerilogVal(f"(relu {arg})", r)
         pe.push_instructions(r)
         return v
 
@@ -659,7 +671,7 @@ def Exp(*args):
     def op(arg):
         pe = PES[CURRENT_PE]
         r = ExpInst(arg)
-        v = Val(f"(exp {arg})", r)
+        v = VerilogVal(f"(exp {arg})", r)
         pe.push_instructions(r)
         return v
 
@@ -712,12 +724,11 @@ class ArrayDecl:
 
 
 class GlobalArray:
-    def __init__(self, name, global_name, global_array):
-        self.name = name
+    def __init__(self, local_name, global_name, global_array):
+        self.name = local_name
         self.global_name = global_name
         self.global_array = global_array
         self.curr_shape = global_array.shape
-        self.csts = {}
 
     def __getitem__(self, index: ArrayIndex):
         v = GlobalArrayVal(self.name, index, self)
@@ -754,3 +765,55 @@ if __name__ == "__main__":
         ).read()
     )
     print(llmod)
+
+
+@dataclass(frozen=True)
+class _Instruction:
+    pe_id: PEIndex = field(init=False, default_factory=lambda: CURRENT_PE)
+
+
+@dataclass(frozen=True)
+class NOP(_Instruction):
+    pass
+
+
+@dataclass(frozen=True)
+class Bin(_Instruction):
+    left: Any
+    right: Any
+
+
+@dataclass(frozen=True)
+class MulInst(Bin):
+    pass
+
+
+@dataclass(frozen=True)
+class DivInst(Bin):
+    pass
+
+
+@dataclass(frozen=True)
+class AddInst(Bin):
+    pass
+
+@dataclass(frozen=True)
+class SubInst(Bin):
+    pass
+
+
+@dataclass(frozen=True)
+class GTInst(Bin):
+    pass
+
+
+@dataclass(frozen=True)
+class ReLUInst(_Instruction):
+    val: Any
+
+
+@dataclass(frozen=True)
+class ExpInst(_Instruction):
+    val: Any
+
+Instruction = Union[NOP, ExpInst, ReLUInst, MulInst, AddInst, DivInst, SubInst, GTInst]

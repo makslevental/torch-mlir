@@ -1,78 +1,45 @@
 //===----------------------------------------------------------------------===//
 //
-// Copyright 2020-2021 The ScaleHLS Authors.
+// Forked/modified from https://github.com/hanchenye/scalehls/
 //
 //===----------------------------------------------------------------------===//
 
-#include "EmitHLSPy.h"
-#include "llvm/ADT/APFloat.h"
-#include "Utils.h"
+#include "EmitBraggHLSPy.h"
+#include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/Affine/IR/AffineValueMap.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "Visitor.h"
 #include "mlir/IR/AffineExprVisitor.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/IntegerSet.h"
 #include "mlir/Tools/mlir-translate/Translation.h"
+#include "llvm/ADT/APFloat.h"
 #include "llvm/Support/raw_ostream.h"
-#include <iostream>
 
 using namespace mlir;
-using namespace scalehls;
+using namespace bragghls;
+using namespace mlir::func;
 
-//===----------------------------------------------------------------------===//
-// Utils
-//===----------------------------------------------------------------------===//
-
-static SmallString<16> getTypeName(Value val) {
-  // Handle memref, tensor, and vector types.
-  auto valType = val.getType();
-  if (auto arrayType = val.getType().dyn_cast<ShapedType>())
-    valType = arrayType.getElementType();
-
-  // Handle float types.
-  if (valType.isa<Float32Type>())
-    return SmallString<16>("float");
-  else if (valType.isa<Float64Type>())
-    return SmallString<16>("double");
-
-  // Handle integer types.
-  else if (valType.isa<IndexType>())
-    return SmallString<16>("int");
-  else if (auto intType = valType.dyn_cast<IntegerType>()) {
-    if (intType.getWidth() == 1)
-      return SmallString<16>("bool");
-    else {
-      std::string signedness = "";
-      if (intType.getSignedness() == IntegerType::SignednessSemantics::Unsigned)
-        signedness = "u";
-
-      switch (intType.getWidth()) {
-      case 8:
-      case 16:
-      case 32:
-      case 64:
-        return SmallString<16>(signedness + "int" +
-                               std::to_string(intType.getWidth()) + "_t");
-      default:
-        return SmallString<16>("ap_" + signedness + "int<" +
-                               std::to_string(intType.getWidth()) + ">");
-      }
-    }
+SmallVector<int64_t, 8> getIntArrayAttrValue(Operation *op,
+                                                       StringRef name) {
+  SmallVector<int64_t, 8> array;
+  if (auto arrayAttr = op->getAttrOfType<ArrayAttr>(name)) {
+    for (auto attr : arrayAttr)
+      if (auto intAttr = attr.dyn_cast<IntegerAttr>())
+        array.push_back(intAttr.getInt());
+      else
+        return SmallVector<int64_t, 8>();
+    return array;
   } else
-    val.getDefiningOp()->emitError("has unsupported type.");
-
-  return SmallString<16>();
+    return SmallVector<int64_t, 8>();
 }
-
-//===----------------------------------------------------------------------===//
-// Some Base Classes
-//===----------------------------------------------------------------------===//
 
 namespace {
 /// This class maintains the mutable state that cross-cuts and is shared by the
 /// various emitters.
-class ScaleHLSEmitterState {
+class BraggHLSEmitterState {
 public:
-  explicit ScaleHLSEmitterState(raw_ostream &os) : os(os) {}
+  explicit BraggHLSEmitterState(raw_ostream &os) : os(os) {}
 
   // The stream to emit to.
   raw_ostream &os;
@@ -84,16 +51,16 @@ public:
   DenseMap<Value, SmallString<8>> nameTable;
 
 private:
-  ScaleHLSEmitterState(const ScaleHLSEmitterState &) = delete;
-  void operator=(const ScaleHLSEmitterState &) = delete;
+  BraggHLSEmitterState(const BraggHLSEmitterState &) = delete;
+  void operator=(const BraggHLSEmitterState &) = delete;
 };
 } // namespace
 
 namespace {
 /// This is the base class for all of the HLSPy Emitter components.
-class ScaleHLSEmitterBase {
+class BraggHLSEmitterBase {
 public:
-  explicit ScaleHLSEmitterBase(ScaleHLSEmitterState &state)
+  explicit BraggHLSEmitterBase(BraggHLSEmitterState &state)
       : state(state), os(state.os) {}
 
   InFlightDiagnostic emitError(Operation *op, const Twine &message) {
@@ -107,7 +74,7 @@ public:
   void reduceIndent() { state.currentIndent -= 2; }
 
   // All of the mutable state we are maintaining.
-  ScaleHLSEmitterState &state;
+  BraggHLSEmitterState &state;
 
   // The stream to emit to.
   raw_ostream &os;
@@ -128,13 +95,13 @@ public:
   }
 
 private:
-  ScaleHLSEmitterBase(const ScaleHLSEmitterBase &) = delete;
-  void operator=(const ScaleHLSEmitterBase &) = delete;
+  BraggHLSEmitterBase(const BraggHLSEmitterBase &) = delete;
+  void operator=(const BraggHLSEmitterBase &) = delete;
 };
 } // namespace
 
 // TODO: update naming rule.
-SmallString<8> ScaleHLSEmitterBase::addName(Value val, bool isPtr) {
+SmallString<8> BraggHLSEmitterBase::addName(Value val, bool isPtr) {
   assert(!isDeclared(val) && "has been declared before.");
 
   SmallString<8> valName;
@@ -150,7 +117,7 @@ SmallString<8> ScaleHLSEmitterBase::addName(Value val, bool isPtr) {
   return valName;
 }
 
-SmallString<8> ScaleHLSEmitterBase::addAlias(Value val, Value alias) {
+SmallString<8> BraggHLSEmitterBase::addAlias(Value val, Value alias) {
   assert(!isDeclared(alias) && "has been declared before.");
   assert(isDeclared(val) && "hasn't been declared before.");
 
@@ -160,18 +127,15 @@ SmallString<8> ScaleHLSEmitterBase::addAlias(Value val, Value alias) {
   return valName;
 }
 
-void ScaleHLSEmitterBase::removeName(Value val) {
+void BraggHLSEmitterBase::removeName(Value val) {
   assert(isDeclared(val) && "has not been declared before.");
   val.dump();
   state.nameTable.erase(val);
 }
 
-SmallString<8> ScaleHLSEmitterBase::getName(Value val) {
+SmallString<8> BraggHLSEmitterBase::getName(Value val) {
   // For constant scalar operations, the constant number will be returned rather
   // than the value name.
-//  if (val.getType().dyn_cast<ShapedType>()) {
-//    return {"arr_" + state.nameTable.lookup(val).str().str()};
-//  }
   if (auto defOp = val.getDefiningOp()) {
     if (auto constOp = dyn_cast<arith::ConstantOp>(defOp)) {
       auto constAttr = constOp.getValue();
@@ -201,11 +165,11 @@ SmallString<8> ScaleHLSEmitterBase::getName(Value val) {
 //===----------------------------------------------------------------------===//
 
 namespace {
-class ModuleEmitter : public ScaleHLSEmitterBase {
+class ModuleEmitter : public BraggHLSEmitterBase {
 public:
   using operand_range = Operation::operand_range;
-  explicit ModuleEmitter(ScaleHLSEmitterState &state)
-      : ScaleHLSEmitterBase(state) {}
+  explicit ModuleEmitter(BraggHLSEmitterState &state)
+      : BraggHLSEmitterBase(state) {}
 
   /// SCF statement emitters.
   void emitScfFor(scf::ForOp op);
@@ -240,11 +204,6 @@ public:
   void emitTensorToMemref(bufferization::ToMemrefOp op);
   void emitMemrefToTensor(bufferization::ToTensorOp op);
 
-  /// HLS dialect operation emitters.
-  //  void emitStreamChannel(StreamChannelOp op);
-  //  void emitStreamRead(StreamReadOp op);
-  //  void emitStreamWrite(StreamWriteOp op);
-  //  void emitPrimMul(PrimMulOp op);
   template <typename AssignOpType> void emitAssign(AssignOpType op);
 
   /// Control flow operation emitters.
@@ -286,13 +245,13 @@ private:
 //===----------------------------------------------------------------------===//
 
 namespace {
-class AffineExprEmitter : public ScaleHLSEmitterBase,
+class AffineExprEmitter : public BraggHLSEmitterBase,
                           public AffineExprVisitor<AffineExprEmitter> {
 public:
   using operand_range = Operation::operand_range;
-  explicit AffineExprEmitter(ScaleHLSEmitterState &state, unsigned numDim,
+  explicit AffineExprEmitter(BraggHLSEmitterState &state, unsigned numDim,
                              operand_range operands)
-      : ScaleHLSEmitterBase(state), numDim(numDim), operands(operands) {}
+      : BraggHLSEmitterBase(state), numDim(numDim), operands(operands) {}
 
   void visitAddExpr(AffineBinaryOpExpr expr) { emitAffineBinary(expr, "+"); }
   void visitMulExpr(AffineBinaryOpExpr expr) { emitAffineBinary(expr, "*"); }
@@ -902,7 +861,6 @@ void ModuleEmitter::emitAffineYield(AffineYieldOp op) {
       emitValue(result, rank);
       os << " = ";
       emitValue(op.getOperand(resultIdx++), rank);
-      //      os << "\n";
       emitNestedLoopFooter(rank);
     }
   } else if (auto parentOp = dyn_cast<AffineParallelOp>(op->getParentOp())) {
@@ -1439,7 +1397,7 @@ void ModuleEmitter::emitArrayDecl(Value array, bool input, bool output, bool glo
   auto arrayType = array.getType().cast<ShapedType>();
   if (arrayType.hasStaticShape()) {
     emitValue(array);
-    os << " = ArrayDecl('";
+    os << " = Array('";
     os << getName(array);
     os << "', ";
     if (!arrayType.getShape().empty())
@@ -1501,22 +1459,6 @@ void ModuleEmitter::emitNestedLoopFooter(unsigned rank) {
 /// MLIR component and HLS C++ pragma emitters.
 void ModuleEmitter::emitBlock(Block &block) {
   for (auto &op : block) {
-
-//    if (!llvm::dyn_cast<scf::YieldOp>(op) &&
-//        !llvm::dyn_cast<AffineYieldOp>(op)) {
-//      std::string s;
-//      llvm::raw_string_ostream rs{s};
-//      op.print(rs);
-//      std::stringstream ss(s);
-//      std::string line;
-//      while (std::getline(ss, line, '\n')) {
-//        indent();
-////        os << "# " << line << "\n";
-//        os << "\n";
-//        break;
-//      }
-//    }
-
     if (ExprVisitor(*this).dispatchVisitor(&op)) {
       continue;
     }
@@ -1586,13 +1528,6 @@ void ModuleEmitter::emitFunction(FuncOp func) {
   // Emit function body.
   addIndent();
 
-//  args = []
-//for index in np.ndindex(*_arg0.curr_shape):
-//  args.append(f"float {_arg0.var_name}_{'_'.join(map(str, index))}")
-//for index in np.ndindex(*_56.curr_shape):
-//  args.append(f"float* {_56.var_name}_{'_'.join(map(str, index))}")
-//print(f"define void @forward({', '.join(args)}) {{\n")
-
   emitBlock(func.front());
   reduceIndent();
   os << "\n";
@@ -1605,10 +1540,7 @@ void ModuleEmitter::emitFunction(FuncOp func) {
 void ModuleEmitter::emitModule(ModuleOp module) {
   os << R"XXX(import sys
 import numpy as np
-# from hls.scripts.mlir_ops import ArrayDecl, ParFor, ReLU, Exp, GlobalArray
-# from hls.scripts.verilog_val import Forward
-# from hls.scripts.llvm_val import Forward, FMulAdd, ArrayDecl, ParFor, ReLU, Exp, GlobalArray
-from hls.scripts.cpp_val import Forward, FMulAdd, ArrayDecl, ParFor, FMac, Add, GlobalArray, Copy
+from hls.python.interpreter import *
 )XXX";
   os << "\n\n";
   os << " # fmt: off\n";
@@ -1633,23 +1565,23 @@ from hls.scripts.cpp_val import Forward, FMulAdd, ArrayDecl, ParFor, FMac, Add, 
   }
   os << R"XXX(
 if __name__ == "__main__":
-    Forward(forward, worker_id=None)
+    Forward(forward)
 )XXX";
 }
 
 //===----------------------------------------------------------------------===//
-// Entry of scalehls-translate
+// Entry of bragghls-translate
 //===----------------------------------------------------------------------===//
 
-LogicalResult scalehls::emitHLSPy(ModuleOp module, llvm::raw_ostream &os) {
-  ScaleHLSEmitterState state(os);
+LogicalResult bragghls::emitHLSPy(ModuleOp module, llvm::raw_ostream &os) {
+  BraggHLSEmitterState state(os);
   ModuleEmitter(state).emitModule(module);
   return failure(state.encounteredError);
 }
 
-void scalehls::registerEmitHLSPyTranslation() {
+void bragghls::registerEmitHLSPyTranslation() {
   static TranslateFromMLIRRegistration toHLSPy(
       "emit-hlspy", emitHLSPy, [&](DialectRegistry &registry) {
-        scalehls::registerAllDialects(registry);
+        bragghls::registerAllDialects(registry);
       });
 }

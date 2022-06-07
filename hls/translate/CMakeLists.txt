@@ -5,18 +5,15 @@ set(LLVM_LINK_COMPONENTS
         Support
         )
 
-add_llvm_tool(scalehls-translate
+add_llvm_tool(bragghls-translate
         translate.cpp
-        EmitHLSPy.cpp
-        Utils.cpp
+        EmitBraggHLSPy.cpp
         )
 
-llvm_update_compile_flags(scalehls-translate)
+llvm_update_compile_flags(bragghls-translate)
 
-target_link_libraries(scalehls-translate
+target_link_libraries(bragghls-translate
         PRIVATE
         ${dialect_libs}
         ${translation_libs}
         )
-
-#add_executable(make_schedule .make_schedule.cpp)

@@ -1,21 +1,21 @@
 //===----------------------------------------------------------------------===//
 //
-// Copyright 2020-2021 The ScaleHLS Authors.
+// Forked/modified from https://github.com/hanchenye/scalehls/
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef SCALEHLS_TRANSLATION_EMITHLSPy_H
-#define SCALEHLS_TRANSLATION_EMITHLSPy_H
+#ifndef BRAGGHLS_TRANSLATION_EMITHLSPy_H
+#define BRAGGHLS_TRANSLATION_EMITHLSPy_H
 
 #include "mlir/IR/BuiltinOps.h"
 
 namespace mlir {
-namespace scalehls {
+namespace bragghls {
 
 LogicalResult emitHLSPy(ModuleOp module, llvm::raw_ostream &os);
 void registerEmitHLSPyTranslation();
 
-} // namespace scalehls
+} // namespace bragghls
 } // namespace mlir
 
-#endif // SCALEHLS_TRANSLATION_EMITHLSPy_H
+#endif // BRAGGHLS_TRANSLATION_EMITHLSPy_H

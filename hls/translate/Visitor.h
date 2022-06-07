@@ -1,11 +1,11 @@
 //===----------------------------------------------------------------------===//
 //
-// Copyright 2020-2021 The ScaleHLS Authors.
+// Forked/modified from https://github.com/hanchenye/scalehls/
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef SCALEHLS_DIALECT_HLS_VISITOR_H
-#define SCALEHLS_DIALECT_HLS_VISITOR_H
+#ifndef BRAGGHLS_DIALECT_HLS_VISITOR_H
+#define BRAGGHLS_DIALECT_HLS_VISITOR_H
 
 #include "InitAllDialects.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -14,7 +14,7 @@
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 
 namespace mlir {
-namespace scalehls {
+namespace bragghls {
 
 /// This class is a visitor for SSACFG operation nodes.
 template <typename ConcreteType, typename ResultType, typename... ExtraArgs>
@@ -44,10 +44,6 @@ public:
             tensor::ReshapeOp, memref::ReshapeOp, memref::CollapseShapeOp,
             memref::ExpandShapeOp, memref::ReinterpretCastOp,
             bufferization::ToMemrefOp, bufferization::ToTensorOp,
-
-            // HLS dialect operations.
-//            DataflowBufferOp, StreamChannelOp, StreamReadOp, StreamWriteOp,
-//            PrimMulOp, PrimCastOp, PrimBufferOp,
 
             // Control flow operations.
             func::CallOp, func::ReturnOp,
@@ -141,15 +137,6 @@ public:
   HANDLE(bufferization::ToMemrefOp);
   HANDLE(bufferization::ToTensorOp);
 
-  // HLS dialect operations.
-//  HANDLE(DataflowBufferOp);
-//  HANDLE(StreamChannelOp);
-//  HANDLE(StreamReadOp);
-//  HANDLE(StreamWriteOp);
-//  HANDLE(PrimMulOp);
-//  HANDLE(PrimCastOp);
-//  HANDLE(PrimBufferOp);
-
   // Control flow operations.
   HANDLE(func::CallOp);
   HANDLE(func::ReturnOp);
@@ -214,7 +201,7 @@ public:
   HANDLE(arith::FPToSIOp);
 #undef HANDLE
 };
-} // namespace scalehls
+} // namespace bragghls
 } // namespace mlir
 
-#endif // SCALEHLS_DIALECT_HLS_VISITOR_H
+#endif // BRAGGHLS_DIALECT_HLS_VISITOR_H

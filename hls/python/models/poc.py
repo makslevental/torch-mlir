@@ -1,20 +1,15 @@
-import inspect
 import argparse
-
 import os
-import pathlib
-from pathlib import Path
 import re
 import shutil
 import stat
 import subprocess
+from pathlib import Path
 
 import torch
 
 # noinspection PyUnresolvedReferences
 from torch import nn
-from torchvision.models.resnet import BasicBlock
-
 from torch_mlir.dialects.torch.importer.jit_ir import ModuleBuilder
 
 # noinspection PyUnresolvedReferences
@@ -27,13 +22,10 @@ from torch_mlir_e2e_test.linalg_on_tensors_backends.refbackend import RefBackend
 # noinspection PyUnresolvedReferences
 from torch_mlir_e2e_test.torchscript.annotations import annotate_args, export
 from torch_mlir_e2e_test.utils import run_pipeline_with_repro_report
+from torchvision.models.resnet import BasicBlock
 
 from hls.python.models.braggnn import (
     BraggNN,
-    cnn_layers_1,
-    cnn_layers_2,
-    dense_layers,
-    theta_phi_g_combine,
 )
 from hls.python.models.layers import make_layer
 from hls.python.models.resnet18 import ResNet18
@@ -244,6 +236,7 @@ def make_wrapper(wrapper_str, in_shape, out_shape):
 
     return wrapper_str
 
+SCRIPTS_PATH = "../scripts"
 
 def put_script_files(*, out_str, in_shape, out_shape, out_dir, forward_suffix=""):
     out_str = re.sub(r"cf.assert .*", "", out_str)
@@ -273,13 +266,13 @@ def put_script_files(*, out_str, in_shape, out_shape, out_dir, forward_suffix=""
     # shutil.copyfile("mlir_ops.py", f"{out_dir}/mlir_ops.py")
     # shutil.copyfile("llvm_val.py", f"{out_dir}/llvm_val.py")
     # shutil.copyfile("verilog_val.py", f"{out_dir}/verilog_val.py")
-    shutil.copyfile("translate.sh", f"{out_dir}/translate.sh")
+    shutil.copyfile(f"{SCRIPTS_PATH}/translate.sh", f"{out_dir}/translate.sh")
     st = os.stat(f"{out_dir}/translate.sh")
     os.chmod(f"{out_dir}/translate.sh", st.st_mode | stat.S_IEXEC)
 
     # shutil.copyfile("make_schedule.py", f"{out_dir}/make_schedule.py")
-    shutil.copyfile("run_vivado.tcl", f"{out_dir}/run_vivado.tcl")
-    shutil.copyfile("run_vivado.sh", f"{out_dir}/run_vivado.sh")
+    shutil.copyfile(f"{SCRIPTS_PATH}/run_vivado.tcl", f"{out_dir}/run_vivado.tcl")
+    shutil.copyfile(f"{SCRIPTS_PATH}/run_vivado.sh", f"{out_dir}/run_vivado.sh")
     st = os.stat(f"{out_dir}/run_vivado.sh")
     os.chmod(f"{out_dir}/run_vivado.sh", st.st_mode | stat.S_IEXEC)
 

@@ -1,1 +1,0 @@
-./bin/scalehls-translate /home/maksim/dev_projects/torch-mlir/hls/scripts/individual_layers/BraggNN.4/forward.csts.mlir --emit-hlspy --mlir-print-elementsattrs-with-hex-if-larger=-1 > /home/maksim/dev_projects/torch-mlir/hls/scripts/individual_layers/BraggNN.4/forward.py

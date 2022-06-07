@@ -30,14 +30,14 @@ open("forward.affine.mlir", "w").writelines(new_lines)
 EOF
 sed -i.bak 's/scf\.yield//g' forward.affine.mlir
 
-scalehls-translate forward.affine.mlir --emit-hlspy --mlir-print-elementsattrs-with-hex-if-larger=-1 -o forward.py
+bragghls-translate forward.affine.mlir --emit-hlspy --mlir-print-elementsattrs-with-hex-if-larger=-1 -o forward.py
 
-python ../../scripts/mlir_ops.py forward.py --macs
+python ../../python/interpreter/rewriters/python.py forward.py --macs
 FN=macs python forward_rewritten.py
-
-python ../../scripts/mlir_ops.py forward.py
+#
+python ../../python/interpreter/rewriters/python.py forward.py
 FN=regular python forward_rewritten.py
 
-python ../../scripts/cpp_val.py "$PWD"/forward_regular.cpp
+python ../../python/interpreter/cpp_scheduler.py "$PWD"/forward_regular.cpp
 
-python ../../scripts/make_verilog.py "$PWD"/design.json
+python ../../python/interpreter/rewriters/make_verilog.py "$PWD"/design.json
