@@ -81,6 +81,7 @@ NEG_LATENCY = 0
 FSM_STAGE_INTERVAL = 2
 COLLAPSE_TREES = True
 MAX_FANOUT = 10
+USE_BRAM = False
 
 
 def latency_for_op(op):
@@ -311,10 +312,11 @@ class Module:
         self.precision = precision
         self.val_graph = nx.MultiDiGraph()
         self.mul_instances: Dict[Tuple[int, int], FMul] = {}
-        self.rom_instances: Dict[Tuple[int, int], ShiftROM] = {}
         self.add_instances: Dict[Tuple[int, int], FAdd] = {}
         self.relu_instances: Dict[int, ReLU] = {}
         self.neg_instances: Dict[int, Neg] = {}
+        if USE_BRAM:
+            self.rom_instances: Dict[Tuple[int, int], ShiftROM] = {}
 
         self.max_layer_stage_lens: Dict[int, int] = {}
         self.name_to_val = {}
@@ -343,8 +345,9 @@ class Module:
                 self.add_vals(add.registers)
                 self.add_vals([add.res_wire])
                 rom = ShiftROM(idx, precision, num_csts=512)
-                self.rom_instances[idx] = rom
-                self.add_vals([rom.data_out_wire])
+                if USE_BRAM:
+                    self.rom_instances[idx] = rom
+                    self.add_vals([rom.data_out_wire])
 
             num_relus = 0
             for _, stage in self._fsm_stages.items():
@@ -403,7 +406,7 @@ class Module:
     def make_assign_wire_to_reg(self):
         assigns = []
         for wire_reg in self.wire_ids.intersection(self.register_ids):
-            if "constant" in wire_reg:
+            if USE_BRAM and "constant" in wire_reg:
                 continue
 
             assigns.append(
@@ -644,7 +647,7 @@ class Module:
                             (edge_attr["stage"], v.name)
                             for v, edge_attrs in edges.items()
                             for _, edge_attr in edge_attrs.items()
-                            if "constant" not in v.name
+                            if not USE_BRAM or "constant" not in v.name
                         ]
                     )
                 else:
@@ -676,8 +679,9 @@ class Module:
             yield relu.make()
         for neg in self.neg_instances.values():
             yield neg.make()
-        for rom in self.rom_instances.values():
-            yield rom.make()
+        if USE_BRAM:
+            for rom in self.rom_instances.values():
+                yield rom.make()
 
     def make_registers(self):
         res = []
@@ -796,7 +800,7 @@ def build_module(mod, program_graph, layer):
             mul_inputs_a.items(), mul_inputs_b.items(), add_inputs_bs.items()
         ):
             a = Val(RegOrWire.REG, a)
-            if "constant" in b or "cst" in b:
+            if USE_BRAM and ("constant" in b or "cst" in b):
                 b = mod.rom_instances[op_idx].data_out_wire
             else:
                 b = Val(RegOrWire.REG, b)
