@@ -109,7 +109,7 @@ def make_mul_or_add(precision, idx, op_name, a_reg, b_reg, res_wire, add_or_mul)
     op = dedent(
         f"""\
             wire   [{precision - 1}:0] {res_wire};
-            (* keep = "true" *) f{add_or_mul} #({idx[0]}, {idx[1]}) f{op_name}(
+            (* keep = "true" *) f{add_or_mul} #({idx[0]}, {idx[1]}, {precision}) f{op_name}(
                 .clock(clock),
                 .reset(reset),
                 .clock_enable(clock_enable),
@@ -143,7 +143,7 @@ def make_shift_rom(precision, idx, op_name, data_out_wire, addr_width):
     res.append(
         dedent(
             f"""\
-            reg[RAM_SIZE-1:0] {op_name}_raddr;
+            reg[{addr_width}-1:0] {op_name}_raddr;
             always @(posedge clock) begin
                 if ({op_name}_raddr == RAM_SIZE) begin
                     {op_name}_raddr = 0;
@@ -153,11 +153,11 @@ def make_shift_rom(precision, idx, op_name, data_out_wire, addr_width):
             end
         
             wire   [{precision - 1}:0] {data_out_wire};
-            simple_dual_rw_ram #({idx}, {precision}, {2**addr_width}) {op_name}(
+            simple_dual_rw_ram #({idx}, {precision}, {2 ** addr_width}) {op_name}(
                 .wclk(clock),
                 .waddr({addr_width}'b0),
                 .write_data({op_name}_raddr),
-                .write_en(1'b0),
+                .write_en(1'b1),
                 .rclk(clock),
                 .raddr({op_name}_raddr),
                 .read_data({data_out_wire})
@@ -481,21 +481,74 @@ class Module:
 
         base_outputs = []
         output_ports = [f"[{self.precision - 1}:0] {o.name}" for o in outputs]
-        mod = "`default_nettype none\n"
-        mod += "module forward #(RAM_SIZE = 512) (\n"
-        mod += ",\n".join([f"\tinput wire {inp}" for inp in base_inputs + input_ports])
-        mod += ",\n"
-        mod += ",\n".join(
-            [f"\toutput wire {outp}" for outp in base_outputs + output_ports]
-        )
-        mod += "\n);\n"
 
-        return mod
+        input_wires = ",\n".join(
+            [f"input wire {inp}" for inp in base_inputs + input_ports]
+        )
+        output_wires = ",\n".join(
+            [f"output wire {outp}" for outp in base_outputs + output_ports]
+        )
+
+        mod_top = dedent(
+            f"""\
+        `default_nettype none
+        module forward (
+        """
+        )
+
+        mod_top += indent(
+            dedent(
+                ",\n".join(
+                    [f"input wire {inp}" for inp in base_inputs + input_ports[:2]]
+                )
+            ),
+            "\t",
+        )
+        mod_top += indent(
+            dedent(",\n".join([f"output wire {inp}" for inp in output_ports])), "\t"
+        )
+        mod_top += "\n);\n\n"
+        mod_top += dedent(
+            "\n".join(
+                [
+                    f"""(* keep = "true" *) reg {inp} = {self.precision}'d{random.randint(0, 2 ** self.precision - 1)};"""
+                    for inp in input_ports[2:]
+                ]
+            )
+        )
+
+        mod_top += "\n"
+        mod_top += "\nforward_inner #(512) _forward_inner(\n"
+        mod_top += indent(
+            dedent(
+                ",\n".join(
+                    [f".{port}({port})" for port in base_inputs + inputs + outputs]
+                )
+            ),
+            "\t",
+        )
+        mod_top += "\n"
+        mod_top += dedent(
+            f"""\
+        );
+        endmodule
+        """
+        )
+
+        mod_inner = dedent(
+            f"""\
+        module forward_inner #(RAM_SIZE = 512) (
+        """
+        )
+        mod_inner += indent(dedent(input_wires + ",\n" + output_wires), "\t")
+        mod_inner += "\n);\n"
+
+        return "\n".join([mod_top, mod_inner])
 
     def make_fsm_params(self):
         params = "\n".join(
             [
-                f"parameter fsm_state{str(i).zfill(self.fsm_idx_width)} = {self.max_fsm_stage + 1}'d{1 << i};"
+                f"parameter fsm_state{str(i).zfill(self.fsm_idx_width)} = {self.max_fsm_stage + 1}'d{1 << i - 1};"
                 for i in range(1, self.max_fsm_stage + 1)
             ]
         )
@@ -509,11 +562,7 @@ class Module:
         wires = "\n".join(
             [
                 f"wire current_state_fsm_state{str(i).zfill(self.fsm_idx_width)};"
-                for i in range(0, self.max_fsm_stage + 1)
-            ]
-            + [
-                f"wire next_state_fsm_state{str(i).zfill(self.fsm_idx_width)};"
-                for i in range(0, self.max_fsm_stage)
+                for i in range(1, self.max_fsm_stage + 1)
             ]
         )
         return wires
@@ -582,13 +631,6 @@ class Module:
             """
             )
 
-        for i in range(1, self.max_fsm_stage):
-            fsm += dedent(
-                f"""\
-        assign next_state_fsm_state{str(i).zfill(self.fsm_idx_width)} = next_state_fsm[{fsm_2bit_width}'d{i - 1}];
-            """
-            )
-
         return fsm
 
     def make_trees(self):
@@ -625,22 +667,6 @@ class Module:
                 else:
                     yield ""
 
-    # def make_shift_rom_fmul_connections(self):
-    #     rev = self.val_graph.reverse().adj
-    #     for idx, mul in self.mul_instances.items():
-    #         occupied_stages = rev[mul.b_reg]
-    #         for i in range(self.max_fsm_stage):
-    #             if True:
-    #                 print()
-    #         rom = self.rom_instances[idx]
-    #         dedent(
-    #             f"""\
-    #             always @ (posedge clock) begin
-    #                 {mul.b_reg} = {rom.data_out_reg};
-    #             end
-    #             """
-    #         )
-
     def make_op_instances(self):
         for mul in self.mul_instances.values():
             yield mul.make()
@@ -662,7 +688,7 @@ class Module:
                 res.extend(
                     [
                         f"(* max_fanout = {MAX_FANOUT} *) reg [{self.precision - 1}:0] {reg.name};",
-                        f"initial {reg.name} = 16'd{random.randint(0,2**self.precision-1)};",
+                        f"initial {reg.name} = 16'd{random.randint(0, 2 ** self.precision - 1)};",
                     ]
                 )
             else:
@@ -777,7 +803,7 @@ def build_module(mod, program_graph, layer):
             add_b = Val(RegOrWire.REG, add_b)
             mod.add_add_mul_transfer(stage, op_idx, Op.MUL, a, b)
             mod.add_add_mul_transfer(
-                stage + MUL_LATENCY,
+                stage,
                 op_idx,
                 op_type=Op.ADD,
                 inp_a=mul_res_reg,

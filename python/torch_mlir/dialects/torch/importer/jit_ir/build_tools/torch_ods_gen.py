@@ -249,6 +249,7 @@ def emit_ops(emitter_td: TextEmitter, registry: Registry):
             "aten::sub.Tensor : (Tensor, Tensor, Scalar) -> (Tensor)",
             "aten::mul.Tensor : (Tensor, Tensor) -> (Tensor)",
             "aten::div.Tensor : (Tensor, Tensor) -> (Tensor)",
+            "aten::logical_or : (Tensor, Tensor) -> (Tensor)",
             "aten::lerp.Tensor : (Tensor, Tensor, Tensor) -> (Tensor)",
             "aten::eq.Tensor : (Tensor, Tensor) -> (Tensor)",
             "aten::gt.Tensor : (Tensor, Tensor) -> (Tensor)",
@@ -267,6 +268,8 @@ def emit_ops(emitter_td: TextEmitter, registry: Registry):
             "aten::fmod.Scalar : (Tensor, Scalar) -> (Tensor)",
             "aten::masked_fill.Scalar : (Tensor, Tensor, Scalar) -> (Tensor)",
             "aten::clamp : (Tensor, Scalar?, Scalar?) -> (Tensor)",
+            "aten::clamp_min : (Tensor, Scalar) -> (Tensor)",
+            "aten::clamp_max : (Tensor, Scalar) -> (Tensor)",
             "aten::log2 : (Tensor) -> (Tensor)",
             "aten::rsqrt : (Tensor) -> (Tensor)",
             "aten::abs : (Tensor) -> (Tensor)",
@@ -288,6 +291,7 @@ def emit_ops(emitter_td: TextEmitter, registry: Registry):
     emit("aten::gelu : (Tensor, str) -> (Tensor)")
     emit("aten::pow.Tensor_Scalar : (Tensor, Scalar) -> (Tensor)")
     emit("aten::threshold_backward : (Tensor, Tensor, Scalar) -> (Tensor)")
+    emit("aten::zero.functional : (Tensor) -> (Tensor)")
 
     # Ops without value semantics but the corresponding without trailing
     # underscore variant doesn't exist.
@@ -387,6 +391,7 @@ def emit_ops(emitter_td: TextEmitter, registry: Registry):
     emit("aten::tensor.int : (int, int?, Device?, bool) -> (Tensor)")
     emit("aten::_shape_as_tensor : (Tensor) -> (Tensor)")
     emit("aten::all : (Tensor) -> (Tensor)")
+    emit("aten::all.bool : (bool[]) -> (bool)")
     emit("aten::any : (Tensor) -> (Tensor)")
     emit("aten::any.dim : (Tensor, int, bool) -> (Tensor)")
     emit("aten::arange : (Scalar, int?, int?, Device?, bool?) -> (Tensor)")
@@ -445,6 +450,7 @@ def emit_ops(emitter_td: TextEmitter, registry: Registry):
     emit("aten::Int.Tensor : (Tensor) -> (int)", has_folder=True)
     emit("aten::Float.Tensor : (Tensor) -> (float)", has_folder=True)
     emit_with_mutating_variants("aten::dropout : (Tensor, float, bool) -> (Tensor)")
+    emit("aten::native_dropout : (Tensor, float, bool?) -> (Tensor, Tensor)")
     emit("aten::t : (Tensor) -> (Tensor)")
     emit("aten::full : (int[], Scalar, int?, int?, Device?, bool?) -> (Tensor)")
     emit("aten::full_like : (Tensor, Scalar, int?, int?, Device?, bool?, int?) -> (Tensor)")
@@ -535,6 +541,10 @@ def emit_ops(emitter_td: TextEmitter, registry: Registry):
     emit("aten::tanh_backward : (Tensor, Tensor) -> (Tensor)")
     emit("aten::gelu_backward : (Tensor, Tensor, str) -> (Tensor)")
     emit("aten::_log_softmax_backward_data : (Tensor, Tensor, int, int) -> (Tensor)")
+    emit("aten::native_layer_norm_backward : (Tensor, Tensor, int[], Tensor, Tensor, Tensor?, Tensor?, bool[]) -> (Tensor, Tensor, Tensor)")
+    emit("aten::embedding_dense_backward : (Tensor, Tensor, int, int, bool) -> (Tensor)")
+    emit("aten::native_batch_norm_backward : (Tensor, Tensor, Tensor?, Tensor?, Tensor?, Tensor?, Tensor?, bool, float, bool[]) -> (Tensor, Tensor, Tensor)")
+    emit("aten::native_dropout_backward : (Tensor, Tensor, float) -> (Tensor)")
 
     # ==========================================================================
     # `prim::` namespace.
