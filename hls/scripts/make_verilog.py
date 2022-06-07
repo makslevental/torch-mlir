@@ -507,6 +507,7 @@ class Module:
             ),
             "\t",
         )
+        mod_top += ",\n"
         mod_top += indent(
             dedent(",\n".join([f"output wire {inp}" for inp in output_ports])), "\t"
         )
