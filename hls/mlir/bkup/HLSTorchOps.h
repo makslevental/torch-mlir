@@ -14,6 +14,6 @@
 #include "torch-mlir/Dialect/Torch/IR/TorchTypes.h"
 
 #define GET_OP_CLASSES
-#include "/Users/mlevental/dev_projects/torch-mlir/build/tools/torch-mlir/hls/mlir/HLSTorchOps.h.inc"
+#include "/Users/mlevental/dev_projects/torch-mlir/build/tools/torch-mlir/hls/mlir/BraggHLSOps.h.inc"
 
 #endif // HLS_TORCHOPS_H

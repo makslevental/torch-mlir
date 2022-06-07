@@ -7,20 +7,20 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "HLSPassDetail.h"
-#include "HLSPasses.h"
+#include "BraggHLSPassDetail.h"
+#include "BraggHLSPasses.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
 
 using namespace mlir;
 using namespace mlir::func;
-using namespace mlir::torch::HLS;
+using namespace mlir::BraggHLS;
 
 namespace {
 
 class DropPublicReturnPass
-    : public HLSDropPublicReturnBase<DropPublicReturnPass> {
+    : public BraggHLSDropPublicReturnBase<DropPublicReturnPass> {
   void runOnOperation() override {
     auto module = getOperation();
     module.walk([&](FuncOp func) {
@@ -65,6 +65,6 @@ class DropPublicReturnPass
 } // namespace
 
 std::unique_ptr<OperationPass<ModuleOp>>
-mlir::torch::HLS::createHLSDropPublicReturnPass() {
+mlir::BraggHLS::createBraggHLSDropPublicReturnPass() {
   return std::make_unique<DropPublicReturnPass>();
 }

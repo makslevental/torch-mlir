@@ -3,16 +3,12 @@ from __future__ import annotations
 import io
 import itertools
 import os
-import re
-import sys
 from collections import defaultdict, deque
 from textwrap import dedent
 from typing import Tuple
 
-import networkx as nx
 import numpy as np
 
-from hls.python.interpreter import DTYPE
 from hls.python.interpreter.util import (
     get_default_args,
     index_map,
@@ -21,7 +17,6 @@ from hls.python.interpreter.util import (
 
 VAR_COUNT = 0
 FILE = None
-DTYPE = "half"
 
 
 class LLVMVal:
@@ -251,7 +246,7 @@ MACS = {}
 def MAC(*idx):
     if len(idx) < 4:
         _idx = 4 * [0]
-        _idx[0 : len(idx)] = idx
+        _idx[0: len(idx)] = idx
         idx = tuple(_idx)
 
     if idx not in MACS:
@@ -448,19 +443,6 @@ def Forward(forward, max_range, worker_id=None):
     LLVMForward(Args, Args["_arg1"], forward, max_range=max_range)
 
 
-# declare void @_ssdm_op_SpecResource(...)
-#
-#   call void @_Z12fmul_0_8_0_6ffPf({DTYPE} %v123110, {DTYPE} 6.000000e+00, {DTYPE}* %v5891)
-# call void (...) @_ssdm_op_SpecResource([1 x [3 x [34 x [34 x i8]]]]* %v85, i64 666, i64 23, i64 2)
-# call void (...) @_ssdm_op_SpecResource([1 x [3 x [34 x [34 x i8]]]]* %v86, i64 666, i64 20, i64 -1)
-# call void (...) @_ssdm_op_SpecResource([1 x [3 x [34 x [34 x i8]]]]* %v87, i64 666, i64 22, i64 2)
-#
-# volatile int8_t v85[1][3][34][34];	// L71
-# #pragma HLS BIND_STORAGE variable=v85 type=RAM_2P impl=LUTRAM latency=2
-# int8_t v86[1][3][34][34];	// L71
-# #pragma HLS BIND_STORAGE variable=v86 type=RAM_1P impl=URAM
-# int8_t v87[1][3][34][34];	// L7
-# #pragma HLS BIND_STORAGE variable=v87 type=RAM_2P impl=BRAM latency=2V
 def get_array_type(shape, ptr=True, nd=False):
     if nd:
         typ = ""
@@ -474,3 +456,17 @@ def get_array_type(shape, ptr=True, nd=False):
     else:
         typ = f"{np.prod(shape)} x {DTYPE}"
     return typ
+
+# declare void @_ssdm_op_SpecResource(...)
+#
+#   call void @_Z12fmul_0_8_0_6ffPf({DTYPE} %v123110, {DTYPE} 6.000000e+00, {DTYPE}* %v5891)
+# call void (...) @_ssdm_op_SpecResource([1 x [3 x [34 x [34 x i8]]]]* %v85, i64 666, i64 23, i64 2)
+# call void (...) @_ssdm_op_SpecResource([1 x [3 x [34 x [34 x i8]]]]* %v86, i64 666, i64 20, i64 -1)
+# call void (...) @_ssdm_op_SpecResource([1 x [3 x [34 x [34 x i8]]]]* %v87, i64 666, i64 22, i64 2)
+#
+# volatile int8_t v85[1][3][34][34];	// L71
+# #pragma HLS BIND_STORAGE variable=v85 type=RAM_2P impl=LUTRAM latency=2
+# int8_t v86[1][3][34][34];	// L71
+# #pragma HLS BIND_STORAGE variable=v86 type=RAM_1P impl=URAM
+# int8_t v87[1][3][34][34];	// L7
+# #pragma HLS BIND_STORAGE variable=v87 type=RAM_2P impl=BRAM latency=2V

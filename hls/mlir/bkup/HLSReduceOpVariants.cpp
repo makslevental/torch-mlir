@@ -18,7 +18,7 @@
 using namespace mlir;
 using namespace mlir::torch;
 using namespace mlir::torch::Torch;
-using namespace mlir::torch::HLS;
+using namespace mlir::BraggHLS;
 
 namespace {
 // Convert value semantic ops operating on mutable arrays to instead operate on
@@ -159,7 +159,7 @@ reduceNonValueTensorLiteralOpToValueTensorLiteralOp(NonValueTensorLiteralOp op,
 }
 
 namespace {
-class HLSReduceOpVariantsPass : public HLSReduceOpVariantsBase<HLSReduceOpVariantsPass> {
+class HLSReduceOpVariantsPass : public BraggHLSReduceOpVariantsBase<HLSReduceOpVariantsPass> {
   void runOnOperation() override {
     MLIRContext *context = &getContext();
     RewritePatternSet patterns(context);
@@ -197,6 +197,6 @@ class HLSReduceOpVariantsPass : public HLSReduceOpVariantsBase<HLSReduceOpVarian
 } // namespace
 
 std::unique_ptr<OperationPass<FuncOp>>
-mlir::torch::HLS::createHLSReduceOpVariantsPass() {
+mlir::BraggHLS::createBraggHLSReduceOpVariantsPass() {
   return std::make_unique<HLSReduceOpVariantsPass>();
 }

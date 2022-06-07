@@ -3,15 +3,15 @@
 #include "interval_tree_fwd.hpp"
 #include "interval_types.hpp"
 
-#include <cassert>
-#include <cstdio>
-#include <iterator>
-#include <memory>
-#include <stdexcept>
-#include <string>
-#include <type_traits>
+#include "../../../../../../../Library/Developer/CommandLineTools/SDKs/MacOSX12.3.sdk/usr/include/c++/v1/cassert"
+#include "../../../../../../../Library/Developer/CommandLineTools/SDKs/MacOSX12.3.sdk/usr/include/c++/v1/cstdio"
+#include "../../../../../../../Library/Developer/CommandLineTools/SDKs/MacOSX12.3.sdk/usr/include/c++/v1/iterator"
+#include "../../../../../../../Library/Developer/CommandLineTools/SDKs/MacOSX12.3.sdk/usr/include/c++/v1/memory"
+#include "../../../../../../../Library/Developer/CommandLineTools/SDKs/MacOSX12.3.sdk/usr/include/c++/v1/stdexcept"
+#include "../../../../../../../Library/Developer/CommandLineTools/SDKs/MacOSX12.3.sdk/usr/include/c++/v1/string"
+#include "../../../../../../../Library/Developer/CommandLineTools/SDKs/MacOSX12.3.sdk/usr/include/c++/v1/type_traits"
 
-#include <iostream>
+#include "../../../../../../../Library/Developer/CommandLineTools/SDKs/MacOSX12.3.sdk/usr/include/c++/v1/iostream"
 
 namespace lib_interval_tree {
 //############################################################################################################

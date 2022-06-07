@@ -17,7 +17,7 @@ namespace torch {
 namespace Torch {
 
 #define GET_TYPEDEF_CLASSES
-#include "HLSTorchTypes.h.inc"
+#include "BraggHLSTypes.h.inc"
 
 } // namespace HLS
 } // namespace torch

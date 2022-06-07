@@ -23,7 +23,7 @@ class Torch_Op<string mnemonic, list<Trait> traits = []>
 }
 
 include "torch-mlir/Dialect/Torch/IR/GeneratedTorchOps.td"
-include "/home/mlevental/dev_projects/torch-mlir/hls/mlir/HLSTorchOps.td"
+include "/Users/mlevental/dev_projects/torch-mlir/hls/mlir/BraggHLSOps.td"
 
 //===----------------------------------------------------------------------===//
 // TorchScript `torch.nn.Module` object instantiation ops.

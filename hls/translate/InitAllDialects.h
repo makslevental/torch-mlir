@@ -1,11 +1,11 @@
 //===----------------------------------------------------------------------===//
 //
-// Copyright 2020-2021 The ScaleHLS Authors.
+// Forked/modified from https://github.com/hanchenye/scalehls/
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef SCALEHLS_INITALLDIALECTS_H
-#define SCALEHLS_INITALLDIALECTS_H
+#ifndef BRAGGHLS_INITALLDIALECTS_H
+#define BRAGGHLS_INITALLDIALECTS_H
 
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/DLTI/DLTI.h"
@@ -15,14 +15,13 @@
 #include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/Tosa/IR/TosaOps.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
-//#include "scalehls/Dialect/HLS/HLS.h"
+//#include "bragghls/Dialect/HLS/HLS.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 
 namespace mlir {
-namespace scalehls {
+namespace bragghls {
 
-// Add all the ScaleHLS dialects to the provided registry.
 inline void registerAllDialects(mlir::DialectRegistry &registry) {
   // clang-format off
   registry.insert<
@@ -36,14 +35,13 @@ inline void registerAllDialects(mlir::DialectRegistry &registry) {
     mlir::arith::ArithmeticDialect,
     mlir::vector::VectorDialect,
     mlir::scf::SCFDialect,
-//    mlir::scalehls::hls::HLSDialect,
     mlir::LLVM::LLVMDialect,
     mlir::DLTIDialect
   >();
   // clang-format on
 }
 
-} // namespace scalehls
+} // namespace bragghls
 } // namespace mlir
 
-#endif // SCALEHLS_INITALLDIALECTS_H
+#endif // BRAGGHLS_INITALLDIALECTS_H

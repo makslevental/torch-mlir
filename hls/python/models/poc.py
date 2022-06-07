@@ -169,7 +169,6 @@ BUFFERIZATION_PIPELINE = [
     # Bufferize.
     "func.func(scf-bufferize)",
     "func.func(tm-tensor-bufferize)",
-    # "func.func(torch-hls-linalg-bufferize)",
     "func.func(linalg-bufferize)",
     "func-bufferize",
     "arith-bufferize",
@@ -185,7 +184,7 @@ BUFFERIZATION_PIPELINE = [
 LOWERING_PIPELINE = [
     "func.func(cse)",
     # TODO: use this correctly in promoteallocs
-    "torch-hls-drop-public-return",
+    "bragg-hls-drop-public-return",
     "func.func(cse)",
     # "func.func(convert-linalg-to-loops)",
     # "func.func(convert-linalg-to-affine-loops)",

@@ -4,20 +4,20 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "HLSPassDetail.h"
-#include "HLSPasses.h"
+#include "BraggHLSPassDetail.h"
+#include "BraggHLSPasses.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/Tosa/IR/TosaOps.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
 
 using namespace mlir;
-using namespace mlir::torch::HLS;
+using namespace mlir::BraggHLS;
 
 namespace {
 struct AllocOpRewritePattern : public OpRewritePattern<memref::AllocOp> {
@@ -220,6 +220,6 @@ struct ConvertCopyToAffineLoops
 } // namespace
 
 std::unique_ptr<OperationPass<func::FuncOp>>
-mlir::torch::HLS::createConvertCopyToAffineLoopsPass() {
+mlir::BraggHLS::createConvertCopyToAffineLoopsPass() {
   return std::make_unique<ConvertCopyToAffineLoops>();
 }

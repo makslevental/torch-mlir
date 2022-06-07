@@ -1,6 +1,6 @@
 #include "HLSPassDetail.h"
 #include "HLSPasses.h"
-#include "HLSTorchOps.h"
+#include "BraggHLSOps.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/Linalg/IR/LinalgOps.h"
 #include "mlir/Dialect/Linalg/Transforms/Transforms.h"
@@ -14,7 +14,7 @@
 
 using namespace mlir;
 using namespace mlir::torch;
-using namespace mlir::torch::HLS;
+using namespace mlir::BraggHLS;
 using namespace mlir::torch::Torch;
 using namespace mlir::torch::TorchConversion;
 
@@ -50,7 +50,7 @@ public:
 namespace {
 
 class HLSConvertOperators
-    : public mlir::torch::HLS::HLSConvertOperatorsBase<HLSConvertOperators> {
+    : public mlir::BraggHLS::HLSConvertOperatorsBase<HLSConvertOperators> {
 public:
   void getDependentDialects(DialectRegistry &registry) const override {
     registry.insert<linalg::LinalgDialect>();
@@ -85,6 +85,6 @@ public:
 } // namespace
 
 std::unique_ptr<OperationPass<FuncOp>>
-mlir::torch::HLS::createHLSConvertOperatorsPass() {
+mlir::BraggHLS::createBraggHLSConvertOperatorsPass() {
   return std::make_unique<HLSConvertOperators>();
 }

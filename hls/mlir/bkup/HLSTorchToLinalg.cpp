@@ -1,6 +1,7 @@
-#include "HLSPassDetail.h"
-#include "HLSPasses.h"
+#include "BraggHLSPassDetail.h"
+#include "BraggHLSPasses.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Linalg/Transforms/Transforms.h"
 #include "mlir/Dialect/Math/IR/Math.h"
@@ -12,12 +13,11 @@
 #include "torch-mlir/Dialect/Torch/IR/TorchDialect.h"
 #include "torch-mlir/Dialect/Torch/IR/TorchOps.h"
 #include "torch-mlir/Dialect/TorchConversion/Transforms/BackendTypeConversion.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
 
 using namespace mlir;
 using namespace mlir::torch;
 using namespace mlir::linalg;
-using namespace mlir::torch::HLS;
+using namespace mlir::BraggHLS;
 using namespace mlir::torch::Torch;
 using namespace mlir::torch::TorchConversion;
 
@@ -384,7 +384,7 @@ struct ConvertElementwiseOp : ConversionPattern {
 
 namespace {
 class HLSConvertTorchToLinalg
-    : public HLSConvertTorchToLinalgBase<HLSConvertTorchToLinalg> {
+    : public BraggHLSConvertTorchToLinalgBase<HLSConvertTorchToLinalg> {
 public:
   void runOnOperation() override {
     MLIRContext *context = &getContext();
@@ -437,6 +437,6 @@ public:
 } // namespace
 
 std::unique_ptr<OperationPass<func::FuncOp>>
-mlir::torch::HLS::createHLSConvertTorchToLinalgPass() {
+mlir::BraggHLS::createBraggHLSConvertTorchToLinalgPass() {
   return std::make_unique<HLSConvertTorchToLinalg>();
 }

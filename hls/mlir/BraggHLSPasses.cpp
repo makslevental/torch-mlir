@@ -1,6 +1,6 @@
-#include "HLSPasses.h"
-#include "mlir/IR/BuiltinOps.h"
+#include "BraggHLSPasses.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/InitAllPasses.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/Passes.h"
@@ -13,36 +13,36 @@
 
 using namespace mlir;
 using namespace mlir::torch::Torch;
-using namespace mlir::torch::HLS;
+using namespace mlir::BraggHLS;
 
 namespace {
 #define GEN_PASS_REGISTRATION
-#include "HLSPasses.h.inc"
+#include "BraggHLSPasses.h.inc"
 } // end namespace
 
-void mlir::torch::HLS::registerHLSPasses() {
+void mlir::BraggHLS::registerHLSPasses() {
   ::registerPasses();
-  registerHLSTorchPasses();
+  registerBraggHLSPasses();
   registerHLSConversionPasses();
 }
 
 using namespace mlir::torch;
-using namespace mlir::torch::HLS;
+using namespace mlir::BraggHLS;
 using namespace mlir::torch::TorchConversion;
 
-void mlir::torch::HLS::registerHLSTorchPasses() {
+void mlir::BraggHLS::registerBraggHLSPasses() {
   ::registerPasses();
   mlir::PassPipelineRegistration<>(
       "torchscript-module-to-torch-hls-backend-pipeline", "",
-      mlir::torch::HLS::createTorchScriptModuleToTorchHLSBackendPipeline);
+      mlir::BraggHLS::createTorchScriptModuleToTorchHLSBackendPipeline);
   mlir::PassPipelineRegistration<>(
       "torch-function-to-torch-hls-backend-pipeline", "",
-      mlir::torch::HLS::createTorchScriptFunctionToTorchHLSBackendPipeline);
+      mlir::BraggHLS::createTorchScriptFunctionToTorchHLSBackendPipeline);
 
 //  registerDirtyPass();
 }
 
-void mlir::torch::HLS::createTorchScriptModuleToTorchHLSBackendPipeline(
+void mlir::BraggHLS::createTorchScriptModuleToTorchHLSBackendPipeline(
     OpPassManager &pm) {
   pm.addPass(createSymbolDCEPass());
   pm.addPass(createPrepareForGlobalizeObjectGraphPass());
@@ -54,8 +54,7 @@ void mlir::torch::HLS::createTorchScriptModuleToTorchHLSBackendPipeline(
 }
 
 namespace mlir {
-namespace torch {
-namespace HLS {
+namespace BraggHLS {
 
 void createTorchScriptFunctionToTorchHLSBackendPipeline(OpPassManager &pm) {
   pm.addPass(createAdjustCallingConventionsPass());
@@ -73,7 +72,6 @@ void createTorchScriptFunctionToTorchHLSBackendPipeline(OpPassManager &pm) {
   }
 
   // ours
-  pm.addNestedPass<func::FuncOp>(HLS::createHLSRefineTypesPass());
 
   pm.addPass(Torch::createRefinePublicReturnPass());
 
@@ -85,17 +83,16 @@ void createTorchScriptFunctionToTorchHLSBackendPipeline(OpPassManager &pm) {
   if (true) {
     pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
   }
-  //  pm.addPass(HLS::createHLSDropPublicReturnPass());
+  //  pm.addPass(HLS::createBraggHLSDropPublicReturnPass());
   pm.addNestedPass<func::FuncOp>(Torch::createDecomposeComplexOpsPass());
-  pm.addNestedPass<func::FuncOp>(HLS::createHLSDecomposeComplexOpsPass());
 
-  // TODO: VerifyHLSTorchBackendContractPass.
+  // TODO: VerifyBraggHLSBackendContractPass.
 }
 
 void registerHLSConversionPasses() {
   ::registerPasses();
   ::mlir::PassPipelineRegistration<>(
-      "torch-hls-backend-to-linalg-on-tensors-backend-pipeline", "",
+      "bragg-hls-backend-to-linalg-on-tensors-backend-pipeline", "",
       createTorchBackendToLinalgOnTensorsBackendPipeline);
 }
 
@@ -109,7 +106,6 @@ void createTorchBackendToLinalgOnTensorsBackendPipeline(OpPassManager &pm) {
   // We do this first as it tends to involve pattern-matching against constants,
   // (e.g. dimensions which must be constant in a ranked programming model)
   // and those constants get somewhat obscured by TorchToStd.
-  pm.addNestedPass<func::FuncOp>(createHLSConvertTorchToLinalgPass());
   pm.addNestedPass<func::FuncOp>(createConvertTorchToLinalgPass());
   pm.addNestedPass<func::FuncOp>(createConvertTorchToStdPass());
   pm.addNestedPass<func::FuncOp>(createConvertTorchToSCFPass());
@@ -137,5 +133,4 @@ void createTorchBackendToLinalgOnTensorsBackendPipeline(OpPassManager &pm) {
   pm.addPass(TorchConversion::createVerifyLinalgOnTensorsBackendContractPass());
 }
 } // namespace HLS
-} // namespace torch
 } // namespace mlir

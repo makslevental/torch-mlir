@@ -7,24 +7,24 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "HLSPassDetail.h"
-#include "HLSPasses.h"
-#include "MemoryPlanning.h"
+#include "BraggHLSPassDetail.h"
+#include "BraggHLSPasses.h"
+#include "bkup/MemoryPlanning.h"
 #include "mlir/Analysis/SliceAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include <iostream>
 
 #define DEBUG_TYPE "hls-promote-allocs"
 
 using namespace mlir;
-using namespace mlir::torch::HLS;
+using namespace mlir::BraggHLS;
 
 using LiveRanges = DenseMap<Operation *, llvm::SmallVector<size_t>>;
 
@@ -52,7 +52,7 @@ template <class Container> int product(const Container &container) {
 }
 
 namespace {
-class PromoteAllocsPass : public HLSPromoteAllocsBase<PromoteAllocsPass> {
+class PromoteAllocsPass : public BraggHLSPromoteAllocsBase<PromoteAllocsPass> {
   void runOnOperation() override {
     auto module = getOperation();
     module.walk([&](func::FuncOp func) {
@@ -297,6 +297,6 @@ class PromoteAllocsPass : public HLSPromoteAllocsBase<PromoteAllocsPass> {
 } // namespace
 
 std::unique_ptr<OperationPass<ModuleOp>>
-mlir::torch::HLS::createHLSPromoteAllocsPass() {
+mlir::BraggHLS::createBraggHLSPromoteAllocsPass() {
   return std::make_unique<PromoteAllocsPass>();
 }

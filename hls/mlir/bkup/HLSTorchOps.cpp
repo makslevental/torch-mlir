@@ -7,7 +7,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "HLSTorchOps.h"
+#include "BraggHLSOps.h"
 
 #define GET_OP_CLASSES
-#include "HLSTorchOps.cpp.inc"
+#include "BraggHLSOps.cpp.inc"

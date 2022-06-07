@@ -23,7 +23,7 @@
 using namespace mlir;
 using namespace mlir::torch;
 using namespace mlir::torch::Torch;
-using namespace mlir::torch::HLS;
+using namespace mlir::BraggHLS;
 
 // Map from func name and arg index to the type bound for that arg.
 // This is needed because to rewrite calls, we need the non-local information
@@ -299,7 +299,7 @@ static LogicalResult HLSAdjustCallingConventions(FuncOp func,
 
 namespace {
 class HLSAdjustCallingConventionsPass
-    : public HLSAdjustCallingConventionsBase<HLSAdjustCallingConventionsPass> {
+    : public BraggHLSAdjustCallingConventionsBase<HLSAdjustCallingConventionsPass> {
   void runOnOperation() override {
     auto module = getOperation();
     TypeBoundMap typeBoundMap;
@@ -321,6 +321,6 @@ class HLSAdjustCallingConventionsPass
 } // namespace
 
 std::unique_ptr<OperationPass<ModuleOp>>
-mlir::torch::HLS::createHLSAdjustCallingConventionsPass() {
+mlir::BraggHLS::createBraggHLSAdjustCallingConventionsPass() {
   return std::make_unique<HLSAdjustCallingConventionsPass>();
 }

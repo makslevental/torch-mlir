@@ -9,6 +9,7 @@
 
 #include "torch-mlir/InitAll.h"
 
+#include "/Users/mlevental/dev_projects/torch-mlir/hls/mlir/BraggHLSPasses.h"
 #include "mlir/IR/Dialect.h"
 #include "torch-mlir-dialects/Dialect/TMTensor/IR/TMTensorDialect.h"
 #include "torch-mlir-dialects/Dialect/TMTensor/Transforms/Passes.h"
@@ -18,7 +19,6 @@
 #include "torch-mlir/Dialect/TorchConversion/IR/TorchConversionDialect.h"
 #include "torch-mlir/Dialect/TorchConversion/Transforms/Passes.h"
 #include "torch-mlir/RefBackend/Passes.h"
-#include "/home/mlevental/dev_projects/torch-mlir/hls/mlir/HLSPasses.h"
 
 void mlir::torch::registerAllDialects(mlir::DialectRegistry &registry) {
   registry.insert<mlir::torch::Torch::TorchDialect>();
@@ -29,7 +29,7 @@ void mlir::torch::registerAllDialects(mlir::DialectRegistry &registry) {
 void mlir::torch::registerAllPasses() {
   mlir::torch::registerTorchPasses();
   mlir::torch::registerTorchConversionPasses();
-  mlir::torch::HLS::registerHLSPasses();
+  mlir::BraggHLS::registerHLSPasses();
 
   mlir::torch::registerConversionPasses();
   mlir::torch::RefBackend::registerRefBackendPasses();

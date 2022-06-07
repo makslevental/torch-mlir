@@ -6,13 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <mlir/Dialect/Linalg/Transforms/Transforms.h>
-#include "HLSPassDetail.h"
-#include "HLSPasses.h"
+#include "BraggHLSPassDetail.h"
+#include "BraggHLSPasses.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Linalg/Utils/Utils.h"
 #include "mlir/Dialect/Math/IR/Math.h"
+#include <mlir/Dialect/Linalg/Transforms/Transforms.h>
 //#include "mlir/Dialect/StandardOps/Utils/Utils.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
@@ -25,7 +25,7 @@
 using namespace ::mlir;
 using namespace ::mlir::bufferization;
 using namespace ::mlir::linalg;
-using namespace ::mlir::torch::HLS;
+using namespace ::mlir::BraggHLS;
 
 static Value cloneMemref(Location loc, Value memref, OpBuilder &b) {
   auto memrefType = memref.getType().cast<MemRefType>();
@@ -331,7 +331,7 @@ namespace {
 /// Converts Linalg operations that work on tensor-type operands or results to
 /// work on buffers.
 struct HLSLinalgBufferizePass
-    : public mlir::torch::HLS::HLSLinalgBufferizeBase<HLSLinalgBufferizePass> {
+    : public mlir::BraggHLS::HLSLinalgBufferizeBase<HLSLinalgBufferizePass> {
   void runOnOperation() override {
     MLIRContext &context = getContext();
     ConversionTarget target(context);
@@ -362,7 +362,7 @@ struct HLSLinalgBufferizePass
 } // end anonymous namespace
 
 std::unique_ptr<OperationPass<func::FuncOp>>
-mlir::torch::HLS::createHLSLinalgBufferizePass() {
+mlir::BraggHLS::createBraggHLSLinalgBufferizePass() {
   return std::make_unique<HLSLinalgBufferizePass>();
 }
 

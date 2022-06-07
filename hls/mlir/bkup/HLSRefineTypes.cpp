@@ -7,9 +7,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "HLSPassDetail.h"
-#include "HLSPasses.h"
+#include "BraggHLSPassDetail.h"
+#include "BraggHLSPasses.h"
 #include "mlir/Analysis/DataFlowAnalysis.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -19,12 +20,11 @@
 #include "torch-mlir/Dialect/Torch/IR/TorchOps.h"
 #include "torch-mlir/Dialect/Torch/Utils/TorchUpstream.h"
 #include "torch-mlir/Dialect/Torch/Utils/Utils.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
 
 using namespace mlir;
 using namespace mlir::torch;
 using namespace mlir::torch::Torch;
-using namespace mlir::torch::HLS;
+using namespace mlir::BraggHLS;
 using namespace mlir::torch::torch_upstream; // For ScalarType and type
                                              // promotion related helpers.
 
@@ -1807,7 +1807,7 @@ void optimize(func::FuncOp func, TypeAnalyzer &analyzer) {
 }
 
 namespace {
-class HLSRefineTypesPass : public HLSRefineTypesBase<HLSRefineTypesPass> {
+class HLSRefineTypesPass : public BraggHLSRefineTypesBase<HLSRefineTypesPass> {
   void runOnOperation() override {
     auto func = getOperation();
     TypeAnalyzer analyzer(&getContext());
@@ -1818,6 +1818,6 @@ class HLSRefineTypesPass : public HLSRefineTypesBase<HLSRefineTypesPass> {
 } // namespace
 
 std::unique_ptr<OperationPass<func::FuncOp>>
-mlir::torch::HLS::createHLSRefineTypesPass() {
+mlir::BraggHLS::createBraggHLSRefineTypesPass() {
   return std::make_unique<HLSRefineTypesPass>();
 }

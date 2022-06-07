@@ -1,7 +1,7 @@
 #pragma once
 
-#include <functional>
-#include <vector>
+#include "../../../../../../../Library/Developer/CommandLineTools/SDKs/MacOSX12.3.sdk/usr/include/c++/v1/functional"
+#include "../../../../../../../Library/Developer/CommandLineTools/SDKs/MacOSX12.3.sdk/usr/include/c++/v1/vector"
 namespace mem_hash {
 
 // NOTE: hash_combine is based on implementation from Boost

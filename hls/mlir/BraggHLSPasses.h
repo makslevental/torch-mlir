@@ -17,37 +17,36 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 
 namespace mlir {
-namespace torch {
-namespace HLS {
+namespace BraggHLS {
 
-std::unique_ptr<OperationPass<func::FuncOp>> createHLSRefineTypesPass();
+std::unique_ptr<OperationPass<func::FuncOp>> createBraggHLSRefineTypesPass();
 
-std::unique_ptr<OperationPass<ModuleOp>> createHLSDropPublicReturnPass();
+std::unique_ptr<OperationPass<ModuleOp>> createBraggHLSDropPublicReturnPass();
 
-std::unique_ptr<OperationPass<ModuleOp>> createHLSPromoteAllocsPass();
+std::unique_ptr<OperationPass<ModuleOp>> createBraggHLSPromoteAllocsPass();
 
-std::unique_ptr<OperationPass<ModuleOp>> createHLSHLSQuantizeModulePass();
+std::unique_ptr<OperationPass<ModuleOp>> createBraggHLSHLSQuantizeModulePass();
 
-std::unique_ptr<OperationPass<func::FuncOp>> createHLSLinalgBufferizePass();
+std::unique_ptr<OperationPass<func::FuncOp>> createBraggHLSLinalgBufferizePass();
 
-std::unique_ptr<OperationPass<func::FuncOp>> createHLSDecomposeComplexOpsPass();
+std::unique_ptr<OperationPass<func::FuncOp>> createBraggHLSDecomposeComplexOpsPass();
 
-std::unique_ptr<OperationPass<func::FuncOp>> createHLSConvertTorchToLinalgPass();
+std::unique_ptr<OperationPass<func::FuncOp>> createBraggHLSConvertTorchToLinalgPass();
 
-std::unique_ptr<OperationPass<func::FuncOp>> createHLSQuantizePass();
+std::unique_ptr<OperationPass<func::FuncOp>> createBraggHLSQuantizePass();
 
-std::unique_ptr<OperationPass<ModuleOp>> createHLSHLSQuantizeModulePass();
+std::unique_ptr<OperationPass<ModuleOp>> createBraggHLSHLSQuantizeModulePass();
 
 std::unique_ptr<OperationPass<func::FuncOp>> createConvertCopyToAffineLoopsPass();
 
 //std::unique_ptr<OperationPass<func::FuncOp>> createSimplifyMemrefAccessPass();
 
-// std::unique_ptr<OperationPass<func::FuncOp>> createHLSReduceOpVariantsPass();
+// std::unique_ptr<OperationPass<func::FuncOp>> createBraggHLSReduceOpVariantsPass();
 
-// std::unique_ptr<OperationPass<func::FuncOp>> createHLSConvertOperatorsPass();
+// std::unique_ptr<OperationPass<func::FuncOp>> createBraggHLSConvertOperatorsPass();
 
 // std::unique_ptr<OperationPass<ModuleOp>>
-// createHLSAdjustCallingConventionsPass();
+// createBraggHLSAdjustCallingConventionsPass();
 
 void createTorchBackendToLinalgOnTensorsBackendPipeline(OpPassManager &pm);
 
@@ -55,7 +54,7 @@ void createTorchScriptModuleToTorchHLSBackendPipeline(OpPassManager &pm);
 
 void createTorchScriptFunctionToTorchHLSBackendPipeline(OpPassManager &pm);
 
-void registerHLSTorchPasses();
+void registerBraggHLSPasses();
 
 void registerHLSConversionPasses();
 
@@ -64,7 +63,6 @@ void registerHLSPasses();
 void registerDirtyPass();
 
 } // namespace HLS
-} // namespace torch
 } // namespace mlir
 
 #endif // HLS_PASSES_H

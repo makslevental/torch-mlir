@@ -7,21 +7,21 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "HLSPassDetail.h"
-#include "HLSPasses.h"
+#include "BraggHLSPassDetail.h"
+#include "BraggHLSPasses.h"
 #include "MemoryPlanning.h"
 #include "mlir/Analysis/SliceAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include <iostream>
 
 using namespace mlir;
-using namespace mlir::torch::HLS;
+using namespace mlir::BraggHLS;
 
 // struct ModuleOpConversion : public OpRewritePattern<mlir::ModuleOp> {
 //   ModuleOpConversion(MLIRContext *context, StringRef topLevelFunction,
@@ -180,7 +180,7 @@ void replaceGetGlobalMemRefOp(memref::GetGlobalOp op,
 } // namespace
 
 namespace {
-class HLSQuantize : public HLSQuantizeBase<HLSQuantize> {
+class HLSQuantize : public BraggHLSQuantizeBase<HLSQuantize> {
 public:
   void runOnOperation() override {
     MLIRContext *context = &getContext();
@@ -234,13 +234,13 @@ public:
 } // namespace
 
 std::unique_ptr<OperationPass<func::FuncOp>>
-mlir::torch::HLS::createHLSQuantizePass() {
+mlir::BraggHLS::createBraggHLSQuantizePass() {
   return std::make_unique<HLSQuantize>();
 }
 
 namespace {
 class HLSQuantizeModulePass
-    : public HLSHLSQuantizeModuleBase<HLSQuantizeModulePass> {
+    : public BraggHLSHLSQuantizeModuleBase<HLSQuantizeModulePass> {
   void runOnOperation() override {
     MLIRContext *context = &getContext();
     ConversionTarget target(*context);
@@ -339,6 +339,6 @@ class HLSQuantizeModulePass
 } // namespace
 
 std::unique_ptr<OperationPass<ModuleOp>>
-mlir::torch::HLS::createHLSHLSQuantizeModulePass() {
+mlir::BraggHLS::createBraggHLSHLSQuantizeModulePass() {
   return std::make_unique<HLSQuantizeModulePass>();
 }

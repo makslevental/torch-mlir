@@ -15,14 +15,12 @@
 #include "mlir/IR/BuiltinOps.h"
 
 namespace mlir {
-namespace torch {
-namespace HLS {
+namespace BraggHLS {
 
 #define GEN_PASS_CLASSES
-#include "HLSPasses.h.inc"
+#include "BraggHLSPasses.h.inc"
 
 } // namespace HLS
-} // namespace torch
 } // end namespace mlir
 
 #endif // HLS_PASSDETAIL_H
