@@ -515,7 +515,7 @@ class Module:
         mod_top += dedent(
             "\n".join(
                 [
-                    f"""(* keep = "true" *) reg {inp} = {self.precision}'d{random.randint(0, 2 ** self.precision - 1)};"""
+                    f"""reg {inp} = {self.precision}'d{random.randint(0, 2 ** self.precision - 1)};"""
                     for inp in input_ports[2:]
                 ]
             )
@@ -698,7 +698,7 @@ class Module:
                 )
             else:
                 res.append(
-                    f'(* keep = "true", max_fanout = {MAX_FANOUT} *) reg [{self.precision - 1}:0] {reg.name};'
+                    f'(* max_fanout = {MAX_FANOUT} *) reg [{self.precision - 1}:0] {reg.name};'
                 )
 
         return "\n".join(res)
