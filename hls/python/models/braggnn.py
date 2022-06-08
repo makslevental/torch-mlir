@@ -108,7 +108,8 @@ class BraggNN(torch.nn.Module):
                 torch.nn.ReLU(),
             ]
         # output layer
-        self.dense_ops += [torch.nn.Linear(fcsz[-1], 2)]
+        if fcsz[-1] != 2:
+            self.dense_ops += [torch.nn.Linear(fcsz[-1], 2)]
 
         self.cnn_layers_1 = self.cnn_ops[0]
         self.cnn_layers_2 = torch.nn.Sequential(*self.cnn_ops[1:])
