@@ -80,8 +80,9 @@ RELU_LATENCY = 0
 NEG_LATENCY = 0
 FSM_STAGE_INTERVAL = 2
 COLLAPSE_TREES = True
-MAX_FANOUT = 10
+MAX_FANOUT = 50
 USE_BRAM = False
+PRECISION = 16
 
 
 def latency_for_op(op):
@@ -874,7 +875,7 @@ def main(design, fp, num_layers=1):
         n for n, attrdict in program_graph.nodes.items() if attrdict["op"] == "output"
     ]
 
-    mod = Module(fsm_stages, precision=16, num_layers=num_layers)
+    mod = Module(fsm_stages, precision=PRECISION, num_layers=num_layers)
     mod.add_vals([Val(RegOrWire.REG, r) for r in program_graph.nodes])
     input_wires = [Val(RegOrWire.WIRE, v) for v in inputs]
     input_regs = [Val(RegOrWire.REG, v) for v in inputs]
