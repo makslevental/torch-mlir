@@ -81,7 +81,7 @@ NEG_LATENCY = 0
 FSM_STAGE_INTERVAL = 2
 COLLAPSE_TREES = True
 MAX_FANOUT = 50
-USE_BRAM = False
+USE_BRAM = True
 PRECISION = 16
 
 
@@ -141,7 +141,6 @@ def make_shift_rom(precision, idx, op_name, data_out_wire, addr_width):
     res = []
     # waddr = ','.join([f"0'b0"] * addr_width)
     # write_data = ','.join([f"0'b0"] * precision)
-    addr_width = 1
     res.append(
         dedent(
             f"""\
@@ -155,7 +154,7 @@ def make_shift_rom(precision, idx, op_name, data_out_wire, addr_width):
             end
         
             wire   [{precision - 1}:0] {data_out_wire};
-            simple_dual_rw_ram #({idx}, {precision}, {2 ** addr_width}) {op_name}(
+            simple_dual_rw_ram #({idx[0]}, {idx[1]}, {precision}, {2 ** addr_width}) {op_name}(
                 .wclk(clock),
                 .waddr({addr_width}'b0),
                 .write_data({op_name}_raddr),
@@ -217,7 +216,8 @@ class ShiftROM:
     def __init__(self, idx, precision, num_csts):
         if not isinstance(idx, (tuple, list)):
             idx = [idx]
-        self.idx = "_".join(map(str, idx))
+        self.idx = idx
+        self.idx_str = "_".join(map(str, idx))
         self.precision = precision
         self.data_out_wire = Val(RegOrWire.WIRE, f"{self.name}_data_out")
         self.num_csts = num_csts
@@ -225,7 +225,7 @@ class ShiftROM:
 
     @property
     def name(self):
-        return f"shift_rom_{self.idx}"
+        return f"shift_rom_{self.idx_str}"
 
     def make(self):
         return make_shift_rom(
@@ -925,4 +925,4 @@ def main(design, fp, num_layers=1):
 if __name__ == "__main__":
     fp = sys.argv[1]
     design = json.load(open(fp))
-    main(design, fp, num_layers=2)
+    main(design, fp, num_layers=1)
