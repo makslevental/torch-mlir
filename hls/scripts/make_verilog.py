@@ -925,4 +925,4 @@ def main(design, fp, num_layers=1):
 if __name__ == "__main__":
     fp = sys.argv[1]
     design = json.load(open(fp))
-    main(design, fp, num_layers=1)
+    main(design, fp, num_layers=2)
