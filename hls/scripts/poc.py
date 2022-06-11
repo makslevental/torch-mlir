@@ -279,6 +279,9 @@ def put_script_files(*, out_str, in_shape, out_shape, out_dir, forward_suffix=""
 
     # shutil.copyfile("make_schedule.py", f"{out_dir}/make_schedule.py")
     shutil.copyfile("run_vivado.tcl", f"{out_dir}/run_vivado.tcl")
+    shutil.copyfile("imports.tcl", f"{out_dir}/imports.tcl")
+    shutil.copyfile("vivado_alt_synth.tcl", f"{out_dir}/vivado_alt_synth.tcl")
+    shutil.copyfile("run_vivado.tcl", f"{out_dir}/run_vivado.tcl")
     shutil.copyfile("run_vivado.sh", f"{out_dir}/run_vivado.sh")
     st = os.stat(f"{out_dir}/run_vivado.sh")
     os.chmod(f"{out_dir}/run_vivado.sh", st.st_mode | stat.S_IEXEC)
