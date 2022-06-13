@@ -524,6 +524,8 @@ def build_design(fp):
     assert "forward_regular" in fp
     G = build_regular_code_graph(fp)
     op_topo = build_op_topo_sort(G)
+    print("num stages", len(op_topo))
+    print(list(map(lambda x: len(x), op_topo)))
 
     G = build_macs_graph(fp.replace("regular", "macs"))
 
