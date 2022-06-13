@@ -1,6 +1,7 @@
 set_param general.maxThreads 32
 set reports_dir           reports
 set checkpoints_dir       checkpoints
+set_param tcl.collectionResultDisplayLimit 0
 
 if { [file exists ${reports_dir}] == 0} {
   file mkdir ${reports_dir}
@@ -32,13 +33,13 @@ if { [file exists ${reports_dir}/qor_suggestions/post_route.rqs] == 1} {
 
 puts "\n===========================( RTL Synthesize and Map )==========================="
 
-eval synth_design -top forward -flatten_hierarchy rebuilt -retiming -directive AlternateRoutability -fsm_extraction one_hot -resource_sharing off -shreg_min_size 10 -keep_equivalent_registers
-write_checkpoint -force ${checkpoints_dir}/pre_opt
+eval synth_design -top forward -flatten_hierarchy full -retiming -directive AlternateRoutability -fsm_extraction one_hot -resource_sharing off -shreg_min_size 10 -keep_equivalent_registers -no_lc
+#write_checkpoint -force ${checkpoints_dir}/pre_opt
 
 puts "\n==============================( Optimize Design )================================"
 
 eval opt_design -directive ExploreWithRemap
-write_checkpoint -force ${checkpoints_dir}/post_synth
+#write_checkpoint -force ${checkpoints_dir}/post_synth
 
 report_timing_summary -file ${reports_dir}/post_synth/timing_summary.rpt
 report_utilization -hierarchical -force -file ${reports_dir}/post_synth/hierarchical_utilization.rpt
@@ -47,7 +48,8 @@ report_methodology  -file ${reports_dir}/post_synth/methodology.rpt
 puts "\n================================( Place Design )================================="
 
 set_property ALLOW_COMBINATORIAL_LOOPS TRUE [get_nets -regexp .*]
-eval place_design -directive SSI_SpreadLogic_high -ultrathreads
+#eval place_design -directive SSI_SpreadLogic_high -ultrathreads -fanout_opt -no_timing_driven
+eval place_design -ultrathreads -fanout_opt -no_timing_driven
 
 puts "\n==============================( Post-place optimization )================================"
 
@@ -60,13 +62,17 @@ eval opt_design -directive Explore
 puts "\n========================( Post-place Physical Optimization )=========================="
 
 eval phys_opt_design -directive AggressiveExplore
-write_checkpoint -force ${checkpoints_dir}/post_place
+set high_fanout_nets [get_nets [report_high_fanout_nets -max_nets 1000 -return_string]]
+phys_opt_design -force_replication_on_nets ${high_fanout_nets}
+
+#write_checkpoint -force ${checkpoints_dir}/post_place
 report_timing_summary -file ${reports_dir}/post_place/timing_summary.rpt
 report_utilization -hierarchical -force -file ${reports_dir}/post_place/hierarchical_utilization.rpt
 
 puts "\n================================( Route Design )================================="
 
-eval route_design -directive AlternateCLBRouting
+#eval route_design -directive AlternateCLBRouting -no_timing_driven
+eval route_design -no_timing_driven
 
 puts "\n=========================( Post-Route Physical Optimization )=========================="
 
@@ -74,7 +80,7 @@ phys_opt_design -directive AggressiveExplore
 
 puts "\n=============================( Writing Checkpoint )=============================="
 
-write_checkpoint -force ${checkpoints_dir}/post_route
+#write_checkpoint -force ${checkpoints_dir}/post_route
 
 puts "\n==============================( Writing Reports )================================"
 

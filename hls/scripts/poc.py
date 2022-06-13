@@ -483,7 +483,7 @@ def main():
     make_single_small_cnn(
         args.out_dir, in_channels=2, out_channels=4, imgsz=7, simplify_weights=False
     )
-    # make_linear(args.out_dir, imgsz=5, simplify_weights=False)
+    make_linear(args.out_dir, imgsz=5, simplify_weights=False)
     make_double_small_cnn(args.out_dir, scale=1, imgsz=11, simplify_weights=False)
     for i in range(args.low_scale, args.high_scale):
         make_whole_braggnn(args.out_dir, scale=i, imgsz=11, simplify_weights=False)

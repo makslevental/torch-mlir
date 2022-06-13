@@ -80,9 +80,11 @@ RELU_LATENCY = 0
 NEG_LATENCY = 0
 FSM_STAGE_INTERVAL = 2
 COLLAPSE_TREES = True
-MAX_FANOUT = 50
-USE_BRAM = True
+MAX_FANOUT = 100
+USE_BRAM = False
 PRECISION = 16
+LAYERS = 1
+KEEP = False
 
 
 def latency_for_op(op):
@@ -111,10 +113,10 @@ def make_mul_or_add(precision, idx, op_name, a_reg, b_reg, res_wire, add_or_mul)
     op = dedent(
         f"""\
             wire   [{precision - 1}:0] {res_wire};
-            (* keep = "true" *) f{add_or_mul} #({idx[0]}, {idx[1]}, {precision}) f{op_name}(
+            {'(* keep = "true" *)' if KEEP else ''} f{add_or_mul} #({idx[0]}, {idx[1]}, {precision}) f{op_name}(
                 .clock(clock),
-                .reset(reset),
-                .clock_enable(clock_enable),
+                .reset(0'b1),
+                .clock_enable(1'b1),
                 .a({a_reg}),
                 .b({b_reg}),
                 .res({res_wire})
@@ -368,7 +370,6 @@ class Module:
                 self.neg_instances[idx] = neg
                 self.add_vals([neg.a_reg, neg.res_wire])
 
-        print("max_stage_lens", self.max_layer_stage_lens)
 
         self._max_fsm_stage = 0
         self._fsm_idx_width = 0
@@ -558,7 +559,7 @@ class Module:
             ]
         )
         params += "\n\n"
-        params += f'(* fsm_encoding = "none" *) reg [{self.max_fsm_stage}:0] current_state_fsm;\n'
+        params += f'(* max_fanout = {MAX_FANOUT}, fsm_encoding = "none" *) reg [{self.max_fsm_stage}:0] current_state_fsm;\n'
         params += f"reg [{self.max_fsm_stage}:0] next_state_fsm;"
 
         return params
@@ -922,7 +923,26 @@ def main(design, fp, num_layers=1):
     print("endmodule", file=verilog_file)
 
 
+    settings_file = open(f"{verilog_fp}/settings.txt", "w")
+    settings_file.write(json.dumps({
+        "INTERVAL_BETWEEN_MUL_AND_ADD": INTERVAL_BETWEEN_MUL_AND_ADD,
+        "MUL_LATENCY": MUL_LATENCY,
+        "ADD_LATENCY": ADD_LATENCY,
+        "RELU_LATENCY": RELU_LATENCY,
+        "NEG_LATENCY": NEG_LATENCY,
+        "FSM_STAGE_INTERVAL": FSM_STAGE_INTERVAL,
+        "COLLAPSE_TREES": COLLAPSE_TREES,
+        "MAX_FANOUT": MAX_FANOUT,
+        "USE_BRAM": USE_BRAM,
+        "PRECISION": PRECISION,
+        "LAYERS": LAYERS,
+        "max_stage_lens": mod.max_layer_stage_lens,
+        "KEEP": KEEP
+    }, indent=2))
+
+
+
 if __name__ == "__main__":
     fp = sys.argv[1]
     design = json.load(open(fp))
-    main(design, fp, num_layers=2)
+    main(design, fp, num_layers=LAYERS)
