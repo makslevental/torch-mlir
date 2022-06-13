@@ -42,6 +42,20 @@ class Softmax(nn.Module):
         z = y.sum()
         return y * self.div(z)
 
+class Mul(nn.Module):
+    def __init__(self):
+        super(Mul, self).__init__()
+
+    def forward(self, x, y):
+        return x * y
+
+class Add(nn.Module):
+    def __init__(self):
+        super(Add, self).__init__()
+
+    def forward(self, x, y):
+        return x + y
+
 
 class NLB(torch.nn.Module):
     def __init__(self, in_ch, relu_a=0.01):
@@ -61,6 +75,8 @@ class NLB(torch.nn.Module):
             in_channels=self.inter_ch, out_channels=in_ch, kernel_size=1, padding=0
         )
         self.soft = Softmax()
+        self.mul = Mul()
+        self.add = Add()
 
     def forward(self, x):
         theta = self.theta_layer(x)
@@ -69,11 +85,11 @@ class NLB(torch.nn.Module):
 
         # theta_phi = theta * phi
         theta_phi = theta
-        theta_phi = self.soft(theta_phi)
-        theta_phi_g = theta_phi * g
+        # theta_phi = self.soft(theta_phi)
+        theta_phi_g = self.mul(theta_phi, g)
 
         _out_tmp = self.out_cnn(theta_phi_g)
-        _out_tmp = torch.add(_out_tmp, x)
+        _out_tmp = self.add(_out_tmp, x)
 
         return _out_tmp
 
