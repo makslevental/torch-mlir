@@ -82,7 +82,7 @@ FSM_STAGE_INTERVAL = 2
 COLLAPSE_TREES = True
 MAX_FANOUT = 100
 USE_BRAM = False
-PRECISION = 16
+PRECISION = 10
 LAYERS = 1
 KEEP = False
 
@@ -110,19 +110,33 @@ def max_latency_per_fsm_stage(fsm_stages):
 
 
 def make_mul_or_add(precision, idx, op_name, a_reg, b_reg, res_wire, add_or_mul):
-    op = dedent(
-        f"""\
-            wire   [{precision - 1}:0] {res_wire};
-            {'(* keep = "true" *)' if KEEP else ''} f{add_or_mul} #({idx[0]}, {idx[1]}, {precision}) f{op_name}(
-                .clock(clock),
-                .reset(0'b1),
-                .clock_enable(1'b1),
-                .a({a_reg}),
-                .b({b_reg}),
-                .res({res_wire})
-            );
-            """
-    )
+    if precision < 16:
+        op = dedent(
+            f"""\
+                wire   [{precision - 1}:0] {res_wire};
+                {'(* keep = "true" *)' if KEEP else ''} f{add_or_mul} #({idx[0]}, {idx[1]}, {precision}) f{op_name}(
+                    .clk(clock),
+                    .rst(0'b1),
+                    .X({a_reg}),
+                    .Y({b_reg}),
+                    .R({res_wire})
+                );
+                """
+        )
+    else:
+        op = dedent(
+            f"""\
+                wire   [{precision - 1}:0] {res_wire};
+                {'(* keep = "true" *)' if KEEP else ''} f{add_or_mul} #({idx[0]}, {idx[1]}, {precision}) f{op_name}(
+                    .clock(clock),
+                    .reset(0'b1),
+                    .clock_enable(1'b1),
+                    .a({a_reg}),
+                    .b({b_reg}),
+                    .res({res_wire})
+                );
+                """
+        )
     return op
 
 
