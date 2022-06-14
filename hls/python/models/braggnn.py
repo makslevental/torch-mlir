@@ -80,12 +80,12 @@ class NLB(torch.nn.Module):
 
     def forward(self, x):
         theta = self.theta_layer(x)
-        # phi = self.phi_layer(x)
+        phi = self.phi_layer(x)
         g = self.g_layer(x)
 
-        # theta_phi = theta * phi
-        theta_phi = theta
-        # theta_phi = self.soft(theta_phi)
+        theta_phi = theta * phi
+        # theta_phi = theta
+        theta_phi = self.soft(theta_phi)
         theta_phi_g = self.mul(theta_phi, g)
 
         _out_tmp = self.out_cnn(theta_phi_g)
