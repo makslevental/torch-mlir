@@ -103,7 +103,7 @@ def make_small_braggnn(in_channels=1, hw=11):
 
 
 def make_conv(
-    hw=5, in_channels=1, out_channels=1, kernel_size=3, stride=1, padding=0, bias=False
+        hw=5, in_channels=1, out_channels=1, kernel_size=3, stride=1, padding=0, bias=False
 ):
     with torch.no_grad():
         mod = torch.nn.Conv2d(
@@ -204,12 +204,12 @@ LOWERING_PIPELINE = [
 ]
 
 PIPELINE = (
-    [
-        "torchscript-module-to-torch-backend-pipeline",
-        "torch-backend-to-linalg-on-tensors-backend-pipeline",
-    ]
-    + BUFFERIZATION_PIPELINE
-    + LOWERING_PIPELINE
+        [
+            "torchscript-module-to-torch-backend-pipeline",
+            "torch-backend-to-linalg-on-tensors-backend-pipeline",
+        ]
+        + BUFFERIZATION_PIPELINE
+        + LOWERING_PIPELINE
 )
 # print('torch-mlir-opt -debug --pass-pipeline"', ",".join(PIPELINE), '"')
 
@@ -309,13 +309,13 @@ def make_sub_layer(mod, in_shapes, out_shape, scale, root_out_dir):
 
 
 def make_module_artifacts(
-    mod,
-    example_input,
-    example_output,
-    recursivescriptmodule,
-    class_annotator,
-    root_out_dir,
-    scale,
+        mod,
+        example_input,
+        example_output,
+        recursivescriptmodule,
+        class_annotator,
+        root_out_dir,
+        scale,
 ):
     out_dir = str(
         root_out_dir / Path(recursivescriptmodule.original_name + f".{scale}")
@@ -387,7 +387,7 @@ class ConvPlusReLU(nn.Module):
 
 
 def make_single_small_cnn(
-    root_out_dir, in_channels=2, out_channels=4, imgsz=11, simplify_weights=False
+        root_out_dir, in_channels=2, out_channels=4, imgsz=11, simplify_weights=False
 ):
     with torch.no_grad():
         mod = ConvPlusReLU(in_channels, out_channels)
@@ -472,6 +472,34 @@ def make_linear(root_out_dir, scale=1, imgsz=11, simplify_weights=False):
     )
 
 
+class Dot(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x, y):
+        return torch.matmul(x, y)
+
+
+def make_dot(root_out_dir, imgsz=11):
+    with torch.no_grad():
+        mod = Dot()
+        mod.eval()
+        y = torch.randn((imgsz,))
+        x = torch.randn((imgsz,)).T
+        z = mod(x, y)
+        recursivescriptmodule, class_annotator = make_layer(
+            mod, [
+                None,
+                ([1, imgsz], torch.float32, True),
+                ([imgsz, 1], torch.float32, True),
+            ]
+        )
+
+    make_module_artifacts(
+        mod, None, z, recursivescriptmodule, class_annotator, root_out_dir, imgsz
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description="make stuff")
     parser.add_argument("--low_scale", type=int, default=1)
@@ -480,13 +508,16 @@ def main():
     args = parser.parse_args()
     args.out_dir = args.out_dir.resolve()
 
-    make_single_small_cnn(
-        args.out_dir, in_channels=2, out_channels=4, imgsz=7, simplify_weights=False
+    make_dot(
+        args.out_dir, imgsz=10
     )
-    make_linear(args.out_dir, imgsz=5, simplify_weights=False)
-    make_double_small_cnn(args.out_dir, scale=1, imgsz=11, simplify_weights=False)
-    for i in range(args.low_scale, args.high_scale):
-        make_whole_braggnn(args.out_dir, scale=i, imgsz=11, simplify_weights=False)
+    # make_single_small_cnn(
+    #     args.out_dir, in_channels=2, out_channels=4, imgsz=7, simplify_weights=False
+    # )
+    # make_linear(args.out_dir, imgsz=5, simplify_weights=False)
+    # make_double_small_cnn(args.out_dir, scale=1, imgsz=11, simplify_weights=False)
+    # for i in range(args.low_scale, args.high_scale):
+    #     make_whole_braggnn(args.out_dir, scale=i, imgsz=11, simplify_weights=False)
 
 
 if __name__ == "__main__":
