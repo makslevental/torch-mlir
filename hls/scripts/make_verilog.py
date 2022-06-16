@@ -144,7 +144,7 @@ def make_relu_or_neg(precision, idx, op_name, a_reg, res_wire, relu_or_neg):
     op = dedent(
         f"""\
             wire   [{precision - 1}:0] {res_wire};
-            {relu_or_neg} #({idx}) {op_name}(
+            {relu_or_neg} #({idx}, {precision - 1}) {op_name}(
                 .a({a_reg}),
                 .res({res_wire})
             );
