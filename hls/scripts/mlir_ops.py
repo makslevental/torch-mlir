@@ -457,9 +457,11 @@ class SetMaxRange(ast.NodeTransformer):
 def transform_forward_py(fp, max_range=None, macs=False):
     new_tree = astor.parse_file(fp)
     # new_tree = RemoveMAC().visit(new_tree)
-    # new_tree = RemoveMulAdd().visit(new_tree)
-    # if macs:
-    #     new_tree = RemoveMulAddAndSubscript().visit(new_tree)
+
+    new_tree = RemoveMulAdd().visit(new_tree)
+    if macs:
+        new_tree = RemoveMulAddAndSubscript().visit(new_tree)
+
     # new_tree = SetMaxRange(max_range).visit(new_tree)
     # new_tree = RemoveMul().visit(new_tree)
     new_tree = RemoveIfExp().visit(new_tree)
