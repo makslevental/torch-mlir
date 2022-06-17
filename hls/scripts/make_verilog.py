@@ -144,7 +144,7 @@ def make_relu_or_neg(precision, idx, op_name, a_reg, res_wire, relu_or_neg):
     op = dedent(
         f"""\
             wire   [{precision - 1}:0] {res_wire};
-            {relu_or_neg} #({idx}, {precision - 1}) {op_name}(
+            {relu_or_neg} #({idx}, {precision}) {op_name}(
                 .a({a_reg}),
                 .res({res_wire})
             );
@@ -383,7 +383,6 @@ class Module:
                 neg = Neg(idx, precision)
                 self.neg_instances[idx] = neg
                 self.add_vals([neg.a_reg, neg.res_wire])
-
 
         self._max_fsm_stage = 0
         self._fsm_idx_width = 0
