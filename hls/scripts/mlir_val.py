@@ -287,6 +287,7 @@ def ReLU(x):
 
 def make_args_globals(Args):
     args = []
+    outputs = []
     globals = []
     for _arg_name, arg in Args.items():
         if isinstance(arg, ArrayDecl):
@@ -294,14 +295,14 @@ def make_args_globals(Args):
                 id = "_".join(map(str, idx))
                 if arg.input:
                     args.append(f"%{arg.arr_name}_{id}: {DTYPE}")
-                # elif arg.output:
-                #     args.append(f"float* {arg.arr_name}_{id}")
+                elif arg.output:
+                    outputs.append(f"{DTYPE}")
         elif isinstance(arg, GlobalArray):
             for idx in itertools.product(*[range(s) for s in arg.curr_shape]):
                 id = "_".join(map(str, idx))
                 globals.append(f"%{arg.arr_name}_{id}: {DTYPE}")
 
-    return args, globals
+    return args, outputs, globals
 
 
 def make_ops():
@@ -341,21 +342,23 @@ def MLIRForward(Args, output, forward):
     fn = os.environ.get("FN", "regular")
     FILE = open(f"forward{f'_{fn}' if fn else ''}.mlir", "w")
 
-    args, globals = make_args_globals(Args)
+    args, outputs, globals = make_args_globals(Args)
 
     OLD_FILE = FILE
-    print(f"func.func @forward({', '.join(args + globals)})\n", file=OLD_FILE)
+    print(f"func.func @forward({', '.join(args + globals)}) -> ({', '.join(outputs)})\n", file=OLD_FILE)
     FILE = io.StringIO()
     forward()
     make_latency_attrs(OLD_FILE)
     FILE.seek(0)
     OLD_FILE.write(FILE.read())
 
-    # for index, value in output.registers.items():
-    #     id = "_".join(map(str, index))
-    #     print(f"*{output.arr_name}_{id} = {value}", file=OLD_FILE)
+    rets = []
+    for index, value in output.registers.items():
+        # id = "_".join(map(str, index))
+        # print(f"*{output.arr_name}_{id} = {value}", file=OLD_FILE)
+        rets.append(str(value))
 
-    print("return", file=OLD_FILE)
+    print(f"return {', '.join(rets)}: {', '.join([DTYPE for _ in rets])}", file=OLD_FILE)
     print("}", file=OLD_FILE)
 
     OLD_FILE.close()
