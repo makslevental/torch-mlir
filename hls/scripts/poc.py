@@ -508,12 +508,12 @@ def main():
     args = parser.parse_args()
     args.out_dir = args.out_dir.resolve()
 
-    make_dot(
-        args.out_dir, imgsz=10
-    )
-    # make_single_small_cnn(
-    #     args.out_dir, in_channels=2, out_channels=4, imgsz=7, simplify_weights=False
+    # make_dot(
+    #     args.out_dir, imgsz=10
     # )
+    make_single_small_cnn(
+        args.out_dir, in_channels=2, out_channels=4, imgsz=7, simplify_weights=False
+    )
     # make_linear(args.out_dir, imgsz=5, simplify_weights=False)
     # make_double_small_cnn(args.out_dir, scale=1, imgsz=11, simplify_weights=False)
     # for i in range(args.low_scale, args.high_scale):
