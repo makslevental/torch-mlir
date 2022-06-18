@@ -4,7 +4,6 @@ import _ast
 import argparse
 import ast
 import inspect
-import sys
 from _ast import Subscript
 from ast import Assign, Mult, Add, BinOp, Name, Call, keyword, Str, IfExp, Compare
 from typing import Tuple, Union, Dict, Any
@@ -399,6 +398,17 @@ class RemoveIfExp(ast.NodeTransformer):
         return node
 
 
+class HoistGlobals(ast.NodeTransformer):
+    def visit_FunctionDef(self, node):
+        if node.name == "forward":
+            assigns = [(i, b) for i, b in enumerate(node.body) if isinstance(b, Assign) and isinstance(b.value, Call) and isinstance(b.value.func, Name) and b.value.func.id == 'GlobalArray']
+            for i, a in reversed(assigns):
+                del node.body[i]
+                node.args.args.append(a.targets[0].id)
+                node.args.defaults.append(a.value)
+        return node
+
+
 # def unroll_loops():
 #     passer = apply_passes([loop_unroll()], env=SymbolTable(locals(), globals()))
 #     new_body = passer(body)
@@ -454,13 +464,14 @@ class SetMaxRange(ast.NodeTransformer):
         return node
 
 
-def transform_forward_py(fp, max_range=None, macs=False):
+def transform_forward_py(fp, macs=False):
     new_tree = astor.parse_file(fp)
     # new_tree = RemoveMAC().visit(new_tree)
+    new_tree = HoistGlobals().visit(new_tree)
 
-    new_tree = RemoveMulAdd().visit(new_tree)
-    if macs:
-        new_tree = RemoveMulAddAndSubscript().visit(new_tree)
+    # new_tree = RemoveMulAdd().visit(new_tree)
+    # if macs:
+    #     new_tree = RemoveMulAddAndSubscript().visit(new_tree)
 
     # new_tree = SetMaxRange(max_range).visit(new_tree)
     # new_tree = RemoveMul().visit(new_tree)
@@ -472,11 +483,6 @@ def transform_forward_py(fp, max_range=None, macs=False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("fp")
-    parser.add_argument("--max_range", nargs="+", type=int)
     parser.add_argument("--macs", action='store_true', default=False)
     args = parser.parse_args()
-    if args.max_range:
-        max_range = tuple(args.max_range)
-    else:
-        max_range = None
-    transform_forward_py(args.fp, max_range, args.macs)
+    transform_forward_py(args.fp, args.macs)

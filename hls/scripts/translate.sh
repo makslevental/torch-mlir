@@ -30,7 +30,7 @@ open("forward.affine.mlir", "w").writelines(new_lines)
 EOF
 sed -i.bak 's/scf\.yield//g' forward.affine.mlir
 
-#scalehls-translate forward.affine.mlir --emit-hlspy --mlir-print-elementsattrs-with-hex-if-larger=-1 -o forward.py
+scalehls-translate forward.affine.mlir --emit-hlspy --mlir-print-elementsattrs-with-hex-if-larger=-1 -o forward.py
 
 python ../../scripts/mlir_ops.py forward.py --macs
 FN=macs python forward_rewritten.py
@@ -38,8 +38,8 @@ FN=macs python forward_rewritten.py
 python ../../scripts/mlir_ops.py forward.py
 FN=regular python forward_rewritten.py
 
-#python ../../scripts/mlir_val.py "$PWD"/forward_regular.mlir
+circt-opt forward_regular.mlir -test-lp-scheduler=with=Problem -allow-unregistered-dialect -o forward_regular.sched.mlir
+
+python ../../scripts/mlir_val.py "$PWD"/forward_regular.sched.mlir
 
 #python ../../scripts/make_verilog.py "$PWD"/design.json
-
-/home/mlevental/dev_projects/circt/cmake-build-debug-circt/bin/circt-opt forward_regular.mlir -test-lp-scheduler=with=Problem -allow-unregistered-dialect &> forward_regular.sched.mlir

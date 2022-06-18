@@ -1608,8 +1608,7 @@ import numpy as np
 # from hls.scripts.mlir_ops import ArrayDecl, ParFor, ReLU, Exp, GlobalArray
 # from hls.scripts.verilog_val import Forward
 # from hls.scripts.llvm_val import Forward, FMulAdd, ArrayDecl, ParFor, ReLU, Exp, GlobalArray
-from hls.scripts.cpp_val import Forward, FMulAdd, ArrayDecl, ParFor, FMac, Add, GlobalArray, Copy, ReLU, ReduceAdd
-import hls.scripts.cpp_val
+from hls.scripts.mlir_val import Forward, FMulAdd, ArrayDecl, ParFor, FMac, Add, GlobalArray, Copy, ReLU, ReduceAdd
 )XXX";
   os << "\n\n";
   os << " # fmt: off\n";
