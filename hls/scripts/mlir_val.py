@@ -1,4 +1,5 @@
 import argparse
+import ast
 import io
 import itertools
 import json
@@ -26,10 +27,11 @@ DTYPE = "f32"
 
 LAST_IDX_TO_OP_ID = {}
 DEPS = set()
+
+
 def make_unregistered_op(op, *args):
     # return f"\"{op}_{OP_LAYER_PREFIX}_{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}\"({', '.join(map(str, args))}) {{ opr = \"{op}\" }} : ({', '.join([DTYPE for _ in args])}) -> {DTYPE}"
-
-    return f'''"{op}"({', '.join(map(str, args))}) {{ opr = "{op}", pe ="{IDX}" }} : ({', '.join([DTYPE for _ in args])}) -> {DTYPE}'''
+    return f""""{op}"({', '.join(map(str, args))}) {{ opr = "{op}", pe ="{IDX}" }} : ({', '.join([DTYPE for _ in args])}) -> {DTYPE}"""
 
 
 def print_op(op, v, *args):
@@ -61,7 +63,7 @@ class MLIRVal:
         if isinstance(other, (float, int, bool)):
             other = MLIRConstant(other)
         v = MLIRVal(f"(* ({self}) ({other}))")
-        print_op('fmul', v, self, other)
+        print_op("fmul", v, self, other)
 
         return v
 
@@ -70,7 +72,7 @@ class MLIRVal:
         if isinstance(other, (float, int, bool)):
             other = MLIRConstant(other)
         v = MLIRVal(f"(+ ({self}) ({other}))")
-        print_op('fadd', v, self, other)
+        print_op("fadd", v, self, other)
         return v
 
     def __sub__(self, other):
@@ -78,7 +80,7 @@ class MLIRVal:
         if isinstance(other, (float, int, bool)):
             other = MLIRConstant(other)
         v = MLIRVal(f"(- ({self}) ({other}))")
-        print_op('fsub', v, self, other)
+        print_op("fsub", v, self, other)
         return v
 
     def __truediv__(self, other):
@@ -86,7 +88,7 @@ class MLIRVal:
         if isinstance(other, (float, int, bool)):
             other = MLIRConstant(other)
         v = MLIRVal(f"(/ ({self}) ({other}))")
-        print_op('fdiv', v, self, other)
+        print_op("fdiv", v, self, other)
         return v
 
     def __floordiv__(self, other):
@@ -97,13 +99,13 @@ class MLIRVal:
         if isinstance(other, (float, int, bool)):
             other = MLIRConstant(other)
         v = MLIRVal(f"(> ({self}) ({other}))")
-        print_op('fcmpugt', v, self, other)
+        print_op("fcmpugt", v, self, other)
         return v
 
     def __neg__(self):
         # <result> = fcmp ugt float 4.0, 5.0
         v = MLIRVal(f"(- {self})")
-        print_op('fneg', v, self)
+        print_op("fneg", v, self)
         return v
 
     def __str__(self):
@@ -118,7 +120,7 @@ class MLIRConstant(MLIRVal):
         super(MLIRConstant, self).__init__(name)
         self.fmted_cst = f"{format_cst(self.name)}"
         if str(self) not in EMITTED_CSTS:
-            print_op('arith.constant', self, name)
+            print_op("arith.constant", self, name)
             EMITTED_CSTS.add(str(self))
 
     def __str__(self):
@@ -212,7 +214,7 @@ def FMulAdd(a, b, c):
             inps[i] = MLIRConstant(v)
     a, b, c = inps
     v = MLIRVal(f"(fmuladd {a} {b} {c})")
-    print_op('fmuladd', v, a, b, c)
+    print_op("fmuladd", v, a, b, c)
     return v
 
 
@@ -227,7 +229,7 @@ def FMac(a, b, arr, idx):
     # handle the first time you process a constant of input
     if isinstance(c, GlobalArrayVal):
         cc = arr[idx] = arr.make_val(idx)
-    print_op('fmuladd', cc, a, b, c)
+    print_op("fmuladd", cc, a, b, c)
     return cc
 
 
@@ -239,7 +241,7 @@ def Add(a, arr, idx):
     b = bb = arr[idx]
     if isinstance(b, (GlobalArrayVal, MLIRConstant)):
         bb = arr[idx] = arr.make_val(idx)
-    print_op('fadd', bb, a, b)
+    print_op("fadd", bb, a, b)
     return bb
 
 
@@ -273,7 +275,7 @@ def ParFor(body, ranges):
         IDX = idx
         if len(IDX) < 5:
             _idx = 5 * [0]
-            _idx[0: len(idx)] = idx
+            _idx[0 : len(idx)] = idx
             IDX = tuple(_idx)
 
         body(*idx)
@@ -281,7 +283,7 @@ def ParFor(body, ranges):
 
 def ReLU(x):
     v = MLIRVal(f"(relu {x})")
-    print_op('relu', v, x)
+    print_op("relu", v, x)
     return v
 
 
@@ -305,25 +307,10 @@ def make_args_globals(Args):
     return args, outputs, globals
 
 
-def make_ops():
-    return dedent(
-        """\
-    float fmul(float a, float b) {
-        return a * b
-    } 
-    float fdiv(float a, float b) {
-        return a / b
-    } 
-    float relu(float a) {
-        return a
-    } 
-    """
-    )
-
-
 def make_latency_attrs(file):
-    deps = [list(dep) for dep in DEPS]
-    print(f"""
+    deps = sorted([list(dep) for dep in DEPS])
+    print(
+        f"""
  attributes {{
   auxdeps = {deps},
   operatortypes = [
@@ -334,7 +321,9 @@ def make_latency_attrs(file):
     {{ name = "neg", latency = 10, limit = 1296 }},
     {{ name = "fneg", latency = 10, limit = 1296 }}
     ] }} \n{{
-""", file=file)
+""",
+        file=file,
+    )
 
 
 def MLIRForward(Args, output, forward):
@@ -345,7 +334,10 @@ def MLIRForward(Args, output, forward):
     args, outputs, globals = make_args_globals(Args)
 
     OLD_FILE = FILE
-    print(f"func.func @forward({', '.join(args + globals)}) -> ({', '.join(outputs)})\n", file=OLD_FILE)
+    print(
+        f"func.func @forward({', '.join(args + globals)}) -> ({', '.join(outputs)})\n",
+        file=OLD_FILE,
+    )
     FILE = io.StringIO()
     forward()
     make_latency_attrs(OLD_FILE)
@@ -358,7 +350,9 @@ def MLIRForward(Args, output, forward):
         # print(f"*{output.arr_name}_{id} = {value}", file=OLD_FILE)
         rets.append(str(value))
 
-    print(f"return {', '.join(rets)}: {', '.join([DTYPE for _ in rets])}", file=OLD_FILE)
+    print(
+        f"return {', '.join(rets)}: {', '.join([DTYPE for _ in rets])}", file=OLD_FILE
+    )
     print("}", file=OLD_FILE)
 
     OLD_FILE.close()
@@ -369,83 +363,25 @@ def Forward(forward, max_range=None, worker_id=None):
     MLIRForward(Args, Args["_arg1"], forward)
 
 
+reg_idents = re.compile(r"(%[\d|a-z|_]*|([0-9]*[.])+[0-9]+)")
+reg_start_time = re.compile(r"lpStartTime = (\d+)")
+reg_opr = re.compile(r'opr = "([a-z]+)"')
+reg_pe = re.compile(r'pe = "(.*)"')
+
+
 def get_ssas_from_ir_line(line):
-    line = re.sub(r", align \d+", "", line)
-
-    idents = list(
-        filter(
-            lambda x: len(x.strip())
-                      and "mul" not in x
-                      and "add" not in x
-                      and "relu" not in x
-                      and "neg" not in x,
-            [
-                f
-                for f, _ in re.findall(r"([\d|a-z|_]*|([0-9]*[.])+[0-9]+)", line)
-                if len(f.strip())
-                   and f.strip() not in {"void", "forward", "float", "extern", "return"}
-            ],
-        )
-    )
-
-    if not idents or "declare" in line or "//" in line:
-        return None, None, None
-
-    if (
-            "fmul" in line
-            or "fadd" in line
-            or "fneg" in line
-            or "fcmp" in line
-            or "fsub" in line
-            or "fdiv" in line
-            or "relu" in line
-            or "fmuladd" in line
-    ):
-        assign, *_deps = idents
-        deps = []
-        for d in _deps:
-            try:
-                float(d)
-            except:
-                deps.append(d)
-        op = line.split("=")[1].strip().split("(")[0]
-    elif "*" in line and "=" in line:
-        assign, dep = idents
-        deps = [dep]
-        op = "store"
-    elif "expf" in line:
-        assign, *deps = idents
-        op = "expf"
-    elif "forward" in line:
-        inputs = [
-            f.replace("", "")
-            for f, _ in re.findall(r"(float ([\d|a-z|_]*))", line)
-        ]
-        outputs = [
-            f.replace("float* ", "")
-            for f, _ in re.findall(r"(float\* ([\d|a-z|_]*))", line)
-        ]
-        return inputs, outputs, ""
-    elif "float" in line and "cst" in line:
-        return None, None, None
+    start_time = reg_start_time.search(line)
+    start_time = start_time.groups()[0] if start_time else start_time
+    if "arith.constant" in line:
+        opr = "constant"
     else:
-        raise Exception(line)
+        opr = reg_opr.search(line)
+        opr = opr.groups()[0] if opr else opr
+    pe = reg_pe.search(line)
+    pe = ast.literal_eval(pe.groups()[0]) if pe else pe
 
-    return assign, deps, op
+    return start_time, opr, pe
 
-
-def topological_sort_grouped(G):
-    indegree_map = {v: d for v, d in G.in_degree() if d > 0}
-    zero_indegree = [v for v, d in G.in_degree() if d == 0]
-    while zero_indegree:
-        yield zero_indegree
-        new_zero_indegree = []
-        for v in zero_indegree:
-            for _, child in G.edges(v):
-                indegree_map[child] -= 1
-                if not indegree_map[child]:
-                    new_zero_indegree.append(child)
-        zero_indegree = new_zero_indegree
 
 
 def build_regular_code_graph(fp):
@@ -453,101 +389,41 @@ def build_regular_code_graph(fp):
     G = nx.MultiDiGraph()
 
     for line in lines:
-        assign, deps, op = get_ssas_from_ir_line(line)
+        if "attributes" in line:
+            line = line.split("attributes")[0].strip()
+        idents = [i for i, _ in reg_idents.findall(line)]
+        if not idents:
+            continue
         if "forward" in line:
-            for assig in assign:
-                G.add_node(assig, op="input")
-            for dep in deps:
-                G.add_node(dep, op="output")
+            for ident in idents:
+                G.add_node(ident, op="input")
         else:
-            if assign is not None:
-                if assign not in G.nodes:
-                    G.add_node(assign, op=op)
-                for i, dep in enumerate(deps):
-                    if dep not in G.nodes:
-                        assert (
-                                "__constant" in dep or "input" in dep or "cst" in dep
-                        ), dep
-                        if "input" in dep:
-                            G.add_node(dep, op="input")
-                        elif "cst" in dep:
-                            G.add_node(dep, op="constant")
-                        elif "__constant" in dep:
+            start_time, op, pe = get_ssas_from_ir_line(line)
+            if "return" in line:
+                for ident in idents:
+                    G.add_node(ident, op="output", start_time=int(start_time))
+            else:
+                assign, *deps = idents
+                if assign is not None:
+                    if assign not in G.nodes:
+                        G.add_node(assign, op=op, pe=pe, start_time=int(start_time))
+                    for i, dep in enumerate(deps):
+                        if dep not in G.nodes:
+                            assert op == "constant", dep
                             G.add_node(dep, op="constant")
 
-                    G.add_edge(dep, assign, pos=i, op=op)
+                        G.add_edge(dep, assign, pos=i, op=op)
 
     return G
 
 
-def build_macs_graph(fp):
-    lines = open(fp, "r").readlines()
-    G = nx.MultiDiGraph()
-
-    for line in lines:
-        assign, deps, op = get_ssas_from_ir_line(line)
-        if "forward" in line:
-            for assig in assign:
-                G.add_node(assig, op="input")
-            for dep in deps:
-                G.add_node(dep, op="output")
-        else:
-            if assign is not None:
-                first_assign = False
-                if assign not in G.nodes:
-                    G.add_node(assign, op=op)
-                    first_assign = True
-                for i, dep in enumerate(deps):
-                    if dep not in G.nodes or (dep == assign and first_assign):
-                        assert (
-                                "__constant" in dep or "input" in dep or "cst" in dep
-                        ), dep
-                        if "input" in dep:
-                            G.add_node(dep, op="input")
-                        elif "cst" in dep:
-                            G.add_node(dep, op="constant")
-                        elif "__constant" in dep:
-                            glob = re.search(r"__constant_(.*f32)((_\d+)+)", dep)
-                            assert glob
-                            glob_dep = f"glob_{glob[0]}"
-                            assert G.nodes[glob_dep]["op"] == "input"
-                            dep = glob_dep
-
-                    G.add_edge(dep, assign, pos=i, op=op)
-
-    return G
-
-
-def build_op_topo_sort(G):
-    topo_sort = []
-    for i, stage in enumerate(topological_sort_grouped(G)):
-        ops = []
-        for val in stage:
-            op = G.nodes[val]["op"]
-            if op not in {"input", "output", "constant"}:
-                ops.append(op)
-        if ops:
-            topo_sort.append(sorted(ops))
-
-    return topo_sort
 
 
 def build_design(fp):
     assert "forward_regular" in fp
     G = build_regular_code_graph(fp)
-    op_topo = build_op_topo_sort(G)
-    print("num stages", len(op_topo))
-    print(list(map(lambda x: len(x), op_topo)))
-
-    G = build_macs_graph(fp.replace("regular", "macs"))
-
-    design = {
-        "G": nx.json_graph.node_link_data(G),
-        "topo_sort": op_topo,
-    }
-
     fp_dir = os.path.split(fp)[0]
-    json.dump(design, open(f"{fp_dir}/design.json", "w"), indent=2)
+    json.dump(nx.json_graph.node_link_data(G), open(f"{fp_dir}/design.json", "w"), indent=2)
 
 
 if __name__ == "__main__":
