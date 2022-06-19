@@ -257,8 +257,8 @@ class ReLUOrNeg:
         self.idx_str = "_".join(map(str, idx))
         self.relu_or_neg = relu_or_neg
         self.precision = precision
-        self.a_reg = Val(RegOrWire.REG, f"{relu_or_neg}_{idx}_a")
-        self.res_wire = Val(RegOrWire.WIRE, f"{relu_or_neg}_{idx}_res")
+        self.a_reg = Val(RegOrWire.REG, f"{relu_or_neg}_{self.idx_str}_a")
+        self.res_wire = Val(RegOrWire.WIRE, f"{relu_or_neg}_{self.idx_str}_res")
         self.registers = [self.a_reg]
 
     @property
@@ -791,6 +791,7 @@ def main(design_fp, precision):
                 "USE_BRAM": USE_BRAM,
                 "PRECISION": PRECISION,
                 "KEEP": KEEP,
+                "NUM_PES": len(PE_IDXS_TO_IDS)
             },
             indent=2,
         )
