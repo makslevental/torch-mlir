@@ -83,7 +83,7 @@ class NLB(torch.nn.Module):
         phi = self.phi_layer(x)
         g = self.g_layer(x)
 
-        theta_phi = theta * phi
+        theta_phi = self.mul(theta, phi)
         # theta_phi = theta
         theta_phi = self.soft(theta_phi)
         theta_phi_g = self.mul(theta_phi, g)
