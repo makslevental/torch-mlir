@@ -383,7 +383,7 @@ class ConvPlusReLU(nn.Module):
         self.relu = torch.nn.ReLU()
 
     def forward(self, x):
-        return self.relu(self.conv2(self.conv1(x)))
+        return self.relu(self.conv2(self.conv1(x))).sum()
 
 
 def make_single_small_cnn(
@@ -447,6 +447,7 @@ class Linear(nn.Module):
     def __init__(self, scale):
         super().__init__()
         self.linear1 = torch.nn.Linear(3, 4)
+        self.relu = torch.nn.ReLU()
         # self.linear2 = torch.nn.Linear(4, 2)
 
     def forward(self, x):
@@ -511,13 +512,13 @@ def main():
     # make_dot(
     #     args.out_dir, imgsz=10
     # )
-    make_single_small_cnn(
-        args.out_dir, in_channels=2, out_channels=4, imgsz=7, simplify_weights=False
-    )
+    # make_single_small_cnn(
+    #     args.out_dir, in_channels=2, out_channels=4, imgsz=7, simplify_weights=False
+    # )
     # make_linear(args.out_dir, imgsz=5, simplify_weights=False)
     # make_double_small_cnn(args.out_dir, scale=1, imgsz=11, simplify_weights=False)
-    # for i in range(args.low_scale, args.high_scale):
-    #     make_whole_braggnn(args.out_dir, scale=i, imgsz=11, simplify_weights=False)
+    for i in range(args.low_scale, args.high_scale):
+        make_whole_braggnn(args.out_dir, scale=i, imgsz=11, simplify_weights=False)
 
 
 if __name__ == "__main__":

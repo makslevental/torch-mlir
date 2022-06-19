@@ -26,6 +26,7 @@ OP_LAYER_PREFIX = "layer0"
 DTYPE = "f32"
 
 LAST_IDX_TO_OP_ID = {}
+VAL_TO_IDX = {}
 DEPS = set()
 
 
@@ -39,16 +40,11 @@ def print_op(op, v, *args):
     if (op, IDX) in LAST_IDX_TO_OP_ID:
         DEPS.add((LAST_IDX_TO_OP_ID[op, IDX], OP_COUNT))
     LAST_IDX_TO_OP_ID[op, IDX] = OP_COUNT
+    VAL_TO_IDX[v] = IDX
     if "arith" in op:
-        print(
-            f"{v} = arith.constant {args[0]} : {DTYPE}",
-            file=FILE,
-        )
+        print(f"{v} = arith.constant {args[0]} : {DTYPE}", file=FILE)
     else:
-        print(
-            f"{v} = {make_unregistered_op(op, *args)}",
-            file=FILE,
-        )
+        print(f"{v} = {make_unregistered_op(op, *args)}", file=FILE)
     OP_COUNT += 1
 
 
@@ -247,18 +243,19 @@ def Add(a, arr, idx):
 
 def ReduceAdd(src_arr: ArrayDecl, dst_arr: ArrayDecl):
     global IDX
-    IDX = None
     prev_sums = list(src_arr.registers.values())
     while len(prev_sums) > 1:
         next_sums = []
         while len(prev_sums) > 1:
-            next_sums.append(prev_sums.pop() + prev_sums.pop())
+            left = prev_sums.pop()
+            IDX = VAL_TO_IDX[left]
+            next_sums.append(left + prev_sums.pop())
         if len(prev_sums) == 1:
-            next_sums[-1] = next_sums[-1] + prev_sums[0]
+            left = next_sums[-1]
+            IDX = VAL_TO_IDX[left]
+            next_sums[-1] = left + prev_sums[0]
         prev_sums = next_sums
-    dst_arr[
-        0,
-    ] = prev_sums[0]
+    dst_arr[0,] = prev_sums[0]
 
 
 def Copy(a: ArrayDecl, b: ArrayDecl):
@@ -307,19 +304,29 @@ def make_args_globals(Args):
     return args, outputs, globals
 
 
+LATENCIES = {
+    "fadd": 6,
+    "fmul": 8,
+    "fmuladd": 6,
+    "relu": 1,
+    "neg": 1,
+    "fneg": 1,
+    "constant": 1,
+}
+
+
 def make_latency_attrs(file):
     deps = sorted([list(dep) for dep in DEPS])
+    operator_types = [
+        f"""{{ name = "{op}", latency = {lat}, limit = 1296 }}"""
+        for op, lat in LATENCIES.items()
+    ]
     print(
         f"""
  attributes {{
   auxdeps = {deps},
   operatortypes = [
-    {{ name = "fadd", latency = 3, limit = 1296 }},
-    {{ name = "fmul", latency = 6, limit = 1296 }},
-    {{ name = "fmuladd", latency = 6, limit = 1296 }},
-    {{ name = "relu", latency = 6, limit = 1296 }},
-    {{ name = "neg", latency = 10, limit = 1296 }},
-    {{ name = "fneg", latency = 10, limit = 1296 }}
+    {', '.join(operator_types)}
     ] }} \n{{
 """,
         file=file,
@@ -346,8 +353,6 @@ def MLIRForward(Args, output, forward):
 
     rets = []
     for index, value in output.registers.items():
-        # id = "_".join(map(str, index))
-        # print(f"*{output.arr_name}_{id} = {value}", file=OLD_FILE)
         rets.append(str(value))
 
     print(
@@ -377,11 +382,10 @@ def get_ssas_from_ir_line(line):
     else:
         opr = reg_opr.search(line)
         opr = opr.groups()[0] if opr else opr
-    pe = reg_pe.search(line)
-    pe = ast.literal_eval(pe.groups()[0]) if pe else pe
+    pe_idx = reg_pe.search(line)
+    pe_idx = ast.literal_eval(pe_idx.groups()[0]) if pe_idx else pe_idx
 
-    return start_time, opr, pe
-
+    return int(start_time) + 1, opr, pe_idx
 
 
 def build_regular_code_graph(fp):
@@ -391,39 +395,55 @@ def build_regular_code_graph(fp):
     for line in lines:
         if "attributes" in line:
             line = line.split("attributes")[0].strip()
-        idents = [i for i, _ in reg_idents.findall(line)]
+        idents = [i.replace("%", "v") for i, _ in reg_idents.findall(line)]
         if not idents:
             continue
         if "forward" in line:
-            for ident in idents:
-                G.add_node(ident, op="input")
-        else:
-            start_time, op, pe = get_ssas_from_ir_line(line)
-            if "return" in line:
-                for ident in idents:
-                    G.add_node(ident, op="output", start_time=int(start_time))
-            else:
-                assign, *deps = idents
-                if assign is not None:
-                    if assign not in G.nodes:
-                        G.add_node(assign, op=op, pe=pe, start_time=int(start_time))
-                    for i, dep in enumerate(deps):
-                        if dep not in G.nodes:
-                            assert op == "constant", dep
-                            G.add_node(dep, op="constant")
+            for i, ident in enumerate(idents):
+                G.add_node(ident, op="arg", arg_pos=i)
+            continue
 
-                        G.add_edge(dep, assign, pos=i, op=op)
+        start_time, op, pe_idx = get_ssas_from_ir_line(line)
+
+        assign, *deps = idents
+        if "return" in line:
+            G.add_node("return", op="return", start_time=start_time)
+            for i, ident in enumerate(idents):
+                G.add_edge(ident, "return", pos=i, op="return")
+            continue
+
+        if op == "constant":
+            G.add_node(assign, op=op, literal=float(deps[0]))
+            continue
+
+        assert pe_idx is not None
+        if assign is not None:
+            if assign not in G.nodes:
+                G.add_node(
+                    assign,
+                    op=op,
+                    pe_idx=pe_idx,
+                    start_time=start_time,
+                    end_time=start_time + LATENCIES[op],
+                )
+            for i, dep in enumerate(deps):
+                if dep not in G.nodes:
+                    raise Exception
+
+                G.add_edge(dep, assign, pos=i, op=op)
 
     return G
-
-
 
 
 def build_design(fp):
     assert "forward_regular" in fp
     G = build_regular_code_graph(fp)
     fp_dir = os.path.split(fp)[0]
-    json.dump(nx.json_graph.node_link_data(G), open(f"{fp_dir}/design.json", "w"), indent=2)
+    json.dump(
+        {"program_graph": nx.json_graph.node_link_data(G), "op_latencies": LATENCIES},
+        open(f"{fp_dir}/design.json", "w"),
+        indent=2,
+    )
 
 
 if __name__ == "__main__":
