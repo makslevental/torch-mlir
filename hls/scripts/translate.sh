@@ -42,4 +42,4 @@ circt-opt forward_regular.mlir -test-lp-scheduler=with=Problem -allow-unregister
 
 python ../../scripts/mlir_val.py "$PWD"/forward_regular.sched.mlir
 
-#python ../../scripts/make_verilog.py "$PWD"/design.json
+python ../../scripts/make_verilog_mlir.py "$PWD"/design.json
