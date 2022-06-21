@@ -18,7 +18,7 @@ import numpy as np
 
 ParsedProgram = namedtuple(
     "ParsedProgram",
-    ["inputs", "outputs", "pes_to_vals", "ops_to_pes", "constants", "max_interval"],
+    ["inputs", "outputs", "copies", "constants", "pes_to_vals", "ops_to_pes", "max_interval"],
 )
 
 
@@ -353,8 +353,13 @@ class Module:
             self.input_wires + self.output_wires + list(self.input_regs.values())
         )
         self.constants = parsed_program.constants
+        self.copies = parsed_program.copies
         for cst in self.constants:
             v = self.program_val_to_rtl_reg[cst] = Val(RegOrWire.REG, cst)
+            self.add_vals_to_rtl_graph([v])
+
+        for cpy in self.copies:
+            v = self.program_val_to_rtl_reg[cpy] = Val(RegOrWire.REG, cpy)
             self.add_vals_to_rtl_graph([v])
 
         for pe_idx in parsed_program.ops_to_pes["fmul"]:
@@ -433,6 +438,10 @@ class Module:
                             op = self.neg_instances[pe_idx]
                         self.rtl_graph.add_edge(src, op.a_reg, stage=stage)
                         res = op.res_wire
+                    elif op == "copy":
+                        dst = self.program_val_to_rtl_reg[v]
+                        self.rtl_graph.add_edge(src, dst, stage=stage)
+                        res = dst
                     else:
                         raise Exception(f"unknown op {op}")
 
@@ -724,6 +733,7 @@ def parse_program_graph(G):
     pes_to_vals = defaultdict(list)
     ops_to_pes = defaultdict(set)
     constants = {}
+    copies = {}
     for n, attrdict in G.nodes.items():
         op = attrdict["op"]
         if op == "arg":
@@ -732,6 +742,8 @@ def parse_program_graph(G):
             continue
         elif op == "constant":
             constants[n] = attrdict["literal"]
+        elif op == "copy":
+            copies[n] = attrdict["start_time"]
         else:
             pe_idx = attrdict["pe_idx"]
             assert pe_idx is not None
@@ -745,7 +757,7 @@ def parse_program_graph(G):
     max_interval = G.nodes["return"]["start_time"]
 
     return ParsedProgram(
-        inputs, outputs, pes_to_vals, ops_to_pes, constants, max_interval
+        inputs, outputs, copies, constants, pes_to_vals, ops_to_pes, max_interval
     )
 
 
