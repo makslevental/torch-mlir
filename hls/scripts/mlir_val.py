@@ -272,7 +272,7 @@ def ParFor(body, ranges):
         IDX = idx
         if len(IDX) < 5:
             _idx = 5 * [0]
-            _idx[0 : len(idx)] = idx
+            _idx[-len(idx):] = idx
             IDX = tuple(_idx)
 
         body(*idx)

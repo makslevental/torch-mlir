@@ -43,3 +43,17 @@ circt-opt forward_regular.mlir -test-lp-scheduler=with=Problem -allow-unregister
 python ../../scripts/mlir_val.py "$PWD"/forward_regular.sched.mlir
 
 python ../../scripts/make_verilog_mlir.py "$PWD"/design.json
+
+
+#highlight_objects -color green -leaf_cells [get_cells _forward_inner/fadd*]
+#highlight_objects -color red -leaf_cells [get_cells _forward_inner/fmul*]
+#highlight_objects -color red -leaf_cells [get_cells sigProd*]
+#highlight_objects -color red -leaf_cells [get_cells sigProd*]
+#highlight_objects -color red -leaf_cells [get_cells sticky_d1*]
+#highlight_objects -color red -leaf_cells [get_cells sign_d1*]
+#highlight_objects -color red -leaf_cells [get_cells _forward_inner/sign_d1*]
+#highlight_objects -color red -leaf_cells [get_cells exc_d1*]
+#highlight_objects -color red -leaf_cells [get_cells expSig*]
+#highlight_objects -color red -leaf_cells [get_cells expSumPre*]
+#highlight_objects -color red -leaf_cells [get_cells fmul*]
+#highlight_objects: Time (s): cpu = 01:10:14 ; elapsed = 00:07:53 . Memory (MB): peak = 14386.895 ; gain = 0.000 ; free physical = 1382 ; free virtual = 13773
