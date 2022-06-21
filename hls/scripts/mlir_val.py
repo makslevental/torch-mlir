@@ -37,10 +37,11 @@ def make_unregistered_op(op, *args):
 
 def print_op(op, v, *args):
     global OP_COUNT
-    if (op, IDX) in LAST_IDX_TO_OP_ID:
-        DEPS.add((LAST_IDX_TO_OP_ID[op, IDX], OP_COUNT))
-    LAST_IDX_TO_OP_ID[op, IDX] = OP_COUNT
-    VAL_TO_IDX[v] = IDX
+    if IDX is not None:
+        if (op, IDX) in LAST_IDX_TO_OP_ID:
+            DEPS.add((LAST_IDX_TO_OP_ID[op, IDX], OP_COUNT))
+        LAST_IDX_TO_OP_ID[op, IDX] = OP_COUNT
+        VAL_TO_IDX[v] = IDX
     if "arith" in op:
         print(f"{v} = arith.constant {args[0]} : {DTYPE}", file=FILE)
     else:
@@ -258,12 +259,20 @@ def ReduceAdd(src_arr: ArrayDecl, dst_arr: ArrayDecl):
     dst_arr[0,] = prev_sums[0]
 
 
-def Copy(a: ArrayDecl, b: ArrayDecl):
-    assert isinstance(b, ArrayDecl)
-    a.registers = b.registers
+def Copy(dst: ArrayDecl, src: ArrayDecl, valsem=False):
+    assert isinstance(src, ArrayDecl)
+    if valsem:
+        registers_to_copy = {}
+        global IDX
+        IDX = None
+        for idx, v in src.registers.items():
+            copied_v = MLIRVal(f"{v}_copy")
+            print_op("copy", copied_v, v)
+            registers_to_copy[idx] = copied_v
+    else:
+        registers_to_copy = src.registers
 
-
-IDX = None
+    dst.registers = registers_to_copy
 
 
 def ParFor(body, ranges):
@@ -312,6 +321,7 @@ LATENCIES = {
     "neg": 1,
     "fneg": 1,
     "constant": 1,
+    "copy": 1,
 }
 
 
@@ -403,7 +413,11 @@ def build_regular_code_graph(fp):
                 G.add_node(ident, op="arg", arg_pos=i)
             continue
 
-        start_time, op, pe_idx = get_ssas_from_ir_line(line)
+        try:
+            start_time, op, pe_idx = get_ssas_from_ir_line(line)
+        except:
+            print(line)
+            raise
 
         assign, *deps = idents
         if "return" in line:
@@ -416,7 +430,7 @@ def build_regular_code_graph(fp):
             G.add_node(assign, op=op, literal=float(deps[0]))
             continue
 
-        assert pe_idx is not None
+        assert pe_idx is not None or op == "copy"
         if assign is not None:
             if assign not in G.nodes:
                 G.add_node(

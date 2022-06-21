@@ -32,9 +32,6 @@ sed -i.bak 's/scf\.yield//g' forward.affine.mlir
 
 scalehls-translate forward.affine.mlir --emit-hlspy --mlir-print-elementsattrs-with-hex-if-larger=-1 -o forward.py
 
-python ../../scripts/mlir_ops.py forward.py --macs
-FN=macs python forward_rewritten.py
-
 python ../../scripts/mlir_ops.py forward.py
 FN=regular python forward_rewritten.py
 
@@ -56,4 +53,3 @@ python ../../scripts/make_verilog_mlir.py "$PWD"/design.json
 #highlight_objects -color red -leaf_cells [get_cells expSig*]
 #highlight_objects -color red -leaf_cells [get_cells expSumPre*]
 #highlight_objects -color red -leaf_cells [get_cells fmul*]
-#highlight_objects: Time (s): cpu = 01:10:14 ; elapsed = 00:07:53 . Memory (MB): peak = 14386.895 ; gain = 0.000 ; free physical = 1382 ; free virtual = 13773

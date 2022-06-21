@@ -3,6 +3,10 @@ from torch import nn
 
 from torch_mlir_e2e_test.torchscript.annotations import export, annotate_args
 
+def copy(src):
+    _init = torch.empty_like(src)
+    _out = torch.ops.aten.copy_(_init, src)
+    return _out
 
 class Exp(nn.Module):
     def __init__(self):
@@ -11,14 +15,18 @@ class Exp(nn.Module):
     # https://dl.acm.org/doi/pdf/10.1145/2851507
     # https://hal.inria.fr/inria-00071879/document
     def forward(self, x):
-        return (
-            x
-            + (x * x) * 0.5
-            + (x * x * x) * 0.16666666666666666
-            + (x * x * x * x) * 0.041666666666666664
-            + 1
-        )
-
+        y = x
+        y2 = y * y * 0.5
+        y3 = y2 * 0.03333333333333328
+        y4 = y2 * y2 * 0.08333333333333333
+        # (
+        #     x
+        #     + (x * x) * 0.5
+        #     + (x * x * x) * 0.16666666666666666
+        #     + (x * x * x * x) * 0.041666666666666664
+        #     + 1
+        # )
+        return y + y2 + y3 +  y4 + 1
 
 
 class Div(nn.Module):
@@ -88,6 +96,7 @@ class NLB(torch.nn.Module):
         theta_phi = self.soft(theta_phi)
         theta_phi_g = self.mul(theta_phi, g)
 
+        theta_phi_g = copy(theta_phi_g)
         _out_tmp = self.out_cnn(theta_phi_g)
         _out_tmp = self.add(_out_tmp, x)
 
@@ -135,7 +144,9 @@ class BraggNN(torch.nn.Module):
     def forward(self, x):
         _out = x
         _out = self.cnn_layers_1(_out)
+        _out = copy(_out)
         _out = self.nlb(_out)
+        _out = copy(_out)
         _out = self.cnn_layers_2(_out)
         _out = _out.flatten(start_dim=1)
         _out = self.dense_layers(_out)
