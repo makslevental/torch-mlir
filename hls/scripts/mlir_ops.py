@@ -3,6 +3,7 @@ from __future__ import annotations
 import _ast
 import argparse
 import ast
+import glob
 import inspect
 from _ast import Subscript
 from ast import Assign, Mult, Add, BinOp, Name, Call, keyword, Str, IfExp, Compare
@@ -174,9 +175,6 @@ class RemoveMulAdd(ast.NodeTransformer):
         else:
             return node
 
-    def visit_AugAssign(self, node):
-        return node
-
 
 class RemoveMulAddAndSubscript(ast.NodeTransformer):
     subs = {}
@@ -218,7 +216,7 @@ class RemoveMulAddAndSubscript(ast.NodeTransformer):
                     )
                 else:
                     assign2.value = Call(
-                        func=Name(id="FMac"),
+                        func=Name(id="FMAC"),
                         args=assign2.value.args[:-1],
                         keywords=[],
                     )
@@ -397,10 +395,18 @@ class RemoveIfExp(ast.NodeTransformer):
     def visit_AugAssign(self, node):
         return node
 
+
 class HoistGlobals(ast.NodeTransformer):
     def visit_FunctionDef(self, node):
         if node.name == "forward":
-            assigns = [(i, b) for i, b in enumerate(node.body) if isinstance(b, Assign) and isinstance(b.value, Call) and isinstance(b.value.func, Name) and b.value.func.id == 'GlobalArray']
+            assigns = [
+                (i, b)
+                for i, b in enumerate(node.body)
+                if isinstance(b, Assign)
+                and isinstance(b.value, Call)
+                and isinstance(b.value.func, Name)
+                and b.value.func.id == "GlobalArray"
+            ]
             for i, a in reversed(assigns):
                 del node.body[i]
                 node.args.args.append(a.targets[0].id)
@@ -411,23 +417,41 @@ class HoistGlobals(ast.NodeTransformer):
 class RemoveValSemCopies(ast.NodeTransformer):
     def visit_FunctionDef(self, node):
         if node.name == "forward":
-            arg_names = [arg.arg if isinstance(arg, ast.arg) else arg for arg in node.args.args]
-            all_copies = [(i, b) for i, b in enumerate(node.body) if isinstance(b, _ast.FunctionDef) and len(b.body) == 2]
+            arg_names = [
+                arg.arg if isinstance(arg, ast.arg) else arg for arg in node.args.args
+            ]
+            all_copies = [
+                (i, b)
+                for i, b in enumerate(node.body)
+                if isinstance(b, _ast.FunctionDef) and len(b.body) == 2
+            ]
             for i, copy in reversed(all_copies):
                 src = copy.body[0].value.value
                 if src.id in arg_names:
                     continue
                 dst = copy.body[1].targets[0].value
-                assert isinstance(node.body[i+1].value, Call) and node.body[i+1].value.func.id == "ParFor"
-                node.body[i] = ast.Expr(value=Call(func=Name(id="Copy"), args=[dst, src], keywords=[keyword(arg="valsem", value=_ast.Constant(kind=None, value=True))]))
-                del node.body[i+1]
+                assert (
+                    isinstance(node.body[i + 1].value, Call)
+                    and node.body[i + 1].value.func.id == "ParFor"
+                )
+                node.body[i] = ast.Expr(
+                    value=Call(
+                        func=Name(id="Copy"),
+                        args=[dst, src],
+                        keywords=[
+                            keyword(
+                                arg="valsem", value=_ast.Constant(kind=None, value=True)
+                            )
+                        ],
+                    )
+                )
+                del node.body[i + 1]
         return node
 
 
 def parse_range_call(rang):
     lo, hi, step = [r.value for r in rang.args]
     return hi
-
 
 
 class SetMaxRange(ast.NodeTransformer):
@@ -445,10 +469,141 @@ class SetMaxRange(ast.NodeTransformer):
         return node
 
 
+class HandleUnrolledLoops(ast.NodeTransformer):
+    has_fma = False
+
+    def visit_FunctionDef(self, node):
+        args = [arg if isinstance(arg, ast.arg) else arg for arg in node.args.args]
+        arg_names = [arg.arg for arg in args]
+        all_binops = [
+            (i, b)
+            for i, b in enumerate(node.body)
+            if isinstance(b, _ast.Assign) and isinstance(b.value, _ast.BinOp)
+        ]
+        for i, (_, assign) in enumerate(all_binops):
+            if isinstance(assign.value.op, _ast.Mult) and i + 1 < len(all_binops):
+                _, next_assign = all_binops[i + 1]
+                if isinstance(next_assign.value.op, _ast.Add):
+                    self.has_fma = True
+                    break
+
+        if self.has_fma:
+            stuff_to_delete = []
+            all_subscript_assigns = [
+                (i, b)
+                for i, b in enumerate(node.body)
+                if isinstance(b, _ast.Assign)
+                and isinstance(b.targets[0], _ast.Subscript)
+            ]
+            assign_target = all_subscript_assigns[0][1].targets[0].value
+            all_subscript_loads = [
+                (i, b)
+                for i, b in enumerate(node.body)
+                if isinstance(b, _ast.Assign)
+                and isinstance(b.value, _ast.Subscript)
+                and b.value.value.id == assign_target.id
+            ]
+            for i, (j, assign) in enumerate(all_subscript_assigns[0:-1]):
+                stuff_to_delete.append(j)
+                k, load = all_subscript_loads[i + 1]
+                name_to_replace = load.targets[0].id
+                assert node.body[k + 2].value.left.id == name_to_replace
+                node.body[k + 2].value.left = assign.value
+                stuff_to_delete.append(all_subscript_loads[i + 1][0])
+
+            for j in reversed(sorted(stuff_to_delete)):
+                del node.body[j]
+
+            fma = Name(id="fma")
+            node.body.insert(
+                0,
+                Assign(
+                    targets=[fma],
+                    value=Call(func=Name(id="FMAC"), args=args, keywords=[]),
+                    type_comment=None,
+                ),
+            )
+            for i, nod in enumerate(node.body):
+                if (
+                    isinstance(nod, _ast.Assign)
+                    and isinstance(nod.value, _ast.BinOp)
+                    and nod.value.left.id not in arg_names
+                ):
+                    if not isinstance(nod.targets, list):
+                        targets = [nod.targets]
+                    else:
+                        targets = nod.targets
+
+                    if isinstance(nod.value.op, _ast.Mult):
+                        node.body[i] = Assign(
+                            targets=targets,
+                            value=Call(
+                                func=Name(id="fma.Mul"),
+                                args=[nod.value.left, nod.value.right],
+                                keywords=[],
+                            ),
+                            type_comment=None,
+                        )
+                    elif isinstance(nod.value.op, _ast.Add):
+                        node.body[i] = Assign(
+                            targets=targets,
+                            value=Call(
+                                func=Name(id="fma.Add"),
+                                args=[nod.value.left, nod.value.right],
+                                keywords=[],
+                            ),
+                            type_comment=None,
+                        )
+            assert node.body[-1].targets[0].value.id == assign_target.id
+            node.body[-1] = Assign(
+                targets=[node.body[-1].targets[0]],
+                value=Call(func=Name(id="fma.Result"), args=[], keywords=[]),
+                type_comment=None,
+            )
+
+        return node
+
+
+class ReplaceHandleUnrolledLoops(ast.NodeTransformer):
+    def __init__(self, handled_loops):
+        self.handled_loops = handled_loops
+
+    def visit_FunctionDef(self, node):
+        if node.decorator_list:
+            apply_n = node.decorator_list[0].keywords[0].value.value
+            if apply_n in self.handled_loops:
+                node.body = self.handled_loops[apply_n].body[0].body
+            node.decorator_list = []
+
+        self.generic_visit(node)
+        return node
+
+
+def handle_unrolled_loops(fp):
+    handled_loops = {}
+    for unrolled_loop_fp in glob.glob(fp.replace("forward.py", ".ast_tools") + "/*.py"):
+        new_tree = astor.parse_file(unrolled_loop_fp)
+        han = HandleUnrolledLoops()
+        new_tree = han.visit(new_tree)
+        if han.has_fma:
+            handled_loops[unrolled_loop_fp.rsplit("/", 1)[1]] = new_tree
+            with open(
+                f"{unrolled_loop_fp.replace('apply', 'apply_rewritten')}", "w"
+            ) as f:
+                f.write(astor.code_gen.to_source(new_tree))
+
+    new_tree = astor.parse_file(fp)
+    new_tree = ReplaceHandleUnrolledLoops(handled_loops).visit(new_tree)
+    new_fp = f"{fp.replace('forward', 'forward_unrolled')}"
+    with open(new_fp, "w") as f:
+        f.write(astor.code_gen.to_source(new_tree))
+    return new_fp
+
+
 def transform_forward_py(fp):
     new_tree = astor.parse_file(fp)
     new_tree = HoistGlobals().visit(new_tree)
-    new_tree = RemoveValSemCopies().visit(new_tree)
+    # new_tree = RemoveValSemCopies().visit(new_tree)
     new_tree = RemoveIfExp().visit(new_tree)
     with open(f"{fp.replace('forward', 'forward_rewritten')}", "w") as f:
         f.write(astor.code_gen.to_source(new_tree))
@@ -458,22 +613,5 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("fp")
     args = parser.parse_args()
-    transform_forward_py(args.fp)
-
-
-# def unroll_loops():
-#     passer = apply_passes([loop_unroll()], env=SymbolTable(locals(), globals()))
-#     new_body = passer(body)
-#     fun_tree = passer.parse(new_body)
-#
-#     _locals = dict(
-#         zip(
-#             ("_arg2", "_arg3", "_arg4", "_arg5"),
-#             [cst.Integer(value=repr(i)) for i in (0, 0, 0, 0)],
-#         )
-#     )
-#     sym_table = SymbolTable(_locals, {})
-#     new_new_body = replace_symbols(fun_tree.body, sym_table)
-#     open("new_new_body.py", "w").write(to_source(new_new_body))
-#     fun_tree = fun_tree.with_deep_changes(fun_tree, body=new_new_body)
-#     open("unrolled.py", "w").write(to_source(fun_tree))
+    new_fp = handle_unrolled_loops(args.fp)
+    transform_forward_py(new_fp)

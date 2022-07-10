@@ -14,3 +14,5 @@ ninja
 
 # Test Requirements
 pillow
+
+ast-tools==0.1.8

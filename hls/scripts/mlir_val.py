@@ -204,30 +204,28 @@ class GlobalArrayVal(ArrayVal):
         return f"%{self.name}_{self.val_id}"
 
 
-def FMulAdd(a, b, c):
-    inps = [a, b, c]
-    for i, v in enumerate(inps):
-        if isinstance(v, (float, int, bool)):
-            inps[i] = MLIRConstant(v)
-    a, b, c = inps
-    v = MLIRVal(f"(fmuladd {a} {b} {c})")
-    print_op("fmuladd", v, a, b, c)
-    return v
+class FMAC:
+    def __init__(self, *pe_idx):
+        global IDX
+        if len(pe_idx) < 5:
+            _idx = 5 * [0]
+            _idx[-len(pe_idx) :] = pe_idx
+            pe_idx = tuple(_idx)
+        self.pe_idx = IDX = pe_idx
+        print(f"// pe {pe_idx} starts", file=FILE)
+        self.most_recent_res = None
 
+    def Add(self, a, b):
+        self.most_recent_res = a + b
+        return self.most_recent_res
 
-def FMac(a, b, arr, idx):
-    inps = [a, b]
-    for i, v in enumerate(inps):
-        if isinstance(v, (float, int, bool)):
-            inps[i] = MLIRConstant(v)
-    (a, b), c = inps, arr[idx]
-    cc = c
+    def Mul(self, a, b):
+        self.most_recent_res = a * b
+        return self.most_recent_res
 
-    # handle the first time you process a constant of input
-    if isinstance(c, GlobalArrayVal):
-        cc = arr[idx] = arr.make_val(idx)
-    print_op("fmuladd", cc, a, b, c)
-    return cc
+    def Result(self):
+        print(f"// pe {self.pe_idx} ends", file=FILE)
+        return self.most_recent_res
 
 
 def Add(a, arr, idx):
@@ -256,34 +254,19 @@ def ReduceAdd(src_arr: ArrayDecl, dst_arr: ArrayDecl):
             IDX = VAL_TO_IDX[left]
             next_sums[-1] = left + prev_sums[0]
         prev_sums = next_sums
-    dst_arr[0,] = prev_sums[0]
+    dst_arr[
+        0,
+    ] = prev_sums[0]
 
 
-def Copy(dst: ArrayDecl, src: ArrayDecl, valsem=False):
+def Copy(dst: ArrayDecl, src: ArrayDecl):
     assert isinstance(src, ArrayDecl)
-    if valsem:
-        registers_to_copy = {}
-        global IDX
-        IDX = None
-        for idx, v in src.registers.items():
-            copied_v = MLIRVal(f"{v}_copy")
-            print_op("copy", copied_v, v)
-            registers_to_copy[idx] = copied_v
-    else:
-        registers_to_copy = src.registers
-
+    registers_to_copy = src.registers
     dst.registers = registers_to_copy
 
 
 def ParFor(body, ranges):
-    global IDX
     for i, idx in enumerate(itertools.product(*ranges)):
-        IDX = idx
-        if len(IDX) < 5:
-            _idx = 5 * [0]
-            _idx[-len(idx):] = idx
-            IDX = tuple(_idx)
-
         body(*idx)
 
 
@@ -328,7 +311,7 @@ LATENCIES = {
 def make_latency_attrs(file):
     deps = sorted([list(dep) for dep in DEPS])
     operator_types = [
-        f"""{{ name = "{op}", latency = {lat}, limit = 1296 }}"""
+        f"""{{ name = "{op}", latency = {lat}, limit = 2592 }}"""
         for op, lat in LATENCIES.items()
     ]
     print(
