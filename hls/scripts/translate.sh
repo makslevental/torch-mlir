@@ -30,16 +30,22 @@ open("forward.affine.mlir", "w").writelines(new_lines)
 EOF
 sed -i.bak 's/scf\.yield//g' forward.affine.mlir
 
+#sed -i.bak 's/memref\.load/affine.load/g' forward.affine.mlir
+#sed -i.bak 's/memref\.store/affine.store/g' forward.affine.mlir
+#torch-mlir-opt -affine-loop-unroll="unroll-full unroll-full-threshold=1000" -o forward.affine.unrolled.mlir
+#torch-mlir-opt -debug -affine-scalrep forward.affine.unrolled.mlir -o forward.affine.unrolled.scalrep.mlir
+
 scalehls-translate forward.affine.mlir --emit-hlspy --mlir-print-elementsattrs-with-hex-if-larger=-1 -o forward.py
 
 python ../../scripts/mlir_ops.py forward.py
-FN=regular python forward_rewritten.py
+FN=regular python forward_rewritten_unrolled.py
 
 circt-opt forward_regular.mlir -test-lp-scheduler=with=Problem -allow-unregistered-dialect -o forward_regular.sched.mlir
+#/Users/mlevental/dev_projects/circt/build/clion/bin/circt-opt forward_regular.mlir -test-cpsat-scheduler=with=SharedOperatorsProblem -allow-unregistered-dialect -o forward_regular.sched.mlir
 
-python ../../scripts/mlir_val.py "$PWD"/forward_regular.sched.mlir
-
-python ../../scripts/make_verilog_mlir.py "$PWD"/design.json
+#python ../../scripts/mlir_val.py "$PWD"/forward_regular.sched.mlir
+#
+#python ../../scripts/make_verilog_mlir.py "$PWD"/design.json
 
 
 #highlight_objects -color green -leaf_cells [get_cells _forward_inner/fadd*]
