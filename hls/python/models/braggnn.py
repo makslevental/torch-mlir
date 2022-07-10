@@ -3,10 +3,6 @@ from torch import nn
 
 from torch_mlir_e2e_test.torchscript.annotations import export, annotate_args
 
-def copy(src):
-    _init = torch.empty_like(src)
-    _out = torch.ops.aten.copy_(_init, src)
-    return _out
 
 class Exp(nn.Module):
     def __init__(self):
@@ -96,7 +92,7 @@ class NLB(torch.nn.Module):
         theta_phi = self.soft(theta_phi)
         theta_phi_g = self.mul(theta_phi, g)
 
-        theta_phi_g = copy(theta_phi_g)
+        # theta_phi_g = copy(theta_phi_g)
         _out_tmp = self.out_cnn(theta_phi_g)
         _out_tmp = self.add(_out_tmp, x)
 
@@ -144,9 +140,9 @@ class BraggNN(torch.nn.Module):
     def forward(self, x):
         _out = x
         _out = self.cnn_layers_1(_out)
-        _out = copy(_out)
+        # _out = copy(_out)
         _out = self.nlb(_out)
-        _out = copy(_out)
+        # _out = copy(_out)
         _out = self.cnn_layers_2(_out)
         _out = _out.flatten(start_dim=1)
         _out = self.dense_layers(_out)
