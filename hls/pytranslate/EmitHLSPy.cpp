@@ -246,6 +246,7 @@ public:
   //  void emitStreamWrite(StreamWriteOp op);
   //  void emitPrimMul(PrimMulOp op);
   template <typename AssignOpType> void emitAssign(AssignOpType op);
+  int apply_counter = 0;
 
   /// Control flow operation emitters.
   void emitCall(func::CallOp op);
@@ -601,13 +602,13 @@ void ModuleEmitter::emitScfFor(scf::ForOp op) {
   state.nameTable[iterVar] = s;
   os << s;
   //  emitValue(iterVar);
-  os << " in range(";
+  os << " in unroll(range(";
   emitValue(op.getLowerBound());
   os << ", ";
   emitValue(op.getUpperBound());
   os << ", ";
   emitValue(op.getStep());
-  os << "):";
+  os << ")):";
   os << "\n";
 
   addIndent();
@@ -679,7 +680,7 @@ void ModuleEmitter::emitAffineFor(AffineForOp op) {
 
   // Emit lower bound.
   emitValue(iterVar);
-  os << " in range(";
+  os << " in unroll(range(";
   auto lowerMap = op.getLowerBoundMap();
   AffineExprEmitter lowerEmitter(state, lowerMap.getNumDims(),
                                  op.getLowerBoundOperands());
@@ -713,7 +714,7 @@ void ModuleEmitter::emitAffineFor(AffineForOp op) {
       os << ")";
     }
   }
-  os << ", " << op.getStep() << "):";
+  os << ", " << op.getStep() << ")):";
   os << "\n";
 
   addIndent();
@@ -786,6 +787,7 @@ void ModuleEmitter::emitAffineParallel(AffineParallelOp op) {
     }
   }
 
+  indent() << "@apply_passes([loop_unroll(), ssa(strict=False)], file_name='apply_" << apply_counter++ << ".py')\n";
   indent() << "def body(";
   for (unsigned i = 0, e = op.getNumDims(); i < e; ++i) {
     auto iterVar = op.getBody()->getArgument(i);
@@ -1605,10 +1607,12 @@ void ModuleEmitter::emitFunction(FuncOp func) {
 void ModuleEmitter::emitModule(ModuleOp module) {
   os << R"XXX(import sys
 import numpy as np
-# from hls.scripts.mlir_ops import ArrayDecl, ParFor, ReLU, Exp, GlobalArray
-# from hls.scripts.verilog_val import Forward
-# from hls.scripts.llvm_val import Forward, FMulAdd, ArrayDecl, ParFor, ReLU, Exp, GlobalArray
-from hls.scripts.mlir_val import Forward, FMulAdd, ArrayDecl, ParFor, FMac, Add, GlobalArray, Copy, ReLU, ReduceAdd
+from hls.scripts.mlir_val import Forward, ArrayDecl, ParFor, FMAC, Add, GlobalArray, Copy, ReLU, ReduceAdd
+from ast_tools.passes import apply_passes, loop_unroll, ssa
+from ast_tools.macros import unroll
+
+sys.setrecursionlimit(2500)
+
 )XXX";
   os << "\n\n";
   os << " # fmt: off\n";
