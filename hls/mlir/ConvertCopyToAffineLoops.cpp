@@ -120,7 +120,7 @@ struct ReshapeOpLoweringPattern : public OpRewritePattern<tensor::ReshapeOp> {
     if (!toTensorOp || !toMemrefOp)
       return failure();
 
-    auto inputType = toTensorOp.memref().getType().cast<MemRefType>();
+    auto inputType = toTensorOp.getMemref().getType().cast<MemRefType>();
     auto resultType = toMemrefOp.getType().cast<MemRefType>();
     auto loc = reshape.getLoc();
 
@@ -152,9 +152,9 @@ struct ReshapeOpLoweringPattern : public OpRewritePattern<tensor::ReshapeOp> {
 
     // Create affine load/store operations.
     auto value = rewriter.create<mlir::AffineLoadOp>(
-        loc, toTensorOp.memref(), getMemrefAccessMap(inputType),
+        loc, toTensorOp.getMemref(), getMemrefAccessMap(inputType),
         loop.getInductionVar());
-    rewriter.create<mlir::AffineStoreOp>(loc, value, toMemrefOp.memref(),
+    rewriter.create<mlir::AffineStoreOp>(loc, value, toMemrefOp.getMemref(),
                                          getMemrefAccessMap(resultType),
                                          loop.getInductionVar());
 
