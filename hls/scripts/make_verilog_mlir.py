@@ -747,6 +747,10 @@ def parse_program_graph(G):
         else:
             pe_idx = attrdict["pe_idx"]
             assert pe_idx is not None
+            if isinstance(pe_idx, int):
+                pe_idx = (pe_idx,)
+            if isinstance(pe_idx, list):
+                pe_idx = tuple(pe_idx)
             pe_idx = tuple(pe_idx)
             attrdict["pe_idx"] = pe_idx
             vals_to_pes[n] = pe_idx

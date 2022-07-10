@@ -28,11 +28,14 @@ DTYPE = "f32"
 LAST_IDX_TO_OP_ID = {}
 VAL_TO_IDX = {}
 DEPS = set()
-
+NUM_EXTRA_PES = 1296
+IDX = 0
+UNIQUE_IDXS = set()
 
 def make_unregistered_op(op, *args):
+    UNIQUE_IDXS.add(IDX)
     # return f"\"{op}_{OP_LAYER_PREFIX}_{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}\"({', '.join(map(str, args))}) {{ opr = \"{op}\" }} : ({', '.join([DTYPE for _ in args])}) -> {DTYPE}"
-    return f""""{op}"({', '.join(map(str, args))}) {{ opr = "{op}", pe ="{IDX}" }} : ({', '.join([DTYPE for _ in args])}) -> {DTYPE}"""
+    return f""""{op}"({', '.join(map(str, args))}) {{ opr = "{op}", pe = "{IDX}", op_count = "{OP_COUNT}" }} : ({', '.join([DTYPE for _ in args])}) -> {DTYPE}"""
 
 
 def print_op(op, v, *args):
@@ -207,11 +210,12 @@ class GlobalArrayVal(ArrayVal):
 class FMAC:
     def __init__(self, *pe_idx):
         global IDX
-        if len(pe_idx) < 5:
-            _idx = 5 * [0]
+        self.old_idx = IDX
+        if len(pe_idx) < 4:
+            _idx = 4 * [0]
             _idx[-len(pe_idx) :] = pe_idx
             pe_idx = tuple(_idx)
-        self.pe_idx = IDX = pe_idx
+        IDX = self.pe_idx = pe_idx
         print(f"// pe {pe_idx} starts", file=FILE)
         self.most_recent_res = None
 
@@ -225,6 +229,8 @@ class FMAC:
 
     def Result(self):
         print(f"// pe {self.pe_idx} ends", file=FILE)
+        global IDX
+        IDX = self.old_idx - 1
         return self.most_recent_res
 
 
@@ -266,7 +272,9 @@ def Copy(dst: ArrayDecl, src: ArrayDecl):
 
 
 def ParFor(body, ranges):
+    global IDX
     for i, idx in enumerate(itertools.product(*ranges)):
+        IDX = (IDX + 1) % NUM_EXTRA_PES
         body(*idx)
 
 
@@ -310,6 +318,7 @@ LATENCIES = {
 
 def make_latency_attrs(file):
     deps = sorted([list(dep) for dep in DEPS])
+    deps = []
     operator_types = [
         f"""{{ name = "{op}", latency = {lat}, limit = 2592 }}"""
         for op, lat in LATENCIES.items()
@@ -340,6 +349,7 @@ def MLIRForward(Args, output, forward):
     )
     FILE = io.StringIO()
     forward()
+    print(f"num unique pes {len(UNIQUE_IDXS)}")
     make_latency_attrs(OLD_FILE)
     FILE.seek(0)
     OLD_FILE.write(FILE.read())

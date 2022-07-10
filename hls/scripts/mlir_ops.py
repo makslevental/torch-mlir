@@ -594,7 +594,7 @@ def handle_unrolled_loops(fp):
 
     new_tree = astor.parse_file(fp)
     new_tree = ReplaceHandleUnrolledLoops(handled_loops).visit(new_tree)
-    new_fp = f"{fp.replace('forward', 'forward_unrolled')}"
+    new_fp = f"{fp.replace('.py', '_unrolled.py')}"
     with open(new_fp, "w") as f:
         f.write(astor.code_gen.to_source(new_tree))
     return new_fp
@@ -605,13 +605,16 @@ def transform_forward_py(fp):
     new_tree = HoistGlobals().visit(new_tree)
     # new_tree = RemoveValSemCopies().visit(new_tree)
     new_tree = RemoveIfExp().visit(new_tree)
-    with open(f"{fp.replace('forward', 'forward_rewritten')}", "w") as f:
+    new_fp = f"{fp.replace('.py', '_rewritten.py')}"
+    with open(new_fp, "w") as f:
         f.write(astor.code_gen.to_source(new_tree))
+    return new_fp
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("fp")
     args = parser.parse_args()
+    print(args.fp)
     new_fp = handle_unrolled_loops(args.fp)
     transform_forward_py(new_fp)
