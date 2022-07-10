@@ -177,16 +177,12 @@ BUFFERIZATION_PIPELINE = [
     # Bufferize.
     "func.func(scf-bufferize)",
     "func.func(tm-tensor-bufferize)",
-    # "func.func(torch-hls-linalg-bufferize)",
+    "func.func(linalg-init-tensor-to-alloc-tensor)",
     "func.func(linalg-bufferize)",
     "func-bufferize",
     "arith-bufferize",
     "func.func(tensor-bufferize)",
     "func.func(buffer-loop-hoisting)",
-    "func.func(finalizing-bufferize)",
-    # "tensor-constant-bufferize{alignment=0}",
-    ## "func.func(buffer-hoisting)",
-    ## "builtin.module(buffer-results-to-out-params)",
     "func.func(finalizing-bufferize)",
 ]
 
@@ -383,7 +379,7 @@ class ConvPlusReLU(nn.Module):
         self.relu = torch.nn.ReLU()
 
     def forward(self, x):
-        return self.relu(self.conv2(self.conv1(x))).sum()
+        return self.relu(self.conv2(self.conv1(x)))
 
 
 def make_single_small_cnn(
@@ -447,7 +443,6 @@ class Linear(nn.Module):
     def __init__(self, scale):
         super().__init__()
         self.linear1 = torch.nn.Linear(3, 4)
-        self.relu = torch.nn.ReLU()
         # self.linear2 = torch.nn.Linear(4, 2)
 
     def forward(self, x):
