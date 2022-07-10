@@ -24,6 +24,8 @@ echo "LIBTORCH_SRC_BUILD=${LIBTORCH_SRC_BUILD}"
 echo "LIBTORCH_CACHE=${LIBTORCH_CACHE}"
 echo "CMAKE_OSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES}"
 export CMAKE_OSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES}
+export CMAKE_C_COMPILER_LAUNCHER=${CMAKE_C_COMPILER_LAUNCHER}
+export CMAKE_CXX_COMPILER_LAUNCHER=${CMAKE_CXX_COMPILER_LAUNCHER}
 
 if [[ "$LIBTORCH_VARIANT" == *"cxx11-abi"* ]]; then
   echo _GLIBCXX_USE_CXX11_ABI=1
@@ -102,19 +104,39 @@ fi
 
 checkout_pytorch() {
   if [[ ! -d "$PYTORCH_ROOT" ]]; then
-    git clone https://github.com/pytorch/pytorch "$PYTORCH_ROOT"
+    git clone --depth 1 --single-branch --branch "${PYTORCH_BRANCH}" https://github.com/pytorch/pytorch "$PYTORCH_ROOT"
   fi
   cd "$PYTORCH_ROOT"
-  git fetch --all
-  git checkout origin/"${PYTORCH_BRANCH}"
-  git submodule update --init --recursive
+  for dep in protobuf pocketfft cpuinfo FP16 psimd fmt sleef pybind11 onnx flatbuffers foxi; do
+    git submodule update --init --depth 1 -- third_party/$dep
+  done
 }
 
 build_pytorch() {
   cd "$PYTORCH_ROOT"
   # Uncomment the next line if you want to iterate on source builds
-  python setup.py clean
+  # python setup.py clean
 
+  sed -i.bak -E 's/^[[:space:]]+check_submodules()/#check_submodules()/g' setup.py
+  # remove after https://github.com/pytorch/pytorch/issues/81178 is fixed
+  sed -i.bak -E 's/namespace ao {/namespace ao {\n#include <ATen\/native\/ao_sparse\/quantized\/cpu\/packed_params.h>/g' aten/src/ATen/native/ao_sparse/quantized/cpu/qlinear_deserialize.cpp
+  sed -i.bak -E 's/namespace ao {/namespace ao {\n#include <ATen\/native\/ao_sparse\/quantized\/cpu\/packed_params.h>/g' aten/src/ATen/native/ao_sparse/quantized/cpu/qlinear_serialize.cpp
+
+  if ! command -v ninja &> /dev/null
+  then
+    echo "You should probably install Ninja using pip install ninja"
+    USE_NINJA=0
+    MAX_JOBS=1
+  else
+    USE_NINJA=1
+    if [[ -z ${MAX_JOBS+""} ]]; then
+      if [[ "$(uname -s)" == 'Darwin' ]]; then
+        MAX_JOBS=$(sysctl -n hw.ncpu)
+      else
+        MAX_JOBS=$(nproc)
+      fi
+    fi
+  fi
 
   BUILD_SHARED_LIBS=ON
   USE_LIGHTWEIGHT_DISPATCH=OFF
@@ -127,11 +149,38 @@ build_pytorch() {
     # STATIC_DISPATCH_BACKEND=ON
     # BUILD_LITE_INTERPRETER=OFF
   fi
-  BUILD_SHARED_LIBS=${BUILD_SHARED_LIBS} USE_LIGHTWEIGHT_DISPATCH=${USE_LIGHTWEIGHT_DISPATCH} STATIC_DISPATCH_BACKEND=${STATIC_DISPATCH_BACKEND} BUILD_LITE_INTERPRETER=${BUILD_LITE_INTERPRETER} BUILD_TEST=OFF USE_GLOO=OFF USE_MPS=OFF USE_PYTORCH_QNNPACK=OFF USE_OPENMP=OFF  USE_OBSERVERS=OFF USE_KINETO=OFF USE_EIGEN_FOR_BLAS=OFF CMAKE_CXX_FLAGS="-D_GLIBCXX_USE_CXX11_ABI=${CXX_ABI}" USE_FBGEMM=OFF USE_NCCL=OFF INTERN_DISABLE_ONNX=OFF USE_CUDA=OFF USE_MKL=OFF USE_XNNPACK=OFF USE_DISTRIBUTED=OFF USE_BREAKPAD=OFF USE_MKLDNN=OFF USE_QNNPACK=OFF USE_NNPACK=OFF ONNX_ML=OFF CMAKE_OSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES} python setup.py  bdist_wheel -d "$WHEELHOUSE"
+  BUILD_LITE_INTERPRETER=${BUILD_LITE_INTERPRETER} \
+  BUILD_SHARED_LIBS=${BUILD_SHARED_LIBS} \
+  BUILD_TEST=OFF \
+  CMAKE_CXX_FLAGS="-D_GLIBCXX_USE_CXX11_ABI=${CXX_ABI}" \
+  CMAKE_OSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES} \
+  MAX_JOBS=${MAX_JOBS} \
+  ONNX_ML=OFF \
+  STATIC_DISPATCH_BACKEND=${STATIC_DISPATCH_BACKEND} \
+  USE_BREAKPAD=OFF \
+  USE_CUDA=OFF \
+  USE_DISTRIBUTED=OFF \
+  USE_EIGEN_FOR_BLAS=OFF \
+  USE_FBGEMM=OFF \
+  USE_GLOO=OFF \
+  USE_KINETO=OFF \
+  USE_LIGHTWEIGHT_DISPATCH=${USE_LIGHTWEIGHT_DISPATCH} \
+  USE_MKL=OFF \
+  USE_MKLDNN=OFF \
+  USE_MPS=OFF \
+  USE_NCCL=OFF \
+  USE_NINJA=${USE_NINJA} \
+  USE_NNPACK=OFF \
+  USE_OBSERVERS=OFF \
+  USE_OPENMP=OFF \
+  USE_PYTORCH_QNNPACK=OFF \
+  USE_QNNPACK=OFF \
+  USE_XNNPACK=OFF \
+  python setup.py bdist_wheel -d "$WHEELHOUSE"
 }
 
 package_pytorch() {
-  mkdir -p libtorch/{lib,bin,include,share}
+  rm -rf libtorch/{lib,bin,include,share}
 
   # Copy over all of the cmake files
   mv build/lib*/torch/share     libtorch/
@@ -142,10 +191,9 @@ package_pytorch() {
   # Copy over all include files
   mv build/include/*            libtorch/include/
 
-  echo "${PYTORCH_BUILD_VERSION}" > libtorch/build-version
   (pushd "$PYTORCH_ROOT" && git rev-parse HEAD) > libtorch/build-hash
   echo "Installing libtorch in ${PYTORCH_ROOT}/../../"
-  echo "deleteing old ${PYTORCH_ROOT}/../../libtorch"
+  echo "deleting old ${PYTORCH_ROOT}/../../libtorch"
   rm -rf "${PYTORCH_ROOT}"/../../libtorch
   mv libtorch "${PYTORCH_ROOT}"/../../
 }
