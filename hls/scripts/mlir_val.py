@@ -217,7 +217,7 @@ class GlobalArrayVal(ArrayVal):
 
 
 class FMAC:
-    def __init__(self, *pe_idx):
+    def __init__(self, *pe_idx, file=None):
         pe_idx = extend_idx(pe_idx)
         assert pe_idx == IDX, (pe_idx, IDX)
         self.pe_idx = pe_idx
@@ -234,7 +234,7 @@ class FMAC:
 
     def Mul(self, a, b):
         if self.most_recent_mul is None or DONT_COLLAPSE_MACS:
-            self.most_recent_mul = a + b
+            self.most_recent_mul = a * b
         else:
             print_op("fmul", self.most_recent_mul, a, b)
         return self.most_recent_mul
@@ -285,7 +285,7 @@ def ParFor(body, ranges):
     global IDX
     for i, idx in enumerate(itertools.product(*ranges)):
         IDX = extend_idx(idx)
-        body(*idx)
+        body(*idx, file=FILE)
 
 
 def ReLU(x):
