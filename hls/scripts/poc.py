@@ -440,31 +440,29 @@ def make_double_small_cnn(root_out_dir, scale=1, imgsz=11, simplify_weights=Fals
 
 
 class Linear(nn.Module):
-    def __init__(self, scale):
+    def __init__(self, imgsz):
         super().__init__()
-        self.linear1 = torch.nn.Linear(3, 4)
-        # self.linear2 = torch.nn.Linear(4, 2)
+        self.linear1 = torch.nn.Linear(imgsz, imgsz)
 
     def forward(self, x):
         y = self.linear1(x)
-        # z = self.linear2(y)
         return y.sum()
 
 
-def make_linear(root_out_dir, scale=1, imgsz=11, simplify_weights=False):
+def make_linear(root_out_dir, imgsz=11, simplify_weights=False):
     with torch.no_grad():
-        mod = Linear(scale)
+        mod = Linear(imgsz)
         mod.eval()
-        t = torch.randn((2, 3))
+        t = torch.randn((imgsz, imgsz))
         y = mod(t)
         if simplify_weights:
             mod.apply(set_weights)
         recursivescriptmodule, class_annotator = make_layer(
-            mod, [None, ([2, 3], torch.float32, True)]
+            mod, [None, ([imgsz, imgsz], torch.float32, True)]
         )
 
     make_module_artifacts(
-        mod, t, y, recursivescriptmodule, class_annotator, root_out_dir, scale
+        mod, t, y, recursivescriptmodule, class_annotator, root_out_dir, imgsz
     )
 
 
@@ -473,7 +471,7 @@ class Dot(nn.Module):
         super().__init__()
 
     def forward(self, x, y):
-        return torch.matmul(x, y)
+        return (x * y).sum()
 
 
 def make_dot(root_out_dir, imgsz=11):
@@ -504,14 +502,14 @@ def main():
     args = parser.parse_args()
     args.out_dir = args.out_dir.resolve()
 
-    # make_dot(
-    #     args.out_dir, imgsz=10
-    # )
-    # make_single_small_cnn(
-    #     args.out_dir, in_channels=2, out_channels=4, imgsz=7, simplify_weights=False
-    # )
-    # make_linear(args.out_dir, imgsz=5, simplify_weights=False)
-    # make_double_small_cnn(args.out_dir, scale=1, imgsz=11, simplify_weights=False)
+    make_dot(
+        args.out_dir, imgsz=10
+    )
+    make_single_small_cnn(
+        args.out_dir, in_channels=2, out_channels=4, imgsz=7, simplify_weights=False
+    )
+    make_linear(args.out_dir, imgsz=11, simplify_weights=False)
+    make_double_small_cnn(args.out_dir, scale=1, imgsz=11, simplify_weights=False)
     for i in range(args.low_scale, args.high_scale):
         make_whole_braggnn(args.out_dir, scale=i, imgsz=11, simplify_weights=False)
 
