@@ -30,6 +30,7 @@ DEPS = set()
 NUM_EXTRA_PES = 1296
 IDX = 0
 UNIQUE_IDXS = set()
+DONT_COLLAPSE_MACS = True
 
 def make_unregistered_op(op, *args):
     UNIQUE_IDXS.add(IDX)
@@ -221,19 +222,26 @@ class FMAC:
         assert pe_idx == IDX, (pe_idx, IDX)
         self.pe_idx = pe_idx
         print(f"// pe {pe_idx} starts", file=FILE)
-        self.most_recent_res = None
+        self.most_recent_add = None
+        self.most_recent_mul = None
 
     def Add(self, a, b):
-        self.most_recent_res = a + b
-        return self.most_recent_res
+        if self.most_recent_add is None or DONT_COLLAPSE_MACS:
+            self.most_recent_add = a + b
+        else:
+            print_op("fadd", self.most_recent_add, a, b)
+        return self.most_recent_add
 
     def Mul(self, a, b):
-        self.most_recent_res = a * b
-        return self.most_recent_res
+        if self.most_recent_mul is None or DONT_COLLAPSE_MACS:
+            self.most_recent_mul = a + b
+        else:
+            print_op("fmul", self.most_recent_mul, a, b)
+        return self.most_recent_mul
 
     def Result(self):
         print(f"// pe {self.pe_idx} ends", file=FILE)
-        return self.most_recent_res
+        return self.most_recent_add
 
 
 def Add(a, arr, idx):
