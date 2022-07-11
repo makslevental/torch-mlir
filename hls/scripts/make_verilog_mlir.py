@@ -5,7 +5,6 @@ import math
 import os
 import random
 import struct
-import sys
 import warnings
 from collections import defaultdict, namedtuple
 from dataclasses import dataclass
@@ -428,6 +427,7 @@ class Module:
                     stage = op_info["start_time"]
                     if op in {"fmul", "fadd"}:
                         op_type = Op.MUL if op == "fmul" else Op.ADD
+                        # TODO: check for hopping across PEs here
                         res = add_add_mul_transfer(
                             stage, pe_idx, op_type, inp_pos=pos, inp=src
                         )
