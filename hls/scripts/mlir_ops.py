@@ -473,7 +473,11 @@ class HandleUnrolledLoops(ast.NodeTransformer):
     has_fma = False
 
     def visit_FunctionDef(self, node):
-        args = [arg if isinstance(arg, ast.arg) else arg for arg in node.args.args]
+        args = [arg if isinstance(arg, ast.arg) else arg for arg in node.args.args if arg.arg != "file"]
+        file_arg = [arg if isinstance(arg, ast.arg) else arg for arg in node.args.args if arg.arg == "file"]
+        assert file_arg
+        file_arg = file_arg[0]
+
         arg_names = [arg.arg for arg in args]
         all_binops = [
             (i, b)
@@ -519,7 +523,9 @@ class HandleUnrolledLoops(ast.NodeTransformer):
                 0,
                 Assign(
                     targets=[fma],
-                    value=Call(func=Name(id="FMAC"), args=args, keywords=[]),
+                    value=Call(func=Name(id="FMAC"), args=args, keywords=[
+                        keyword(arg="file", value=file_arg)
+                    ]),
                     type_comment=None,
                 ),
             )
