@@ -5,7 +5,6 @@ import itertools
 import json
 import os
 import re
-from textwrap import dedent
 
 import networkx as nx
 
@@ -36,6 +35,15 @@ def make_unregistered_op(op, *args):
     UNIQUE_IDXS.add(IDX)
     # return f"\"{op}_{OP_LAYER_PREFIX}_{f'{OP_COUNT}'.zfill(OP_COUNT_ZFILL)}\"({', '.join(map(str, args))}) {{ opr = \"{op}\" }} : ({', '.join([DTYPE for _ in args])}) -> {DTYPE}"
     return f""""{op}"({', '.join(map(str, args))}) {{ opr = "{op}", pe = "{IDX}", op_count = "{OP_COUNT}" }} : ({', '.join([DTYPE for _ in args])}) -> {DTYPE}"""
+
+
+def extend_idx(pe_idx):
+    idx = pe_idx[:]
+    if len(pe_idx) < 4:
+        idx = 4 * [0]
+        idx[-len(pe_idx) :] = pe_idx
+    pe_idx = tuple(idx)
+    return pe_idx
 
 
 def print_op(op, v, *args):
@@ -209,13 +217,9 @@ class GlobalArrayVal(ArrayVal):
 
 class FMAC:
     def __init__(self, *pe_idx):
-        global IDX
-        self.old_idx = IDX
-        if len(pe_idx) < 4:
-            _idx = 4 * [0]
-            _idx[-len(pe_idx) :] = pe_idx
-            pe_idx = tuple(_idx)
-        IDX = self.pe_idx = pe_idx
+        pe_idx = extend_idx(pe_idx)
+        assert pe_idx == IDX, (pe_idx, IDX)
+        self.pe_idx = pe_idx
         print(f"// pe {pe_idx} starts", file=FILE)
         self.most_recent_res = None
 
@@ -229,8 +233,6 @@ class FMAC:
 
     def Result(self):
         print(f"// pe {self.pe_idx} ends", file=FILE)
-        global IDX
-        IDX = self.old_idx - 1
         return self.most_recent_res
 
 
@@ -274,7 +276,7 @@ def Copy(dst: ArrayDecl, src: ArrayDecl):
 def ParFor(body, ranges):
     global IDX
     for i, idx in enumerate(itertools.product(*ranges)):
-        IDX = (IDX + 1) % NUM_EXTRA_PES
+        IDX = extend_idx(idx)
         body(*idx)
 
 
