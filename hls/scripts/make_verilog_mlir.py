@@ -95,7 +95,6 @@ def make_mul_or_add(precision, id, op_name, a_reg, b_reg, res_wire, add_or_mul):
                 wire   [{precision - 1}:0] {res_wire};
                 {'(* keep = "true" *)' if KEEP else ''} f{add_or_mul} #({id}, {precision}) f{op_name}(
                     .clk(clock),
-                    .rst(0'b1),
                     .X({a_reg}),
                     .Y({b_reg}),
                     .R({res_wire})
