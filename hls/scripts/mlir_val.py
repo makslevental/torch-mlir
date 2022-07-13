@@ -315,7 +315,7 @@ def make_args_globals(Args):
 
 
 LATENCIES = {
-    "fadd": 8,
+    "fadd": 4,
     "fmul": 3,
     "fmuladd": 6,
     "relu": 1,
