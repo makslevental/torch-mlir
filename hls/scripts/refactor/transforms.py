@@ -119,7 +119,7 @@ class HoistGlobals(ast.NodeTransformer):
                 if isinstance(b, Assign)
                 and isinstance(b.value, Call)
                 and isinstance(b.value.func, Name)
-                and b.value.func.id == "GlobalArray"
+                and b.value.func.id == "GlobalMemRef"
             ]
             for i, a in reversed(assigns):
                 del node.body[i]

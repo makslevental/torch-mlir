@@ -75,6 +75,7 @@ def create_new_op(op_type: OpType, pe_idx):
     if op not in state.OP_GRAPH.nodes:
         state.OP_GRAPH.add_node(op)
     v = Val()
+    state.VAL_TO_PE_IDX[v] = pe_idx
     state.VAL_SOURCE[v] = op
     return op, v
 

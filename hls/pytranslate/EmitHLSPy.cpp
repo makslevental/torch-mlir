@@ -602,13 +602,13 @@ void ModuleEmitter::emitScfFor(scf::ForOp op) {
   state.nameTable[iterVar] = s;
   os << s;
   //  emitValue(iterVar);
-  os << " in unroll(range(";
+  os << " in range(";
   emitValue(op.getLowerBound());
   os << ", ";
   emitValue(op.getUpperBound());
   os << ", ";
   emitValue(op.getStep());
-  os << ")):";
+  os << "):";
   os << "\n";
 
   addIndent();
@@ -680,7 +680,7 @@ void ModuleEmitter::emitAffineFor(AffineForOp op) {
 
   // Emit lower bound.
   emitValue(iterVar);
-  os << " in unroll(range(";
+  os << " in range(";
   auto lowerMap = op.getLowerBoundMap();
   AffineExprEmitter lowerEmitter(state, lowerMap.getNumDims(),
                                  op.getLowerBoundOperands());
@@ -714,7 +714,7 @@ void ModuleEmitter::emitAffineFor(AffineForOp op) {
       os << ")";
     }
   }
-  os << ", " << op.getStep() << ")):";
+  os << ", " << op.getStep() << "):";
   os << "\n";
 
   addIndent();
@@ -787,22 +787,8 @@ void ModuleEmitter::emitAffineParallel(AffineParallelOp op) {
     }
   }
 
-  indent() << "@apply_passes([loop_unroll(), ssa(strict=False)], file_name='apply_" << apply_counter++ << ".py')\n";
-  indent() << "def body(";
-  for (unsigned i = 0, e = op.getNumDims(); i < e; ++i) {
-    auto iterVar = op.getBody()->getArgument(i);
-    emitValue(iterVar);
-    if (i < op.getNumDims()-1)
-      os << ", ";
-  }
-  os << "):";
   os << "\n";
-  addIndent();
-  emitBlock(*op.getBody());
-  reduceIndent();
-
-  os << "\n";
-  indent() << "ParFor(body, ranges=(";
+  indent() << "@parfor(ranges=(";
   auto steps = getIntArrayAttrValue(op, op.getStepsAttrName());
   for (unsigned i = 0, e = op.getNumDims(); i < e; ++i) {
     os << "range(";
@@ -823,6 +809,18 @@ void ModuleEmitter::emitAffineParallel(AffineParallelOp op) {
       os << ", ";
   }
   indent() << "))\n";
+  indent() << "def body(";
+  for (unsigned i = 0, e = op.getNumDims(); i < e; ++i) {
+    auto iterVar = op.getBody()->getArgument(i);
+    emitValue(iterVar);
+    if (i < op.getNumDims()-1)
+      os << ", ";
+  }
+  os << "):";
+  os << "\n";
+  addIndent();
+  emitBlock(*op.getBody());
+  reduceIndent();
   os << "\n";
 }
 
@@ -1171,7 +1169,7 @@ void ModuleEmitter::emitStore(memref::StoreOp op) {
 void ModuleEmitter::emitMemCpy(memref::CopyOp op) {
 //  indent() << "memcpy(";
   indent() << "";
-  os << "Copy(";
+  os << "Alias(";
   emitValue(op.target());
   os << ", ";
   emitValue(op.getSource());
@@ -1201,7 +1199,7 @@ void ModuleEmitter::emitGlobal(memref::GlobalOp op) {
 void ModuleEmitter::emitGetGlobal(memref::GetGlobalOp op) {
   indent();
   emitValue(op.getResult());
-  os << " = GlobalArray('" << getName(op.getResult()) << "', " << "'" << op.name() << "', " << op.name() << ")\n";
+  os << " = GlobalMemRef(" << "'" << op.name() << "', " << op.name() << ")\n";
 }
 
 void ModuleEmitter::emitTensorStore(memref::TensorStoreOp op) {
@@ -1441,7 +1439,7 @@ void ModuleEmitter::emitArrayDecl(Value array, bool input, bool output, bool glo
   auto arrayType = array.getType().cast<ShapedType>();
   if (arrayType.hasStaticShape()) {
     emitValue(array);
-    os << " = ArrayDecl('";
+    os << " = MemRef('";
     os << getName(array);
     os << "', ";
     if (!arrayType.getShape().empty())
@@ -1605,13 +1603,10 @@ void ModuleEmitter::emitFunction(FuncOp func) {
 
 /// Top-level MLIR module emitter.
 void ModuleEmitter::emitModule(ModuleOp module) {
-  os << R"XXX(import sys
-import numpy as np
-from hls.scripts.mlir_val import Forward, ArrayDecl, ParFor, FMAC, Add, GlobalArray, Copy, ReLU, ReduceAdd
-from ast_tools.passes import apply_passes, loop_unroll, ssa
-from ast_tools.macros import unroll
-
-sys.setrecursionlimit(2500)
+  os << R"XXX(import numpy as np
+from hls.scripts.refactor.memref import MemRef, GlobalMemRef
+from hls.scripts.refactor.ops import Alias, FMAC, ReLU, ReduceAdd
+from hls.scripts.refactor.runner import parfor, Forward
 
 )XXX";
   os << "\n\n";
@@ -1637,7 +1632,7 @@ sys.setrecursionlimit(2500)
   }
   os << R"XXX(
 if __name__ == "__main__":
-    Forward(forward, worker_id=None)
+    Forward(forward)
 )XXX";
 }
 

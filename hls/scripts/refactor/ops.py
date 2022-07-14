@@ -84,3 +84,21 @@ class FMAC:
         else:
             v = self.most_recent_add
         return v
+
+
+def ReduceAdd(src_arr: "MemRef", dst_arr: "MemRef"):
+    prev_sums = list(src_arr.registers.values())
+    while len(prev_sums) > 1:
+        next_sums = []
+        while len(prev_sums) > 1:
+            left = prev_sums.pop()
+            state.PE_IDX = state.VAL_TO_PE_IDX[left]
+            next_sums.append(left + prev_sums.pop())
+        if len(prev_sums) == 1:
+            left = next_sums[-1]
+            state.PE_IDX = state.VAL_TO_PE_IDX[left]
+            next_sums[-1] = left + prev_sums[0]
+        prev_sums = next_sums
+    dst_arr[
+        0,
+    ] = prev_sums[0]

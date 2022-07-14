@@ -22,6 +22,7 @@ DTYPE = "f32"
 COLLAPSE_MACS = False
 
 VAL_SOURCE = {}
+VAL_TO_PE_IDX = {}
 
 FN = os.environ.get("FN", "regular")
 OUTPUT_FILE = open(f"forward{f'_{FN}' if FN else ''}.mlir", "w")
