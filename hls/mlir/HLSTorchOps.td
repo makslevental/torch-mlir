@@ -173,31 +173,31 @@ def HLSTorch_AtenAddOutTensorOp : Torch_Op<"aten.add.out", [
   let assemblyFormat = "$self `,` $other `,` $alpha `,` $out attr-dict `:` type($self) `,` type($other) `,` type($alpha) `,` type($out) `->` type($result)";
 }
 
-def HLSTorch_Aten_ConvolutionOp : Torch_Op<"aten._convolution", [
-  AllowsTypeRefinement,
-  HasValueSemantics
-]> {
-  let summary = "Generated op for `aten::_convolution : (Tensor, Tensor, Tensor?, int[], int[], int[], bool, int[], int, bool, bool, bool, bool) -> (Tensor)`";
-  let arguments = (ins
-    AnyTorchTensorType:$input,
-    AnyTorchTensorType:$weight,
-    AnyTorchOptionalTensorType:$bias,
-    AnyTorchListOfTorchIntType:$stride,
-    AnyTorchListOfTorchIntType:$padding,
-    AnyTorchListOfTorchIntType:$dilation,
-    Torch_BoolType:$transposed,
-    AnyTorchListOfTorchIntType:$output_padding,
-    Torch_IntType:$groups,
-    Torch_BoolType:$benchmark,
-    Torch_BoolType:$deterministic,
-    Torch_BoolType:$cudnn_enabled,
-    Torch_BoolType:$allow_tf32
-  );
-  let results = (outs
-    AnyTorchTensorType:$result
-  );
-  let assemblyFormat = "$input `,` $weight `,` $bias `,` $stride `,` $padding `,` $dilation `,` $transposed `,` $output_padding `,` $groups `,`  $benchmark `,` $deterministic `,` $cudnn_enabled `,` $allow_tf32 attr-dict `:` type($input) `,` type($weight) `,` type($bias) `,` type($stride) `,` type($padding) `,` type($dilation) `,` type($transposed) `,` type($output_padding) `,` type($groups) `,`  type($benchmark) `,` type($deterministic) `,` type($cudnn_enabled) `,` type($allow_tf32) `->` type($result)";
-}
+//def HLSTorch_Aten_ConvolutionOp : Torch_Op<"aten._convolution", [
+//  AllowsTypeRefinement,
+//  HasValueSemantics
+//]> {
+//  let summary = "Generated op for `aten::_convolution : (Tensor, Tensor, Tensor?, int[], int[], int[], bool, int[], int, bool, bool, bool, bool) -> (Tensor)`";
+//  let arguments = (ins
+//    AnyTorchTensorType:$input,
+//    AnyTorchTensorType:$weight,
+//    AnyTorchOptionalTensorType:$bias,
+//    AnyTorchListOfTorchIntType:$stride,
+//    AnyTorchListOfTorchIntType:$padding,
+//    AnyTorchListOfTorchIntType:$dilation,
+//    Torch_BoolType:$transposed,
+//    AnyTorchListOfTorchIntType:$output_padding,
+//    Torch_IntType:$groups,
+//    Torch_BoolType:$benchmark,
+//    Torch_BoolType:$deterministic,
+//    Torch_BoolType:$cudnn_enabled,
+//    Torch_BoolType:$allow_tf32
+//  );
+//  let results = (outs
+//    AnyTorchTensorType:$result
+//  );
+//  let assemblyFormat = "$input `,` $weight `,` $bias `,` $stride `,` $padding `,` $dilation `,` $transposed `,` $output_padding `,` $groups `,`  $benchmark `,` $deterministic `,` $cudnn_enabled `,` $allow_tf32 attr-dict `:` type($input) `,` type($weight) `,` type($bias) `,` type($stride) `,` type($padding) `,` type($dilation) `,` type($transposed) `,` type($output_padding) `,` type($groups) `,`  type($benchmark) `,` type($deterministic) `,` type($cudnn_enabled) `,` type($allow_tf32) `->` type($result)";
+//}
 
 
 #endif // HLSTORCH_OPS

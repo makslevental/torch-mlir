@@ -11,7 +11,7 @@
 #include "HLSPasses.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "torch-mlir/Dialect/Torch/IR/TorchDialect.h"
-#include "torch-mlir/Dialect/Torch/IR/TorchOps.h"
+//#include "torch-mlir/Dialect/Torch/IR/TorchOps.h"
 #include "torch-mlir/Dialect/Torch/Utils/Utils.h"
 #include "llvm/ADT/StringExtras.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -23,16 +23,16 @@ using namespace mlir::torch::HLS;
 
 // Helper funtion to get rank of `Base tensor type`.
 // -1 is returned if the tensorRank can't be determined.
-static int getTensorRank(Value tensor) {
-  int tensorRank = -1;
-  BaseTensorType tensorType = tensor.getType().cast<BaseTensorType>();
-
-  if (tensorType.hasSizes()) {
-    ArrayRef<int64_t> tensorShape = tensorType.getSizes();
-    tensorRank = tensorShape.size();
-  }
-  return tensorRank;
-}
+//static int getTensorRank(Value tensor) {
+//  int tensorRank = -1;
+//  BaseTensorType tensorType = tensor.getType().cast<BaseTensorType>();
+//
+//  if (tensorType.hasSizes()) {
+//    ArrayRef<int64_t> tensorShape = tensorType.getSizes();
+//    tensorRank = tensorShape.size();
+//  }
+//  return tensorRank;
+//}
 
 namespace {
 class DecomposeComplexOpsPass
