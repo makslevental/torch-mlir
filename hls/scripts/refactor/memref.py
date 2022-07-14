@@ -6,7 +6,8 @@ from dataclasses import dataclass
 
 import hls.scripts.refactor.state as state
 from hls.scripts.refactor.state import VAL_SOURCE
-from hls.scripts.refactor.val import Val, make_constant
+from hls.scripts.refactor.val import Val
+from hls.scripts.refactor.ops import Constant
 
 
 def index_map(index, curr_shape, prev_shape):
@@ -45,7 +46,7 @@ class MemRef:
     def __setitem__(self, index, value):
         if not isinstance(value, Val):
             assert isinstance(value, (float, bool, int))
-            value = make_constant(value)
+            value = Constant(value)
         index = self.idx_map(index)
         assert not self.input
         self.registers[index] = value

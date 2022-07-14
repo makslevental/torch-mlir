@@ -5,6 +5,7 @@ from typing import Tuple
 from dataclasses import dataclass
 
 import hls.scripts.refactor.state as state
+from hls.scripts.refactor.ops import Constant
 
 
 class OpType(Enum):
@@ -16,6 +17,7 @@ class OpType(Enum):
     NEG = "fneg"
     RELU = "frelu"
     CST = "arith.constant"
+    COPY = "copy"
 
 
 LATENCIES = {
@@ -27,6 +29,7 @@ LATENCIES = {
     OpType.NEG: 1,
     OpType.RELU: 1,
     OpType.CST: 0,
+    OpType.COPY: 1,
 }
 
 
@@ -67,6 +70,28 @@ class Op:
     def __repr__(self):
         return f'"{self.key.value}" (ARGS) {{ pe = "{self.pe_idx}", opr = "{self.key.value}" }} : ({", ".join([state.DTYPE] * self.arity)}) -> {state.DTYPE}'
 
+def create_new_op(op_type: OpType, pe_idx):
+    op = Op(op_type, pe_idx)
+    if op not in state.OP_GRAPH.nodes:
+        state.OP_GRAPH.add_node(op)
+    v = Val()
+    state.VAL_SOURCE[v] = op
+    return op, v
+
+
+def create_new_op_arg(arg, op, out_v):
+    if not isinstance(arg, Val):
+        assert isinstance(arg, (float, bool, int))
+        arg = Constant(arg)
+    if arg not in state.VAL_SOURCE:
+        raise Exception(f"val source not found for {arg}")
+    val_source = state.VAL_SOURCE[arg]
+    state.OP_GRAPH.add_edge(
+        val_source, op, input=arg, output=out_v, id=state.OP_CALL_COUNT
+    )
+
+    return arg
+
 
 @dataclass(frozen=True)
 class Val:
@@ -81,24 +106,12 @@ class Val:
         def f(*args: "Tuple[Val]"):
             state.OP_CALL_COUNT += 1
 
-            op = Op(type, state.PE_IDX)
-            if op not in state.OP_GRAPH.nodes:
-                state.OP_GRAPH.add_node(op)
-            v = Val()
-            state.VAL_SOURCE[v] = op
+            op, v = create_new_op(type, state.PE_IDX)
 
             arg_strs = []
             for arg in args:
-                if not isinstance(arg, Val):
-                    raise Exception(f"unknown val {arg}")
-                    arg = Val(name=str(arg))
+                arg = create_new_op_arg(arg, op, v)
                 arg_strs.append(str(arg))
-                if arg not in state.VAL_SOURCE:
-                    raise Exception(f"val source not found for {arg}")
-                val_source = state.VAL_SOURCE[arg]
-                state.OP_GRAPH.add_edge(
-                    val_source, op, input=arg, output=v, id=state.OP_CALL_COUNT
-                )
 
             op_str = str(op)
             state.emit(f"{v} = {op_str.replace('ARGS', ', '.join(arg_strs))}")
@@ -118,8 +131,3 @@ class Val:
         return f"{state.VAL_PREFIX}val_{self.id}"
 
 
-def make_constant(val):
-    value = Val(str(val))
-    state.VAL_SOURCE[value] = state.CONSTANT
-    state.emit(f"{value} = arith.constant {val} : {state.DTYPE}")
-    return value

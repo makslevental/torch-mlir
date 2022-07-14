@@ -19,10 +19,12 @@ OP_GRAPH.add_node(INPUT)
 PE_IDX = (0,)
 DTYPE = "f32"
 
+COLLAPSE_MACS = True
+
 VAL_SOURCE = {}
 
-fn = os.environ.get("FN", "regular")
-OUTPUT_FILE = open(f"forward{f'_{fn}' if fn else ''}.mlir", "w")
+FN = os.environ.get("FN", "regular")
+OUTPUT_FILE = open(f"forward{f'_{FN}' if FN else ''}.mlir", "w")
 
 
 def emit(*args):

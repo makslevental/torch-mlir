@@ -68,9 +68,8 @@ def MLIRForward(args, forward):
 
 
 def ParFor(body, ranges):
-    global IDX
     for i, idx in enumerate(itertools.product(*ranges)):
-        IDX = extend_idx(idx)
+        state.PE_IDX = extend_idx(idx)
         body(*idx, state.OUTPUT_FILE)
 
 
