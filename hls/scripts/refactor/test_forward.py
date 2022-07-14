@@ -2,8 +2,8 @@ import numpy as np
 
 # fmt: off
 from hls.scripts.refactor.memref import MemRef, GlobalMemRef
-from hls.scripts.refactor.ops import Alias, FMAC, Copy, ReLU
-from hls.scripts.refactor.runner import ParFor, Forward
+from hls.scripts.refactor.ops import Alias, FMAC, ReLU
+from hls.scripts.refactor.runner import parfor, Forward
 
 __constant_4x2x3x3xf32 = np.array(
     [1.403888e-01, 8.624066e-02, 1.651159e-01, 2.332027e-01, 1.479630e-01, -2.282581e-02, -2.067856e-01, 9.142201e-02,
@@ -43,17 +43,16 @@ def forward(
         _3=GlobalMemRef('__constant_4x2x3x3xf32', __constant_4x2x3x3xf32),
         _4=MemRef('_4', 1, 4, 5, 5, )
 ):
-    def body(_arg2, _arg3, _arg4, _arg5, debug_print_file=None):
+    @parfor(ranges=(range(0, 1, 1), range(0, 4, 1), range(0, 5, 1), range(0, 5, 1)))
+    def body(_arg2, _arg3, _arg4, _arg5):
         _8 = _2[_arg3,]
         _4[_arg2, _arg3, _arg4, _arg5,] = _8
-
-    ParFor(body, ranges=(range(0, 1, 1), range(0, 4, 1), range(0, 5, 1), range(0, 5, 1)))
 
     _5 = MemRef('_5', 1, 4, 5, 5, )
     Alias(_5, _4)
 
-    def body(_arg2, _arg3, _arg4, _arg5, debug_print_file=None):
-        fma = FMAC(_arg2, _arg3, _arg4, _arg5)
+    @parfor(ranges=(range(0, 1, 1), range(0, 4, 1), range(0, 5, 1), range(0, 5, 1)))
+    def body(_arg2, _arg3, _arg4, _arg5):
         for _arg6 in (range(0, 2, 1)):
             for _arg7 in (range(0, 3, 1)):
                 for _arg8 in (range(0, 3, 1)):
@@ -62,25 +61,22 @@ def forward(
                     _10 = _arg0[_arg2, _arg6, _8, _9,]
                     _11 = _3[_arg3, _arg6, _arg7, _arg8,]
                     _12 = _5[_arg2, _arg3, _arg4, _arg5,]
-                    _13 = fma.Mul(_10, _11)
-                    _14 = fma.Add(_12, _13)
+                    _13 = _10 * _11
+                    _14 = _12 + _13
                     _5[_arg2, _arg3, _arg4, _arg5,] = _14
-        _5[_arg2, _arg3, _arg4, _arg5,] = fma.Result()
-
-    ParFor(body, ranges=(range(0, 1, 1), range(0, 4, 1), range(0, 5, 1), range(0, 5, 1)))
 
     _6 = MemRef('_6', 1, 2, 3, 3, )
 
-    def body(_arg2, _arg3, _arg4, _arg5, debug_print_file=None):
+    @parfor(ranges=(range(0, 1, 1), range(0, 2, 1), range(0, 3, 1), range(0, 3, 1)))
+    def body(_arg2, _arg3, _arg4, _arg5):
         _8 = _0[_arg3,]
         _6[_arg2, _arg3, _arg4, _arg5,] = _8
-
-    ParFor(body, ranges=(range(0, 1, 1), range(0, 2, 1), range(0, 3, 1), range(0, 3, 1)))
 
     _7 = MemRef('_7', 1, 2, 3, 3, )
     Alias(_7, _6)
 
-    def body(_arg2, _arg3, _arg4, _arg5, debug_print_file=None):
+    @parfor(ranges=(range(0, 1, 1), range(0, 2, 1), range(0, 3, 1), range(0, 3, 1)))
+    def body(_arg2, _arg3, _arg4, _arg5):
         for _arg6 in (range(0, 4, 1)):
             for _arg7 in (range(0, 3, 1)):
                 for _arg8 in (range(0, 3, 1)):
@@ -93,15 +89,12 @@ def forward(
                     _14 = _12 + _13
                     _7[_arg2, _arg3, _arg4, _arg5,] = _14
 
-    ParFor(body, ranges=(range(0, 1, 1), range(0, 2, 1), range(0, 3, 1), range(0, 3, 1)))
-
-    def body(_arg2, _arg3, _arg4, _arg5, debug_print_file=None):
+    @parfor(ranges=(range(0, 1, 1), range(0, 2, 1), range(0, 3, 1), range(0, 3, 1)))
+    def body(_arg2, _arg3, _arg4, _arg5):
         _8 = _7[0, _arg3, _arg4, _arg5,]
         _9 = _8 > 0.000000
         _10 = _8 if _9 else 0.000000
         _arg1[_arg2, _arg3, _arg4, _arg5,] = _10
-
-    ParFor(body, ranges=(range(0, 1, 1), range(0, 2, 1), range(0, 3, 1), range(0, 3, 1)))
 
 
 if __name__ == "__main__":

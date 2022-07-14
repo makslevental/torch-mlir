@@ -67,10 +67,12 @@ def MLIRForward(args, forward):
     OLD_FILE.close()
 
 
-def ParFor(body, ranges):
-    for i, idx in enumerate(itertools.product(*ranges)):
-        state.PE_IDX = extend_idx(idx)
-        body(*idx, state.OUTPUT_FILE)
+def parfor(ranges):
+    def wrapper(body):
+        for i, idx in enumerate(itertools.product(*ranges)):
+            state.PE_IDX = extend_idx(idx)
+            body(*idx)
+    return wrapper
 
 
 def Forward(forward):

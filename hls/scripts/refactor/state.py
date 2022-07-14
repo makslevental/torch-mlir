@@ -19,7 +19,7 @@ OP_GRAPH.add_node(INPUT)
 PE_IDX = (0,)
 DTYPE = "f32"
 
-COLLAPSE_MACS = True
+COLLAPSE_MACS = False
 
 VAL_SOURCE = {}
 

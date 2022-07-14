@@ -39,7 +39,7 @@ def Copy(arg):
 
 
 class FMAC:
-    def __init__(self, *pe_idx, file=None):
+    def __init__(self, *pe_idx):
         from hls.scripts.refactor.runner import extend_idx
 
         pe_idx = extend_idx(pe_idx)
