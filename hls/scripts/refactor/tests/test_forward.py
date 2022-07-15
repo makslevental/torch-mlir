@@ -98,4 +98,4 @@ def forward(
 
 
 if __name__ == "__main__":
-    Forward(forward)
+    Forward(forward, __file__)

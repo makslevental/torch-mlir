@@ -4,14 +4,9 @@ from typing import Tuple
 import numpy as np
 from dataclasses import dataclass
 
-import hls.scripts.refactor.state as state
-from hls.scripts.refactor.state import VAL_SOURCE
+from hls.scripts.refactor.state import state
 from hls.scripts.refactor.val import Val
 from hls.scripts.refactor.ops import Constant
-
-
-def index_map(index, curr_shape, prev_shape):
-    return tuple(np.unravel_index(np.ravel_multi_index(index, curr_shape), prev_shape))
 
 
 MemRefIndex = Tuple[int, ...]
@@ -39,39 +34,28 @@ class MemRef:
         self.curr_shape = shape
         self.prev_shape = shape
         self.pe_index = shape
-        self.registers = {}
+        self.registers = np.empty(shape, dtype=object)
         self.input = input
         self.output = output
 
     def __setitem__(self, index, value):
-        if not isinstance(value, Val):
-            assert isinstance(value, (float, bool, int))
+        if isinstance(value, (float, bool, int)):
             value = Constant(value)
-        index = self.idx_map(index)
         assert not self.input
         self.registers[index] = value
 
     def __getitem__(self, index: MemRefIndex):
-        index = self.idx_map(index)
-        if index not in self.registers:
-            self.registers[index] = self.make_val(index)
+        if self.registers[index] is None:
+            assert self.input
+            v = MemRefVal(self.arr_name, index)
+            state.add_memref_arg(v)
+            self.registers[index] = v
+
         v = self.registers[index]
         return v
 
-    def make_val(self, index):
-        name = self.arr_name
-        if self.output:
-            name = f"output_{name}"
-        v = MemRefVal(name, index)
-        VAL_SOURCE[v] = state.MEMREF_ARG
-        return v
-
-    def idx_map(self, index):
-        return index_map(index, self.curr_shape, self.prev_shape)
-
     def reshape(self, *shape):
-        self.prev_shape = self.curr_shape
-        self.curr_shape = shape
+        self.registers = self.registers.reshape(shape)
         return self
 
     @property
@@ -83,7 +67,7 @@ class MemRef:
                 val_names.append(f"%{self.arr_name}_{idx_to_str(idx)}")
         elif self.output:
             assert len(self.registers)
-            val_names = sorted([str(v) for v in self.registers.values()])
+            val_names = sorted([str(v) for v in self.registers.ravel()])
 
         return sorted(val_names)
 
@@ -97,15 +81,15 @@ class GlobalMemRef:
         self.name = global_name
         self.global_array = global_array
         self.curr_shape = global_array.shape
-        self.vals = {}
+        self.vals = np.empty(self.curr_shape, dtype=object)
         for idx, v in np.ndenumerate(global_array):
             v = MemRefVal(f"{self.name}__", idx)
-            state.VAL_SOURCE[v] = state.GLOBAL_MEMREF_ARG
+            state.add_global_memref_arg(v)
             self.vals[idx] = v
 
     @property
     def val_names(self):
-        return sorted([str(v) for v in self.vals.values()])
+        return sorted([str(v) for v in self.vals.ravel()])
 
     def __getitem__(self, index: MemRefIndex):
         if isinstance(index, int):

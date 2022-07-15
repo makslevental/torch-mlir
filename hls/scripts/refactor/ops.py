@@ -1,4 +1,4 @@
-from hls.scripts.refactor import state as state
+from hls.scripts.refactor.state import state as State
 
 
 def Alias(dst: "MemRef", src: "MemRef"):
@@ -13,29 +13,29 @@ def Constant(val):
     from hls.scripts.refactor.val import Val
 
     value = Val(str(val))
-    state.VAL_SOURCE[value] = state.CONSTANT
-    state.emit(f"{value} = arith.constant {val} : {state.DTYPE}")
+    State.add_constant(value)
+    State.emit(f"{value} = arith.constant {val} : {State.dtype}")
     return value
 
 
 def ReLU(arg):
     from hls.scripts.refactor.val import create_new_op, OpType, create_new_op_arg
 
-    op, v = create_new_op(OpType.RELU, state.PE_IDX)
-    arg = create_new_op_arg(arg, op, v)
+    op, op_res = create_new_op(OpType.RELU)
+    arg = create_new_op_arg(op, arg, op_res)
     op_str = str(op)
-    state.emit(f"{v} = {op_str.replace('ARGS', str(arg))}")
-    return v
+    State.emit(f"{op_res} = {op_str.replace('ARGS', str(arg))}")
+    return op_res
 
 
 def Copy(arg):
     from hls.scripts.refactor.val import create_new_op, OpType, create_new_op_arg
 
-    op, v = create_new_op(OpType.COPY, state.PE_IDX)
-    arg = create_new_op_arg(arg, op, v)
+    op, op_res = create_new_op(OpType.COPY)
+    arg = create_new_op_arg(op, arg, op_res)
     op_str = str(op)
-    state.emit(f"{v} = {op_str.replace('ARGS', str(arg))}")
-    return v
+    State.emit(f"{op_res} = {op_str.replace('ARGS', str(arg))}")
+    return op_res
 
 
 class FMAC:
@@ -44,61 +44,59 @@ class FMAC:
 
         pe_idx = extend_idx(pe_idx)
         self.pe_idx = pe_idx
-        state.emit(f"// MAC {pe_idx} starts")
+        State.debug_print(f"MAC {pe_idx} starts")
         self.most_recent_add = None
         self.most_recent_mul = None
 
     def Add(self, a, b):
-        if self.most_recent_add is None or not state.COLLAPSE_MACS:
+        if self.most_recent_add is None or not State.collapse_macs:
             self.most_recent_add = a + b
         else:
-            op_str = str(state.VAL_SOURCE[self.most_recent_add])
-            state.emit(
+            op_str = str(State.get_arg_src(self.most_recent_add))
+            State.emit(
                 f"{self.most_recent_add} = {op_str.replace('ARGS', f'{a}, {b}')}"
             )
         return self.most_recent_add
 
     def Mul(self, a, b):
-        if self.most_recent_mul is None or not state.COLLAPSE_MACS:
+        if self.most_recent_mul is None or not State.collapse_macs:
             self.most_recent_mul = a * b
         else:
-            op_str = str(state.VAL_SOURCE[self.most_recent_mul])
-            state.emit(
+            op_str = str(State.get_arg_src(self.most_recent_mul))
+            State.emit(
                 f"{self.most_recent_mul} = {op_str.replace('ARGS', f'{a}, {b}')}"
             )
         return self.most_recent_mul
 
     def Result(self):
-        if state.COLLAPSE_MACS:
-            state.emit(f"// MAC {self.pe_idx} ends")
+        if State.collapse_macs:
+            State.debug_print(f"MAC {self.pe_idx} ends")
             from hls.scripts.refactor.val import (
                 create_new_op,
                 OpType,
                 create_new_op_arg,
             )
 
-            op, v = create_new_op(OpType.COPY, state.PE_IDX)
-            arg = create_new_op_arg(self.most_recent_add, op, v)
+            op, op_res = create_new_op(OpType.COPY)
+            arg = create_new_op_arg(op, self.most_recent_add, op_res)
             op_str = str(op)
-            state.emit(f"{v} = {op_str.replace('ARGS', str(arg))}")
+            State.emit(f"{op_res} = {op_str.replace('ARGS', str(arg))}")
         else:
-            v = self.most_recent_add
-        return v
+            op_res = self.most_recent_add
+        return op_res
 
 
-def ReduceAdd(src_arr: "MemRef", dst_arr: "MemRef"):
-    prev_sums = list(src_arr.registers.values())
+def ReduceAdd(vals):
+    prev_sums = list(vals)
     while len(prev_sums) > 1:
         next_sums = []
         while len(prev_sums) > 1:
             left = prev_sums.pop()
-            state.PE_IDX = state.VAL_TO_PE_IDX[left]
+            State.pe_idx = State.get_arg_src(left).pe_idx
             next_sums.append(left + prev_sums.pop())
         if len(prev_sums) == 1:
             left = next_sums[-1]
-            state.PE_IDX = state.VAL_TO_PE_IDX[left]
+            State.pe_idx = State.get_arg_src(left).pe_idx
             next_sums[-1] = left + prev_sums[0]
         prev_sums = next_sums
-    dst_arr[
-        0,
-    ] = prev_sums[0]
+    return prev_sums[0]

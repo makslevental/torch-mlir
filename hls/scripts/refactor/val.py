@@ -4,7 +4,7 @@ from typing import Tuple
 
 from dataclasses import dataclass
 
-import hls.scripts.refactor.state as state
+from hls.scripts.refactor.state import state as State
 from hls.scripts.refactor.ops import Constant
 
 
@@ -68,56 +68,48 @@ class Op:
             object.__setattr__(self, "arity", 1)
 
     def __repr__(self):
-        return f'"{self.key.value}" (ARGS) {{ pe = "{self.pe_idx}", opr = "{self.key.value}" }} : ({", ".join([state.DTYPE] * self.arity)}) -> {state.DTYPE}'
-
-def create_new_op(op_type: OpType, pe_idx):
-    op = Op(op_type, pe_idx)
-    if op not in state.OP_GRAPH.nodes:
-        state.OP_GRAPH.add_node(op)
-    v = Val()
-    state.VAL_TO_PE_IDX[v] = pe_idx
-    state.VAL_SOURCE[v] = op
-    return op, v
+        return f'"{self.key.value}" (ARGS) {{ pe = "{self.pe_idx}", opr = "{self.key.value}" }} : ({", ".join([State.dtype] * self.arity)}) -> {State.dtype}'
 
 
-def create_new_op_arg(arg, op, out_v):
+def create_new_op(op_type: OpType):
+    State.incr_op_id()
+    op = Op(op_type, State.pe_idx)
+    State.maybe_add_op(op)
+    res = Val()
+    State.map_val_to_current_pe(res)
+    State.add_op_res(res, op)
+    return op, res
+
+
+def create_new_op_arg(op, arg, op_res):
     if not isinstance(arg, Val):
-        assert isinstance(arg, (float, bool, int))
+        assert isinstance(arg, (float, bool, int)), arg
         arg = Constant(arg)
-    if arg not in state.VAL_SOURCE:
-        raise Exception(f"val source not found for {arg}")
-    val_source = state.VAL_SOURCE[arg]
-    state.OP_GRAPH.add_edge(
-        val_source, op, input=arg, output=out_v, id=state.OP_CALL_COUNT
-    )
-
+    State.add_edge(op, arg, op_res)
     return arg
 
 
 @dataclass(frozen=True)
 class Val:
     name: str = ""
-    id: str = str(state.VAR_COUNT)
+    id: str = str(State.curr_var_id)
 
     def __post_init__(self):
-        state.VAR_COUNT += 1
-        object.__setattr__(self, "id", str(state.VAR_COUNT))
+        State.incr_var()
+        object.__setattr__(self, "id", str(State.curr_var_id))
 
     def __overload_op(type):
         def f(*args: "Tuple[Val]"):
-            state.OP_CALL_COUNT += 1
-
-            op, v = create_new_op(type, state.PE_IDX)
-
+            op, op_res = create_new_op(type)
             arg_strs = []
             for arg in args:
-                arg = create_new_op_arg(arg, op, v)
+                arg = create_new_op_arg(op, arg, op_res)
                 arg_strs.append(str(arg))
 
             op_str = str(op)
-            state.emit(f"{v} = {op_str.replace('ARGS', ', '.join(arg_strs))}")
+            State.emit(f"{op_res} = {op_str.replace('ARGS', ', '.join(arg_strs))}")
 
-            return v
+            return op_res
 
         return f
 
@@ -129,6 +121,4 @@ class Val:
     __neg__ = __overload_op(OpType.NEG)
 
     def __repr__(self):
-        return f"{state.VAL_PREFIX}val_{self.id}"
-
-
+        return f"{State.val_prefix}val_{self.id}"

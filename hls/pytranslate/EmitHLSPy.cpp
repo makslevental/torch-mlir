@@ -1632,7 +1632,7 @@ from hls.scripts.refactor.runner import parfor, Forward
   }
   os << R"XXX(
 if __name__ == "__main__":
-    Forward(forward)
+    Forward(forward, __file__)
 )XXX";
 }
 
