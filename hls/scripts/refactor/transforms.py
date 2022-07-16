@@ -166,8 +166,12 @@ def parse_mlir_module(module_str):
         ):
             return
 
+        if mlir_op.operation.name == "arith.constant":
+            return
+
         if list(mlir_op.results):
-            ident = get_val_identifier(mlir_op.result._CAPIPtr)
+            mlir_op.result.dump()
+            ident = get_val_identifier(mlir_op.operation.results[0]._CAPIPtr)
             print(ident, mlir_op.operation.name, parse_attrs_to_dict(mlir_op.attributes))
 
     traverse_op_region_block_iterators(op, handler)

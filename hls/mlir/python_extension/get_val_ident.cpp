@@ -9,8 +9,16 @@
 
 namespace py = pybind11;
 
+#define MLIR_PYTHON_CAPSULE_OP_RESULT MAKE_MLIR_PYTHON_QUALNAME("ir.OpResult._CAPIPtr")
+
+static inline MlirValue mlirPythonCapsuleToOpResult(PyObject *capsule) {
+  void *ptr = PyCapsule_GetPointer(capsule, MLIR_PYTHON_CAPSULE_OP_RESULT);
+  MlirValue value = {ptr};
+  return value;
+}
+
 std::string getValIdent(py::object pyObjValue) {
-  auto _value = mlirPythonCapsuleToValue(pyObjValue.ptr());
+  auto _value = mlirPythonCapsuleToOpResult(pyObjValue.ptr());
   if (mlirValueIsNull(_value))
     return "null";
   mlirValueDump(_value);

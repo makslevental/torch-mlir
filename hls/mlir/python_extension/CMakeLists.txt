@@ -1,5 +1,6 @@
 include(AddMLIRPython)
 
+declare_mlir_python_sources(HLSExtensions)
 
 declare_mlir_python_extension(HLSExtensions.Main
         MODULE_NAME hls_utils
