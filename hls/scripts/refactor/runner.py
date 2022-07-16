@@ -51,10 +51,10 @@ def MLIRForward(args, forward):
     State.emit(
         f"func.func @forward({', '.join(inps_globals)}) -> ({output_dtypes})\n",
     )
-    State.emit(make_latency_attrs())
 
     OLD_FILE = State.swap_output_file(io.StringIO())
     forward()
+    OLD_FILE.write(make_latency_attrs())
 
     logger.debug(f"num unique pes {State.num_unique_pes}")
 

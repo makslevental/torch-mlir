@@ -9,35 +9,6 @@ def Alias(dst: "MemRef", src: "MemRef"):
     dst.registers = registers_to_copy
 
 
-def Constant(val):
-    from hls.scripts.refactor.val import Val
-
-    value = Val(str(val))
-    State.add_constant(value)
-    State.emit(f"{value} = arith.constant {val} : {State.dtype}")
-    return value
-
-
-def ReLU(arg):
-    from hls.scripts.refactor.val import create_new_op, OpType, create_new_op_arg
-
-    op, op_res = create_new_op(OpType.RELU)
-    arg = create_new_op_arg(op, arg, op_res)
-    op_str = str(op)
-    State.emit(f"{op_res} = {op_str.replace('ARGS', str(arg))}")
-    return op_res
-
-
-def Copy(arg):
-    from hls.scripts.refactor.val import create_new_op, OpType, create_new_op_arg
-
-    op, op_res = create_new_op(OpType.COPY)
-    arg = create_new_op_arg(op, arg, op_res)
-    op_str = str(op)
-    State.emit(f"{op_res} = {op_str.replace('ARGS', str(arg))}")
-    return op_res
-
-
 class FMAC:
     def __init__(self, *pe_idx):
         from hls.scripts.refactor.runner import extend_idx
@@ -48,39 +19,42 @@ class FMAC:
         self.most_recent_add = None
         self.most_recent_mul = None
 
+    def _collapse(self, prev_res, a, b):
+        from hls.scripts.refactor.val import create_new_op, OpType
+
+        prev_op = State.get_arg_src(prev_res)
+        op, prev_res = create_new_op(OpType.MUL, prev_op.pe_idx, prev_res)
+        State.emit(f"{prev_res} = {str(op).replace('ARGS', f'{a}, {b}')}")
+
     def Add(self, a, b):
         if self.most_recent_add is None or not State.collapse_macs:
             self.most_recent_add = a + b
         else:
-            op_str = str(State.get_arg_src(self.most_recent_add))
-            State.emit(
-                f"{self.most_recent_add} = {op_str.replace('ARGS', f'{a}, {b}')}"
-            )
+            self._collapse(self.most_recent_add, a, b)
         return self.most_recent_add
 
     def Mul(self, a, b):
+        from hls.scripts.refactor.val import create_new_op, create_new_op_arg, OpType
+
         if self.most_recent_mul is None or not State.collapse_macs:
-            self.most_recent_mul = a * b
-        else:
-            op_str = str(State.get_arg_src(self.most_recent_mul))
+            op, op_res = create_new_op(OpType.MUL, add_aux_dep=True)
+            op_str = str(op)
+            a = str(create_new_op_arg(op, a, op_res))
+            b = str(create_new_op_arg(op, b, op_res))
             State.emit(
-                f"{self.most_recent_mul} = {op_str.replace('ARGS', f'{a}, {b}')}"
+                f"{op_res} = {op_str.replace('ARGS', ', '.join([a, b]))}"
             )
+            self.most_recent_mul = op_res
+        else:
+            self._collapse(self.most_recent_mul, a, b)
         return self.most_recent_mul
 
     def Result(self):
         if State.collapse_macs:
             State.debug_print(f"MAC {self.pe_idx} ends")
-            from hls.scripts.refactor.val import (
-                create_new_op,
-                OpType,
-                create_new_op_arg,
-            )
+            from hls.scripts.refactor.val import Copy
 
-            op, op_res = create_new_op(OpType.COPY)
-            arg = create_new_op_arg(op, self.most_recent_add, op_res)
-            op_str = str(op)
-            State.emit(f"{op_res} = {op_str.replace('ARGS', str(arg))}")
+            op_res = Copy(self.most_recent_add)
         else:
             op_res = self.most_recent_add
         return op_res

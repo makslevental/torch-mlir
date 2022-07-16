@@ -1,7 +1,7 @@
-import os
 import logging
 
 import networkx as nx
+
 
 INPUT = "INPUT"
 MEMREF_ARG = "MEMREF_ARG"
@@ -9,8 +9,9 @@ GLOBAL_MEMREF_ARG = "GLOBAL_MEMREF_ARG"
 CONSTANT = "CONSTANT"
 VAL_PREFIX = "%"
 DTYPE = "f32"
-COLLAPSE_MACS = True
+COLLAPSE_MACS = False
 DEBUG = False
+INCLUDE_AUX_DEPS = True
 
 
 class State:
@@ -22,6 +23,9 @@ class State:
     _pe_idx = (0,)
     val_source = {}
     val_to_pe_idx = {}
+    pe_idx_to_most_recent_op_id = {}
+    op_id_to_pe_idx = {}
+    pe_deps = set()
 
     def __init__(self):
         self.op_graph.add_nodes_from([INPUT, MEMREF_ARG, GLOBAL_MEMREF_ARG, CONSTANT])
@@ -67,13 +71,25 @@ class State:
 
     def maybe_add_op(self, op):
         if op not in self.op_graph.nodes:
-            state.op_graph.add_node(op)
+            self.op_graph.add_node(op)
 
     def add_edge(self, op, arg, out_v):
-        val_source = state.get_arg_src(arg)
+        val_source = self.get_arg_src(arg)
         self.op_graph.add_edge(
-            val_source, op, input=arg, output=out_v, id=self.curr_op_id
+            val_source, op, input=arg, output=out_v, id=op.op_id
         )
+
+    def update_most_recent_pe_idx(self, pe_idx, op):
+        self.pe_idx_to_most_recent_op_id[pe_idx] = op.op_id
+
+    def get_most_recent_op_id(self, pe_idx):
+        return self.pe_idx_to_most_recent_op_id[pe_idx]
+
+    def maybe_add_aux_dep(self, pe_idx, op):
+        if pe_idx in self.pe_idx_to_most_recent_op_id:
+            prev_op_id = self.get_most_recent_op_id(pe_idx)
+            self.pe_deps.add((prev_op_id, op.op_id))
+        self.update_most_recent_pe_idx(pe_idx, op)
 
     def get_arg_src(self, arg):
         assert arg in self.val_source
@@ -82,6 +98,10 @@ class State:
     @property
     def dtype(self):
         return DTYPE
+
+    @property
+    def include_aux_deps(self):
+        return INCLUDE_AUX_DEPS
 
     @property
     def val_prefix(self):
@@ -99,8 +119,8 @@ class State:
     def pe_idx(self, x):
         self._pe_idx = x
 
-    def map_val_to_current_pe(self, v):
-        self.val_to_pe_idx[v] = self._pe_idx
+    def map_val_to_pe(self, v, pe_idx):
+        self.val_to_pe_idx[v] = pe_idx
 
     def swap_output_file(self, new_file):
         old_file = self.output_file

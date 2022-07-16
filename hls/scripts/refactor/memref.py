@@ -5,8 +5,7 @@ import numpy as np
 from dataclasses import dataclass
 
 from hls.scripts.refactor.state import state
-from hls.scripts.refactor.val import Val
-from hls.scripts.refactor.ops import Constant
+from hls.scripts.refactor.val import Val, Constant
 
 
 MemRefIndex = Tuple[int, ...]
