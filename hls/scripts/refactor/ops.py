@@ -23,8 +23,8 @@ class FMAC:
         from hls.scripts.refactor.val import create_new_op, OpType
 
         prev_op = State.get_arg_src(prev_res)
-        op, prev_res = create_new_op(OpType.MUL, prev_op.pe_idx, prev_res)
-        State.emit(f"{prev_res} = {str(op).replace('ARGS', f'{a}, {b}')}")
+        op, res = create_new_op(OpType.MUL, pe_idx=prev_op.pe_idx, extra_attrs=(("mac_reg", str(prev_res)),))
+        State.emit(f"{res} = {str(op).replace('ARGS', f'{a}, {b}')}")
 
     def Add(self, a, b):
         if self.most_recent_add is None or not State.collapse_macs:

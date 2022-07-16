@@ -4,6 +4,9 @@ from ast import Assign, Mult, Add, BinOp, Name, Call, IfExp, Compare
 
 import astor
 
+from torch_mlir._mlir_libs._mlir.ir import Context, Module, OpView, FunctionType
+from hls.mlir.python_extension.hls._mlir_libs.hls_utils import get_val_identifier
+
 
 class RemoveMAC(ast.NodeTransformer):
     body_args = []
@@ -128,10 +131,51 @@ class HoistGlobals(ast.NodeTransformer):
         return node
 
 
+def traverse_op_region_block_iterators(op, handler):
+    for i, region in enumerate(op.regions):
+        for j, block in enumerate(region):
+            for k, child_op in enumerate(block):
+                handler(child_op)
+                traverse_op_region_block_iterators(child_op, handler)
+
+
+def parse_attrs_to_dict(attrs):
+    d = {}
+    for named_attr in attrs:
+        if named_attr.name in {"lpStartTime", "value"}:
+            d[named_attr.name] = ast.literal_eval(
+                str(named_attr.attr).split(":")[0].strip()
+            )
+        else:
+            d[named_attr.name] = ast.literal_eval(str(named_attr.attr))
+    return d
+
+
+def parse_mlir_module(module_str):
+    ctx = Context()
+    ctx.allow_unregistered_dialects = True
+    module = Module.parse(
+        module_str,
+        ctx,
+    )
+    op = module.operation
+
+    def handler(mlir_op):
+        if not isinstance(mlir_op, OpView) or (
+            hasattr(mlir_op, "type") and isinstance(mlir_op.type, FunctionType)
+        ):
+            return
+
+        if list(mlir_op.results):
+            ident = get_val_identifier(mlir_op.result._CAPIPtr)
+            print(ident, mlir_op.operation.name, parse_attrs_to_dict(mlir_op.attributes))
+
+    traverse_op_region_block_iterators(op, handler)
+
+
 def transform_forward_py(fp):
     new_tree = astor.parse_file(fp)
     new_tree = HoistGlobals().visit(new_tree)
-    # new_tree = RemoveValSemCopies().visit(new_tree)
     new_tree = RemoveIfExp().visit(new_tree)
     new_tree = RemoveMAC().visit(new_tree)
 
@@ -144,5 +188,11 @@ def transform_forward_py(fp):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("fp")
+    parser.add_argument("--py", action="store_true")
+    parser.add_argument("--mlir", action="store_true")
     args = parser.parse_args()
-    transform_forward_py(args.fp)
+    if args.py:
+        transform_forward_py(args.fp)
+    if args.mlir:
+        sched_module_str = open(args.fp).read()
+        parse_mlir_module(sched_module_str)

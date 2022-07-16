@@ -42,3 +42,5 @@ add_mlir_library(HLSTorch
 #target_link_options(HLSTorch PUBLIC "-Wl,--unresolved-symbols=ignore-all")
 target_link_options(HLSTorch PUBLIC -undefined dynamic_lookup)
 torch_mlir_target_includes(HLSTorch)
+
+add_subdirectory(python_extension)

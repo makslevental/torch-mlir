@@ -1601,6 +1601,15 @@ void ModuleEmitter::emitFunction(FuncOp func) {
   os << "\n";
 }
 
+std::string getValIdent(Value &value) {
+  llvm::SmallString<32> str;
+  llvm::raw_svector_ostream os(str);
+  mlir::AsmState asm_state(
+      value.getDefiningOp()->getParentRegion()->getParentOfType<mlir::func::FuncOp>());
+  value.printAsOperand(os, asm_state);
+  return os.str().str();
+}
+
 /// Top-level MLIR module emitter.
 void ModuleEmitter::emitModule(ModuleOp module) {
   os << R"XXX(import numpy as np

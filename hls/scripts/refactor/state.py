@@ -1,6 +1,10 @@
 import logging
+import os
 
 import networkx as nx
+
+logging.basicConfig(encoding='utf-8', level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 
 INPUT = "INPUT"
@@ -9,7 +13,8 @@ GLOBAL_MEMREF_ARG = "GLOBAL_MEMREF_ARG"
 CONSTANT = "CONSTANT"
 VAL_PREFIX = "%"
 DTYPE = "f32"
-COLLAPSE_MACS = False
+COLLAPSE_MACS = bool(os.environ.get("COLLAPSE_MACS"))
+logger.debug(f"{COLLAPSE_MACS=}")
 DEBUG = False
 INCLUDE_AUX_DEPS = True
 
@@ -31,7 +36,8 @@ class State:
         self.op_graph.add_nodes_from([INPUT, MEMREF_ARG, GLOBAL_MEMREF_ARG, CONSTANT])
 
     def set_output_file(self, fp):
-        self.output_file = open(fp.replace(".py", ".mlir"), "w")
+        pref = ".macs" if self.collapse_macs else ""
+        self.output_file = open(fp.replace(".py", pref + ".mlir"), "w")
 
     def incr_var(self):
         self._var_count += 1
@@ -141,7 +147,5 @@ class State:
 
 state = State()
 
-logging.basicConfig(encoding='utf-8', level=logging.DEBUG)
-logger = logging.getLogger(__name__)
 
 

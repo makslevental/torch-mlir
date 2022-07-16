@@ -1,6 +1,6 @@
 from enum import Enum
 from textwrap import dedent, indent
-from typing import Tuple
+from typing import Tuple, Dict, Any, List
 
 from dataclasses import dataclass
 
@@ -62,6 +62,7 @@ class Op:
     pe_idx: Tuple[int, ...]
     op_id: int
     arity: int = 0
+    extra_attrs: Tuple[Tuple[str, Any]] = None
 
     def __post_init__(self):
         if self.type in {OpType.ADD, OpType.SUB, OpType.MUL, OpType.DIV, OpType.GT}:
@@ -70,16 +71,21 @@ class Op:
             object.__setattr__(self, "arity", 1)
 
     def __repr__(self):
-        return f'"{self.type.value}" (ARGS) {{ pe = "{self.pe_idx}", opr = "{self.type.value}", op_id = "{self.op_id}" }} : ({", ".join([State.dtype] * self.arity)}) -> {State.dtype}'
+        attrs = {"pe": self.pe_idx, "opr": self.type.value, "op_id": self.op_id}
+        if self.extra_attrs is not None:
+            for n, v in self.extra_attrs:
+                attrs[n] = v
+        attrs_str = ", ".join([f'{n} = "{v}"' for n, v in attrs.items()])
+        return f'"{self.type.value}" (ARGS) {{ {attrs_str} }} : ({", ".join([State.dtype] * self.arity)}) -> {State.dtype}'
 
 
-def create_new_op(op_type: OpType, pe_idx=None, res=None, add_aux_dep=False):
+def create_new_op(op_type: OpType, *, pe_idx=None, res=None, add_aux_dep=False, extra_attrs=None):
     if pe_idx is None:
         pe_idx = State.pe_idx
     if res is None:
         res = Val()
 
-    op = Op(op_type, pe_idx, State.curr_op_id)
+    op = Op(op_type, pe_idx, State.curr_op_id, extra_attrs=extra_attrs)
 
     if add_aux_dep:
         State.maybe_add_aux_dep(pe_idx, op)
@@ -120,11 +126,12 @@ def overload_op(type):
 @dataclass(frozen=True)
 class Val:
     name: str = ""
-    id: str = str(State.curr_var_id)
+    id: str = None
 
     def __post_init__(self):
         State.incr_var()
-        object.__setattr__(self, "id", str(State.curr_var_id))
+        if self.id is None:
+            object.__setattr__(self, "id", str(State.curr_var_id))
 
     __add__ = overload_op(OpType.ADD)
     __sub__ = overload_op(OpType.SUB)
@@ -140,8 +147,7 @@ class Val:
 def Constant(cst):
     assert isinstance(cst, (float, bool, int)), cst
     op, op_res = create_new_op(OpType.CST, pe_idx=(-1,))
-    op_str = str(op)
-    State.emit(f"{op_res} = {op_str.replace('ARGS', str(cst))}")
+    State.emit(f"{op_res} = arith.constant {str(cst)} : {State.dtype}")
 
     return op_res
 
