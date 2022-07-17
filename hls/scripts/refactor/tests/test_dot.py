@@ -1,6 +1,5 @@
 from hls.scripts.refactor.memref import MemRef, GlobalMemRef
-from hls.scripts.refactor.ops import Alias, FMAC, ReduceAdd
-from hls.scripts.refactor.val import Constant, ReLU, Copy
+from hls.scripts.refactor.ops import Alias, FMAC, ReduceAdd, ReLU, Copy
 from hls.scripts.refactor.runner import parfor, Forward
 
 # fmt: off

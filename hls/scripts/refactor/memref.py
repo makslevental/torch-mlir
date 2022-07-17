@@ -4,15 +4,11 @@ from typing import Tuple
 import numpy as np
 from dataclasses import dataclass
 
-from hls.scripts.refactor.state import state
-from hls.scripts.refactor.val import Val, Constant
+from hls.scripts.refactor.state import state, idx_to_str
+from hls.scripts.refactor.val import Val, make_constant
 
 
 MemRefIndex = Tuple[int, ...]
-
-
-def idx_to_str(idx):
-    return "_".join(map(str, idx))
 
 
 @dataclass(frozen=True)
@@ -39,7 +35,7 @@ class MemRef:
 
     def __setitem__(self, index, value):
         if isinstance(value, (float, bool, int)):
-            value = Constant(value)
+            value = make_constant(value)
         assert not self.input
         self.registers[index] = value
 

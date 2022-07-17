@@ -1,6 +1,6 @@
 from enum import Enum
 from textwrap import dedent, indent
-from typing import Tuple, Dict, Any, List
+from typing import Tuple
 
 from dataclasses import dataclass
 
@@ -61,8 +61,10 @@ class Op:
     type: OpType
     pe_idx: Tuple[int, ...]
     op_id: int
+    args: Tuple[str]
+    res: str
+    res_reg: str = None
     arity: int = 0
-    extra_attrs: Tuple[Tuple[str, Any]] = None
 
     def __post_init__(self):
         if self.type in {OpType.ADD, OpType.SUB, OpType.MUL, OpType.DIV, OpType.GT}:
@@ -71,21 +73,57 @@ class Op:
             object.__setattr__(self, "arity", 1)
 
     def __repr__(self):
-        attrs = {"pe": self.pe_idx, "opr": self.type.value, "op_id": self.op_id}
-        if self.extra_attrs is not None:
-            for n, v in self.extra_attrs:
-                attrs[n] = v
+        args = ", ".join(map(str, self.args)),
+        attrs = {
+            "pe": self.pe_idx,
+            "opr": self.type.value,
+            "op_id": self.op_id,
+            # "args": str(args_attr),
+        }
+        if self.res_reg is not None:
+            attrs["res_reg"] = self.res_reg
         attrs_str = ", ".join([f'{n} = "{v}"' for n, v in attrs.items()])
-        return f'"{self.type.value}" (ARGS) {{ {attrs_str} }} : ({", ".join([State.dtype] * self.arity)}) -> {State.dtype}'
+        if self.type == OpType.CST:
+            return f'{self.res} = {self.type.value} {args[0]} : {State.dtype}'
+        else:
+            return f'{self.res} = "{self.type.value}" ({", ".join(args)}) {{  {attrs_str}  }} : ({", ".join([State.dtype] * self.arity)}) -> {State.dtype}'
+
+def make_constant(arg):
+    assert isinstance(arg, (float, bool, int)), arg
+    arg = str(arg)
+    cst_v = Val(id=f'cst_{arg.replace(".", "")}')
+    cst_op = Op(
+        OpType.CST,
+        pe_idx=(-1,),
+        op_id=State.curr_op_id,
+        args=(arg,),
+        res=str(cst_v),
+    )
+    State.emit(cst_op)
+    # TODO
+    # State.add_op_res(cst_v, cst_op)
+    # State.add_edge(cst_op, "CONSTANT", cst_v)
+    return cst_v
 
 
-def create_new_op(op_type: OpType, *, pe_idx=None, res=None, add_aux_dep=False, extra_attrs=None):
+def create_new_op(op_type: OpType, args, *, pe_idx=None, res=None, add_aux_dep=False, res_reg=None):
     if pe_idx is None:
         pe_idx = State.pe_idx
     if res is None:
         res = Val()
 
-    op = Op(op_type, pe_idx, State.curr_op_id, extra_attrs=extra_attrs)
+    for i, arg in enumerate(args):
+        if not isinstance(arg, Val):
+            assert isinstance(arg, (float, bool, int)), arg
+            args[i] = make_constant(arg)
+
+    op = Op(op_type, pe_idx=pe_idx, op_id=State.curr_op_id, args=args, res=res, res_reg=res_reg)
+
+    for arg in args:
+        if "cst" in arg.id: continue
+        State.add_edge(op, arg, op.res)
+
+    State.emit(op)
 
     if add_aux_dep:
         State.maybe_add_aux_dep(pe_idx, op)
@@ -96,29 +134,12 @@ def create_new_op(op_type: OpType, *, pe_idx=None, res=None, add_aux_dep=False, 
 
     State.incr_op_id()
 
-    return op, res
-
-
-def create_new_op_arg(op, arg, op_res):
-    if not isinstance(arg, Val):
-        assert isinstance(arg, (float, bool, int)), arg
-        arg = Constant(arg)
-    State.add_edge(op, arg, op_res)
-    return arg
+    return res
 
 
 def overload_op(type):
     def f(*args: "Tuple[Val]"):
-        op, op_res = create_new_op(type)
-        arg_strs = []
-        for arg in args:
-            arg = create_new_op_arg(op, arg, op_res)
-            arg_strs.append(str(arg))
-
-        op_str = str(op)
-        State.emit(f"{op_res} = {op_str.replace('ARGS', ', '.join(arg_strs))}")
-
-        return op_res
+        return create_new_op(type, args)
 
     return f
 
@@ -144,13 +165,3 @@ class Val:
         return f"{State.val_prefix}val_{self.id}"
 
 
-def Constant(cst):
-    assert isinstance(cst, (float, bool, int)), cst
-    op, op_res = create_new_op(OpType.CST, pe_idx=(-1,))
-    State.emit(f"{op_res} = arith.constant {str(cst)} : {State.dtype}")
-
-    return op_res
-
-
-ReLU = lambda x: overload_op(OpType.RELU)(x)
-Copy = lambda x: overload_op(OpType.COPY)(x)

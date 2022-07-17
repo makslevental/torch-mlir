@@ -4,8 +4,9 @@ from ast import Assign, Mult, Add, BinOp, Name, Call, IfExp, Compare
 
 import astor
 
-from torch_mlir._mlir_libs._mlir.ir import Context, Module, OpView, FunctionType
-from hls.mlir.python_extension.hls._mlir_libs.hls_utils import get_val_identifier
+from torch_mlir._mlir_libs._mlir.ir import Context, Module, OpView, FunctionType, Value, OpResult
+from torch_mlir._mlir_libs._torchMlir import get_val_identifier
+# from hls_utils import get_val_identifier
 
 
 class RemoveMAC(ast.NodeTransformer):
@@ -169,10 +170,11 @@ def parse_mlir_module(module_str):
         if mlir_op.operation.name == "arith.constant":
             return
 
-        if list(mlir_op.results):
-            mlir_op.result.dump()
-            ident = get_val_identifier(mlir_op.operation.results[0]._CAPIPtr)
-            print(ident, mlir_op.operation.name, parse_attrs_to_dict(mlir_op.attributes))
+        if list(mlir_op.results) and hasattr(mlir_op, "operands"):
+            res = get_val_identifier(mlir_op.results[0]._CAPIPtr)
+            args = [get_val_identifier(op._CAPIPtr) for op in mlir_op.operands]
+            print(res, mlir_op.operation.name, args, parse_attrs_to_dict(mlir_op.attributes))
+            print(mlir_op)
 
     traverse_op_region_block_iterators(op, handler)
 

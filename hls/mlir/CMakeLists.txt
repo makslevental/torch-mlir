@@ -43,4 +43,5 @@ add_mlir_library(HLSTorch
 target_link_options(HLSTorch PUBLIC -undefined dynamic_lookup)
 torch_mlir_target_includes(HLSTorch)
 
+#add_subdirectory(capi)
 add_subdirectory(python_extension)

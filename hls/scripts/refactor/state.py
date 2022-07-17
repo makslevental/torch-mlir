@@ -3,7 +3,7 @@ import os
 
 import networkx as nx
 
-logging.basicConfig(encoding='utf-8', level=logging.DEBUG)
+logging.basicConfig(encoding="utf-8", level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
@@ -81,9 +81,7 @@ class State:
 
     def add_edge(self, op, arg, out_v):
         val_source = self.get_arg_src(arg)
-        self.op_graph.add_edge(
-            val_source, op, input=arg, output=out_v, id=op.op_id
-        )
+        self.op_graph.add_edge(val_source, op, input=arg, output=out_v, id=op.op_id)
 
     def update_most_recent_pe_idx(self, pe_idx, op):
         self.pe_idx_to_most_recent_op_id[pe_idx] = op.op_id
@@ -148,4 +146,5 @@ class State:
 state = State()
 
 
-
+def idx_to_str(idx):
+    return "_".join(map(str, idx))
