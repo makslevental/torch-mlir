@@ -166,7 +166,7 @@ def rewrite_schedule_vals(sched_str, macs_str):
 
     lines = []
     for line in sched_str.splitlines():
-        if "op_id" in line:
+        if "op_id" in line or "return" in line:
             line = reg_idents.sub(repl, line)
         lines.append(line)
 

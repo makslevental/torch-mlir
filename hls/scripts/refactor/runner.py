@@ -4,22 +4,11 @@ import itertools
 from textwrap import indent, dedent
 
 from hls.scripts.refactor.memref import MemRef, GlobalMemRef
-from hls.scripts.refactor.ops import OpType
+from hls.scripts.refactor.ops import LATENCIES
 from hls.scripts.refactor.state import logger, COLLAPSE_MACS
 from hls.scripts.refactor.util import extend_idx
 from hls.scripts.refactor import state
 
-LATENCIES = {
-    OpType.ADD: 4,
-    OpType.SUB: 4,
-    OpType.MUL: 3,
-    OpType.DIV: 3,
-    OpType.GT: 1,
-    OpType.NEG: 1,
-    OpType.RELU: 1,
-    OpType.CST: 0,
-    OpType.COPY: 1,
-}
 
 
 def make_latency_attrs():

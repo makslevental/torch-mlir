@@ -1,46 +1,22 @@
+from dataclasses import dataclass
 from textwrap import dedent
 from typing import Tuple
 
-from dataclasses import dataclass
-
 from hls.scripts.refactor.ops import OpType
+from hls.scripts.refactor.rtl.basic import Reg, Wire
 from hls.scripts.refactor.util import remove_all_leading_whitespace
-
-
-@dataclass(frozen=True)
-class Wire:
-    id: str
-    precision: int
-
-    def __str__(self):
-        return f"{self.id}_wire"
-
-    def instantiate(self):
-        return f"wire [{self.precision - 1}:0] {self};"
-
-
-@dataclass(frozen=True)
-class Reg:
-    id: str
-    precision: int
-
-    def __str__(self):
-        return f"{self.id}_reg"
-
-    def instantiate(self):
-        return f"reg [{self.precision - 1}:0] {self};"
 
 
 def generate_flopoco_fp(op_type, instance_name, id, x, y, r, keep):
     return dedent(
         f"""\
-                    {'(* keep = "true" *) ' if keep else ''}{op_type} #({id}) {instance_name}(
-                        .clk(clk),
-                        .X({x}),
-                        .Y({y}),
-                        .R({r})
-                    );
-                    """
+            {'(* keep = "true" *) ' if keep else ''}{op_type} #({id}) {instance_name}(
+                .clk(clk),
+                .X({x}),
+                .Y({y}),
+                .R({r})
+            );
+        """
     )
 
 
@@ -150,6 +126,13 @@ class Neg(ReLUOrNegIP):
     def __init__(self, pe_idx, precision):
         super().__init__(OpType.NEG, pe_idx, precision)
 
+
+@dataclass(frozen=True)
+class PE:
+    fadd: FAdd
+    fmul: FMul
+    relu: ReLU
+    neg: Neg
 
 if __name__ == "__main__":
     print(FAdd((0, 0), 11).instantiate())

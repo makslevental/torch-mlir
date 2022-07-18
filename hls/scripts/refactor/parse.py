@@ -10,6 +10,8 @@ from torch_mlir._mlir_libs._mlir.ir import (
 )
 from torch_mlir._mlir_libs._torchMlir import get_val_identifier
 
+from hls.scripts.refactor.ops import OPS
+
 
 def traverse_op_region_block_iterators(op, handler):
     for i, region in enumerate(op.regions):
@@ -52,6 +54,7 @@ OpIdData = namedtuple("OpIdData", "res_val opr pe_idx op_inputs start_time")
 
 def parse_mlir_module(module_str):
     vals = set()
+    csts = {}
     pe_idxs = set()
     op_id_data = {}
     func_args = None
@@ -68,26 +71,38 @@ def parse_mlir_module(module_str):
             op_inputs = [inp[0] for inp in idents[1:]]
             if opr == "arith.constant":
                 op_inputs = [float(op_inputs[0])]
-            vals.update(set(op_inputs))
+                csts[res_val] = float(op_inputs[0])
+            else:
+                vals.update(set(op_inputs))
 
             start_time = reg_start_time.findall(line)
             if start_time:
                 start_time = int(start_time[0])
             else:
                 start_time = None
+            opr = OPS[opr]
             op_id_data[op_id, opr] = OpIdData(
                 res_val, opr, pe_idx, op_inputs, start_time
             )
         elif "func.func" in line:
             assert idents
-            func_args = [idn[0] for idn in idents]
+            func_args = set(idn[0] for idn in idents)
         elif "return" in line:
-            returns = idents[0][0]
+            start_time = reg_start_time.findall(line)
+            if start_time:
+                start_time = int(start_time[0])
+            else:
+                start_time = None
+            returns, return_time = idents[0][0], start_time
+            if not isinstance(returns, list):
+                returns = [returns]
+                for r in returns:
+                    vals.add(r)
         else:
             continue
-
     assert func_args and returns
-    return op_id_data, func_args, returns, vals, pe_idxs
+    vals -= func_args
+    return op_id_data, func_args, returns, return_time, vals, csts, pe_idxs
 
 
 def parse_mlir_module_using_mlir(module_str):

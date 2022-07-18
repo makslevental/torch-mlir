@@ -27,6 +27,22 @@ class OpType(Enum):
     COPY = "copy"
 
 
+LATENCIES = {
+    OpType.ADD: 4,
+    OpType.SUB: 4,
+    OpType.MUL: 3,
+    OpType.DIV: 3,
+    OpType.GT: 1,
+    OpType.NEG: 1,
+    OpType.RELU: 1,
+    OpType.CST: 0,
+    OpType.COPY: 1,
+}
+
+
+OPS = {op.value: op for op in OpType}
+
+
 @dataclass(frozen=True)
 class Val:
     name: str = ""
@@ -62,6 +78,8 @@ class Op:
             object.__setattr__(self, "arity", 2)
         else:
             object.__setattr__(self, "arity", 1)
+        object.__setattr__(self, "op_id", state.state.curr_op_id)
+        state.state.incr_op_id()
 
     def __repr__(self):
         args = (", ".join(map(str, self.args)),)
@@ -130,8 +148,6 @@ def create_new_op(
     state.state.map_val_to_pe(res, pe_idx)
     state.state.add_op_res(res, op)
 
-    state.state.incr_op_id()
-
     return res
 
 
@@ -155,12 +171,7 @@ class FMAC:
 
     def _collapse(self, op_type, prev_res, a, b):
         prev_op = state.state.get_arg_src(prev_res)
-        res = create_new_op(
-            op_type,
-            (a, b),
-            pe_idx=prev_op.pe_idx,
-            res=prev_res
-        )
+        res = create_new_op(op_type, (a, b), pe_idx=prev_op.pe_idx, res=prev_res)
         return res
 
     def Add(self, a, b):
