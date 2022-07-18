@@ -15,4 +15,4 @@ COLLAPSE_MACS=1 python ${filename}_rewritten.py
 
 circt-opt ${filename}_rewritten.mlir -test-lp-scheduler=with=Problem -allow-unregistered-dialect -o ${filename}_rewritten.sched.mlir
 
-#python transforms.py --mlir ${filename}_rewritten.sched.mlir
+python transforms.py --mlir ${filename}_rewritten.sched.mlir --macs_fp ${filename}_rewritten.macs.mlir

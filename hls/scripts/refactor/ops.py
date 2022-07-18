@@ -72,7 +72,7 @@ class Op:
         }
         attrs_str = ", ".join([f'{n} = "{v}"' for n, v in attrs.items()])
         if self.type == OpType.CST:
-            return f"{self.res} = {self.type.value} {args[0]} : {state.state.dtype}"
+            return f'{self.res} = "{self.type.value}" () {{  {attrs_str}, value = {args[0]} : {state.state.dtype}  }} : () -> {state.state.dtype}'
         else:
             return f'{self.res} = "{self.type.value}" ({", ".join(args)}) {{  {attrs_str}  }} : ({", ".join([state.state.dtype] * self.arity)}) -> {state.state.dtype}'
 
@@ -159,7 +159,7 @@ class FMAC:
             op_type,
             (a, b),
             pe_idx=prev_op.pe_idx,
-            res_reg=f"{op_type.value}_{self.res_reg}",
+            res=prev_res
         )
         return res
 
@@ -184,10 +184,7 @@ class FMAC:
     def Result(self):
         if state.state.collapse_macs:
             state.state.debug_print(f"MAC {self.pe_idx} ends")
-
-            op_res = Copy(self.most_recent_add)
-        else:
-            op_res = self.most_recent_add
+        op_res = Copy(self.most_recent_add)
         return op_res
 
 

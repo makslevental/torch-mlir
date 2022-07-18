@@ -151,38 +151,6 @@ class Neg(ReLUOrNegIP):
         super().__init__(OpType.NEG, pe_idx, precision)
 
 
-def make_shift_rom(precision, id, op_name, data_out_wire, addr_width):
-    res = []
-    # waddr = ','.join([f"0'b0"] * addr_width)
-    # write_data = ','.join([f"0'b0"] * precision)
-    res.append(
-        dedent(
-            f"""\
-            reg[{addr_width}-1:0] {op_name}_raddr;
-            always @(posedge clk) begin
-                if ({op_name}_raddr == RAM_SIZE) begin
-                    {op_name}_raddr = 0;
-                end else begin
-                    {op_name}_raddr <= {op_name}_raddr+1'b1;
-                end
-            end
-        
-            wire   [{precision - 1}:0] {data_out_wire};
-            simple_dual_rw_ram #({id}, {precision}, {2 ** addr_width}) {op_name}(
-                .wclk(clk),
-                .waddr({addr_width}'b0),
-                .write_data({op_name}_raddr),
-                .write_en(1'b1),
-                .rclk(clk),
-                .raddr({op_name}_raddr),
-                .read_data({data_out_wire})
-            );
-            """
-        )
-    )
-    return "\n".join(res)
-
-
 if __name__ == "__main__":
     print(FAdd((0, 0), 11).instantiate())
     print(FMul((0, 0), 11).instantiate())
