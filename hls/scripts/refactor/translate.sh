@@ -10,8 +10,9 @@ python transforms.py --py $filename
 extension="${filename##*.}"
 filename="${filename%.*}"
 
+COLLAPSE_MACS=0 python ${filename}_rewritten.py
 COLLAPSE_MACS=1 python ${filename}_rewritten.py
 
 circt-opt ${filename}_rewritten.mlir -test-lp-scheduler=with=Problem -allow-unregistered-dialect -o ${filename}_rewritten.sched.mlir
 
-echo python transforms.py --mlir ${filename}_rewritten.sched.mlir
+#python transforms.py --mlir ${filename}_rewritten.sched.mlir

@@ -13,7 +13,7 @@ GLOBAL_MEMREF_ARG = "GLOBAL_MEMREF_ARG"
 CONSTANT = "CONSTANT"
 VAL_PREFIX = "%"
 DTYPE = "f32"
-COLLAPSE_MACS = bool(os.environ.get("COLLAPSE_MACS"))
+COLLAPSE_MACS = int(os.environ.get("COLLAPSE_MACS", 0))
 logger.debug(f"{COLLAPSE_MACS=}")
 DEBUG = False
 INCLUDE_AUX_DEPS = True
@@ -32,12 +32,12 @@ class State:
     op_id_to_pe_idx = {}
     pe_deps = set()
 
-    def __init__(self):
+    def __init__(self, output_fp):
         self.op_graph.add_nodes_from([INPUT, MEMREF_ARG, GLOBAL_MEMREF_ARG, CONSTANT])
+        self.output_file = open(output_fp, "w")
 
     def set_output_file(self, fp):
-        pref = ".macs" if self.collapse_macs else ""
-        self.output_file = open(fp.replace(".py", pref + ".mlir"), "w")
+        self.output_file = open(fp, "w")
 
     def incr_var(self):
         self._var_count += 1
@@ -143,7 +143,7 @@ class State:
         self.output_file.close()
 
 
-state = State()
+state = None
 
 
 def idx_to_str(idx):

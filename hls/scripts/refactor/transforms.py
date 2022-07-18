@@ -4,9 +4,10 @@ from ast import Assign, Mult, Add, BinOp, Name, Call, IfExp, Compare
 
 import astor
 
-from torch_mlir._mlir_libs._mlir.ir import Context, Module, OpView, FunctionType, Value, OpResult
-from torch_mlir._mlir_libs._torchMlir import get_val_identifier
-# from hls_utils import get_val_identifier
+from hls.scripts.refactor.parse import (
+    parse_mlir_module,
+    reg_idents,
+)
 
 
 class RemoveMAC(ast.NodeTransformer):
@@ -26,7 +27,7 @@ class RemoveMAC(ast.NodeTransformer):
                         targets=[fma],
                         value=Call(
                             func=Name(id="FMAC"),
-                            args=self.body_args[:-1],
+                            args=self.body_args,
                             keywords=[],
                         ),
                         type_comment=None,
@@ -132,53 +133,6 @@ class HoistGlobals(ast.NodeTransformer):
         return node
 
 
-def traverse_op_region_block_iterators(op, handler):
-    for i, region in enumerate(op.regions):
-        for j, block in enumerate(region):
-            for k, child_op in enumerate(block):
-                handler(child_op)
-                traverse_op_region_block_iterators(child_op, handler)
-
-
-def parse_attrs_to_dict(attrs):
-    d = {}
-    for named_attr in attrs:
-        if named_attr.name in {"lpStartTime", "value"}:
-            d[named_attr.name] = ast.literal_eval(
-                str(named_attr.attr).split(":")[0].strip()
-            )
-        else:
-            d[named_attr.name] = ast.literal_eval(str(named_attr.attr))
-    return d
-
-
-def parse_mlir_module(module_str):
-    ctx = Context()
-    ctx.allow_unregistered_dialects = True
-    module = Module.parse(
-        module_str,
-        ctx,
-    )
-    op = module.operation
-
-    def handler(mlir_op):
-        if not isinstance(mlir_op, OpView) or (
-            hasattr(mlir_op, "type") and isinstance(mlir_op.type, FunctionType)
-        ):
-            return
-
-        if mlir_op.operation.name == "arith.constant":
-            return
-
-        if list(mlir_op.results) and hasattr(mlir_op, "operands"):
-            res = get_val_identifier(mlir_op.results[0]._CAPIPtr)
-            args = [get_val_identifier(op._CAPIPtr) for op in mlir_op.operands]
-            print(res, mlir_op.operation.name, args, parse_attrs_to_dict(mlir_op.attributes))
-            print(mlir_op)
-
-    traverse_op_region_block_iterators(op, handler)
-
-
 def transform_forward_py(fp):
     new_tree = astor.parse_file(fp)
     new_tree = HoistGlobals().visit(new_tree)
@@ -191,9 +145,38 @@ def transform_forward_py(fp):
     return new_fp
 
 
+def rewrite_schedule_vals(sched_str, macs_str):
+    macs_op_id_data, *_ = parse_mlir_module(macs_str)
+    sched_op_id_data, *_ = parse_mlir_module(sched_str)
+    assert len(sched_op_id_data) == len(macs_op_id_data) and set(
+        macs_op_id_data
+    ) == set(sched_op_id_data)
+    sched_val_to_macs_val = {
+        val: macs_op_id_data[op_id_opr][0]
+        for op_id_opr, (val, *_) in sched_op_id_data.items()
+    }
+
+    def repl(match):
+        g = match.group()
+        if g in sched_val_to_macs_val:
+            return sched_val_to_macs_val[match.group()]
+        else:
+            assert "arg" in g or float(g) + 1, g
+            return g
+
+    lines = []
+    for line in sched_str.splitlines():
+        if "op_id" in line:
+            line = reg_idents.sub(repl, line)
+        lines.append(line)
+
+    return "\n".join(lines)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("fp")
+    parser.add_argument("--macs_fp")
     parser.add_argument("--py", action="store_true")
     parser.add_argument("--mlir", action="store_true")
     args = parser.parse_args()
@@ -201,4 +184,6 @@ if __name__ == "__main__":
         transform_forward_py(args.fp)
     if args.mlir:
         sched_module_str = open(args.fp).read()
-        parse_mlir_module(sched_module_str)
+        macs_module_str = open(args.macs_fp).read()
+        rewritten = rewrite_schedule_vals(sched_module_str, macs_module_str)
+        open(args.macs_fp.replace("macs", "macs_rewritten"), "w").write(rewritten)

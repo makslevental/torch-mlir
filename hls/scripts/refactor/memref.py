@@ -4,9 +4,9 @@ from typing import Tuple
 import numpy as np
 from dataclasses import dataclass
 
-from hls.scripts.refactor.state import state, idx_to_str
-from hls.scripts.refactor.val import Val, make_constant
-
+from hls.scripts.refactor.state import idx_to_str
+from hls.scripts.refactor.ops import make_constant, Val
+from hls.scripts.refactor import state
 
 MemRefIndex = Tuple[int, ...]
 
@@ -43,7 +43,7 @@ class MemRef:
         if self.registers[index] is None:
             assert self.input
             v = MemRefVal(self.arr_name, index)
-            state.add_memref_arg(v)
+            state.state.add_memref_arg(v)
             self.registers[index] = v
 
         v = self.registers[index]
@@ -79,7 +79,7 @@ class GlobalMemRef:
         self.vals = np.empty(self.curr_shape, dtype=object)
         for idx, v in np.ndenumerate(global_array):
             v = MemRefVal(f"{self.name}__", idx)
-            state.add_global_memref_arg(v)
+            state.state.add_global_memref_arg(v)
             self.vals[idx] = v
 
     @property

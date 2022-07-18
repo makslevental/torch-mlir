@@ -1,20 +1,50 @@
 import inspect
 import io
 import itertools
-import logging
+from textwrap import indent, dedent
 
 from hls.scripts.refactor.memref import MemRef, GlobalMemRef
-from hls.scripts.refactor.val import make_latency_attrs
-from hls.scripts.refactor.state import state as State, logger
+from hls.scripts.refactor.ops import OpType
+from hls.scripts.refactor.state import logger, COLLAPSE_MACS
+from hls.scripts.refactor.util import extend_idx
+from hls.scripts.refactor import state
+
+LATENCIES = {
+    OpType.ADD: 4,
+    OpType.SUB: 4,
+    OpType.MUL: 3,
+    OpType.DIV: 3,
+    OpType.GT: 1,
+    OpType.NEG: 1,
+    OpType.RELU: 1,
+    OpType.CST: 0,
+    OpType.COPY: 1,
+}
 
 
-def extend_idx(pe_idx):
-    idx = pe_idx[:]
-    if len(pe_idx) < 4:
-        idx = 4 * [0]
-        idx[-len(pe_idx) :] = pe_idx
-    pe_idx = tuple(idx)
-    return pe_idx
+def make_latency_attrs():
+    if state.state.include_aux_deps:
+        aux_deps = sorted([list(dep) for dep in state.state.pe_deps])
+    else:
+        aux_deps = []
+    operator_types = [
+        f"""{{ name = "{op.value}", latency = {lat}, limit = 2592 }}"""
+        for op, lat in LATENCIES.items()
+    ]
+    lats = indent(
+        dedent(
+            f"""\
+            attributes {{
+                auxdeps = {aux_deps},
+                operatortypes = [
+                    {', '.join(operator_types)}
+                ] 
+            }} {{
+            """,
+        ),
+        "\t",
+    )
+    return lats
 
 
 def get_default_args(func):
@@ -46,35 +76,36 @@ def make_args_globals(args):
 
 def MLIRForward(args, forward):
     inputs, globals, output = make_args_globals(args)
-    output_dtypes = ", ".join([State.dtype] * output.numel)
-    inps_globals = [f"{v}: {State.dtype}" for v in inputs + globals]
-    State.emit(
+    output_dtypes = ", ".join([state.state.dtype] * output.numel)
+    inps_globals = [f"{v}: {state.state.dtype}" for v in inputs + globals]
+    state.state.emit(
         f"func.func @forward({', '.join(inps_globals)}) -> ({output_dtypes})\n",
     )
 
-    OLD_FILE = State.swap_output_file(io.StringIO())
+    OLD_FILE = state.state.swap_output_file(io.StringIO())
     forward()
     OLD_FILE.write(make_latency_attrs())
 
-    logger.debug(f"num unique pes {State.num_unique_pes}")
+    logger.debug(f"num unique pes {state.state.num_unique_pes}")
 
-    OLD_FILE.write(State.read_output_file())
-    State.swap_output_file(OLD_FILE)
+    OLD_FILE.write(state.state.read_output_file())
+    state.state.swap_output_file(OLD_FILE)
 
-    State.emit(f"return {', '.join(output.val_names)}: {output_dtypes}")
-    State.emit("}")
+    state.state.emit(f"return {', '.join(output.val_names)}: {output_dtypes}")
+    state.state.emit("}")
 
 
 def parfor(ranges):
     def wrapper(body):
         for i, idx in enumerate(itertools.product(*ranges)):
-            State.pe_idx = extend_idx(idx)
+            state.state.pe_idx = extend_idx(idx)
             body(*idx)
 
     return wrapper
 
 
 def Forward(forward, fp):
-    State.set_output_file(fp)
+    pref = ".macs" if COLLAPSE_MACS else ""
+    state.state = state.State(fp.replace(".py", pref + ".mlir"))
     args = get_default_args(forward)
     MLIRForward(args, forward)
