@@ -1,11 +1,10 @@
-from typing import Tuple
-
 from dataclasses import dataclass
 from enum import Enum
+from typing import Tuple
 
+from hls.scripts.refactor import state
 from hls.scripts.refactor.state import idx_to_str
 from hls.scripts.refactor.util import extend_idx
-from hls.scripts.refactor import state
 
 
 def overload_op(type):
@@ -38,7 +37,6 @@ LATENCIES = {
     OpType.CST: 0,
     OpType.COPY: 1,
 }
-
 
 OPS = {op.value: op for op in OpType}
 
@@ -83,11 +81,7 @@ class Op:
 
     def __repr__(self):
         args = (", ".join(map(str, self.args)),)
-        attrs = {
-            "pe": self.pe_idx,
-            "opr": self.type.value,
-            "op_id": self.op_id,
-        }
+        attrs = {"pe": self.pe_idx, "opr": self.type.value, "op_id": self.op_id}
         attrs_str = ", ".join([f'{n} = "{v}"' for n, v in attrs.items()])
         if self.type == OpType.CST:
             return f'{self.res} = "{self.type.value}" () {{  {attrs_str}, value = {args[0]} : {state.state.dtype}  }} : () -> {state.state.dtype}'
@@ -126,13 +120,7 @@ def create_new_op(
             assert isinstance(arg, (float, bool, int)), arg
             args[i] = make_constant(arg)
 
-    op = Op(
-        op_type,
-        pe_idx=pe_idx,
-        op_id=state.state.curr_op_id,
-        args=args,
-        res=res,
-    )
+    op = Op(op_type, pe_idx=pe_idx, op_id=state.state.curr_op_id, args=args, res=res)
 
     for arg in args:
         if "cst" in arg.id:

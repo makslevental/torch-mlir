@@ -1,13 +1,15 @@
 import argparse
-import enum
-import os
-from collections import namedtuple
-
-from dataclasses import dataclass
+from collections import defaultdict
 
 from hls.scripts.refactor.ops import OpType, LATENCIES
 from hls.scripts.refactor.parse import parse_mlir_module
-from hls.scripts.refactor.rtl.basic import Wire, Reg, make_constant, make_always_tree
+from hls.scripts.refactor.rtl.basic import (
+    Wire,
+    Reg,
+    make_constant,
+    make_always_tree,
+    make_always_branch,
+)
 from hls.scripts.refactor.rtl.fsm import FSM
 from hls.scripts.refactor.rtl.ip import FAdd, FMul, ReLU, Neg, PE
 from hls.scripts.refactor.rtl.module import make_top_module_decl
@@ -38,6 +40,64 @@ def make_op_always(data, fsm, pes, vals, input_wires):
         raise NotImplementedError
 
     return "\n".join(trees)
+
+
+def make_pe_always(fsm, pe, op_datas, vals, input_wires):
+    tree_conds = []
+    vals_to_init = set()
+    for data in op_datas:
+        op = data.opr
+        ip = getattr(pe, op.value, None)
+        args = data.op_inputs
+        start_time = data.start_time
+        end_time = start_time + LATENCIES[op]
+        res_val = vals.get(data.res_val, data.res_val)
+        vals_to_init.add(res_val)
+        in_a = vals.get(args[0], input_wires.get(args[0], args[0]))
+        vals_to_init.add(in_a)
+
+        if op in {OpType.MUL, OpType.DIV, OpType.ADD, OpType.SUB, OpType.GT}:
+            in_b = vals.get(args[1], input_wires.get(args[1], args[1]))
+            vals_to_init.add(in_b)
+            tree_conds.append(
+                make_always_branch(ip.x, in_a, fsm.make_fsm_states([start_time]))
+            )
+            vals_to_init.add(ip.x)
+            tree_conds.append(
+                make_always_branch(ip.y, in_b, fsm.make_fsm_states([start_time]))
+            )
+            vals_to_init.add(ip.y)
+            tree_conds.append(
+                make_always_branch(res_val, ip.r, fsm.make_fsm_states([end_time]))
+            )
+            vals_to_init.add(ip.r)
+        elif op in {OpType.NEG, OpType.RELU}:
+            tree_conds.append(
+                make_always_branch(ip.a, in_a, fsm.make_fsm_states([start_time]))
+            )
+            vals_to_init.add(ip.a)
+            tree_conds.append(
+                make_always_branch(res_val, ip.res, fsm.make_fsm_states([end_time]))
+            )
+            vals_to_init.add(ip.res)
+        elif op in {OpType.COPY}:
+            tree_conds.append(
+                make_always_branch(res_val, in_a, fsm.make_fsm_states([start_time]))
+            )
+        else:
+            raise NotImplementedError
+
+    return make_always_tree(tree_conds, vals_to_init)
+
+
+def cluster_pes(pes, op_id_data):
+    pe_to_ops = defaultdict(list)
+    for (op_id, op), data in op_id_data.items():
+        if op == OpType.CST:
+            continue
+        pe_to_ops[pes[data.pe_idx]].append(data)
+
+    return pe_to_ops
 
 
 def main(mac_rewritten_sched_mlir_fp, precision):
@@ -96,15 +156,14 @@ def main(mac_rewritten_sched_mlir_fp, precision):
         neg = Neg(pe_idx, precision)
         pes[pe_idx] = PE(fadd, fmul, relu, neg)
 
-    for (op_id, op), data in op_id_data.items():
-        if op == OpType.CST:
-            continue
-        emit(make_op_always(data, fsm, pes, vals, input_wires))
-
+    pe_to_ops = cluster_pes(pes, op_id_data)
+    for pe, op_datas in pe_to_ops.items():
+        emit(make_pe_always(fsm, pe, op_datas, vals, input_wires))
     emit(fsm.make_fsm())
 
     for v, wire in output_wires.items():
-        emit(f"assign output_{v} = {v};")
+        reg = Reg(wire.id, wire.precision)
+        emit(f"assign output_{wire} = {reg};")
 
     emit("endmodule")
 

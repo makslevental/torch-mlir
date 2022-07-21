@@ -3,12 +3,11 @@ import io
 import itertools
 from textwrap import indent, dedent
 
+from hls.scripts.refactor import state
 from hls.scripts.refactor.memref import MemRef, GlobalMemRef
 from hls.scripts.refactor.ops import LATENCIES
 from hls.scripts.refactor.state import logger, COLLAPSE_MACS
 from hls.scripts.refactor.util import extend_idx
-from hls.scripts.refactor import state
-
 
 
 def make_latency_attrs():
@@ -29,7 +28,7 @@ def make_latency_attrs():
                     {', '.join(operator_types)}
                 ] 
             }} {{
-            """,
+            """
         ),
         "\t",
     )
@@ -68,7 +67,7 @@ def MLIRForward(args, forward):
     output_dtypes = ", ".join([state.state.dtype] * output.numel)
     inps_globals = [f"{v}: {state.state.dtype}" for v in inputs + globals]
     state.state.emit(
-        f"func.func @forward({', '.join(inps_globals)}) -> ({output_dtypes})\n",
+        f"func.func @forward({', '.join(inps_globals)}) -> ({output_dtypes})\n"
     )
 
     OLD_FILE = state.state.swap_output_file(io.StringIO())

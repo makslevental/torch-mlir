@@ -11,14 +11,7 @@ def forward(
     _23=GlobalMemRef("_23", np.random.rand(1, 4, 3, 3)),
     _24=GlobalMemRef("_24", np.random.rand(1, 2, 3, 3)),
 ):
-    _255 = MemRef(
-        "_255",
-        4,
-        1,
-        2,
-        3,
-        3,
-    )
+    _255 = MemRef("_255", 4, 1, 2, 3, 3)
     _255[:] = _24[:, :, :, :]
 
     @parfor(
@@ -35,42 +28,14 @@ def forward(
             for _arg8 in range(0, 1, 1):
                 _76 = _arg4 + _arg7
                 _77 = _arg5 + _arg8
-                _78 = _23[
-                    _arg2,
-                    _arg6,
-                    _76,
-                    _77,
-                ]
-                _79 = _19[
-                    _arg3,
-                    _arg6,
-                    _arg7,
-                    _arg2,
-                ]
-                _80 = _255[
-                    _arg6,
-                    _arg2,
-                    _arg3,
-                    _arg4,
-                    _arg5,
-                ]
+                _78 = _23[_arg2, _arg6, _76, _77]
+                _79 = _19[_arg3, _arg6, _arg7, _arg2]
+                _80 = _255[_arg6, _arg2, _arg3, _arg4, _arg5]
                 _81 = _78 * _79
                 _82 = _80 + _81
-                _255[
-                    _arg6,
-                    _arg2,
-                    _arg3,
-                    _arg4,
-                    _arg5,
-                ] = _82
+                _255[_arg6, _arg2, _arg3, _arg4, _arg5] = _82
 
-    _25 = MemRef(
-        "_25",
-        1,
-        2,
-        3,
-        3,
-    )
+    _25 = MemRef("_25", 1, 2, 3, 3)
     _25[:, :, :, :] = np.apply_along_axis(ReduceAdd, 0, _255.registers)
     Alias(_arg1, _25)
 

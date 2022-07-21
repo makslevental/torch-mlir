@@ -1,4 +1,3 @@
-import random
 from textwrap import dedent, indent
 
 from hls.scripts.refactor.rtl.basic import make_constant
@@ -13,9 +12,7 @@ def make_top_module_decl(input_wires, output_wires, precision):
     base_outputs = []
     output_ports = [f"[{precision - 1}:0] {o}" for o in outputs]
 
-    input_wires = ",\n".join(
-        [f"input wire {inp}" for inp in base_inputs + input_ports]
-    )
+    input_wires = ",\n".join([f"input wire {inp}" for inp in base_inputs + input_ports])
     output_wires = ",\n".join(
         [f"output wire {outp}" for outp in base_outputs + output_ports]
     )
@@ -29,9 +26,7 @@ def make_top_module_decl(input_wires, output_wires, precision):
 
     mod_top += indent(
         dedent(
-            ",\n".join(
-                [f"input wire {inp}" for inp in base_inputs + input_ports[:2]]
-            )
+            ",\n".join([f"input wire {inp}" for inp in base_inputs + input_ports[:2]])
         ),
         "\t",
     )
@@ -53,9 +48,7 @@ def make_top_module_decl(input_wires, output_wires, precision):
     mod_top += "\nforward_inner _forward_inner(\n"
     mod_top += indent(
         dedent(
-            ",\n".join(
-                [f".{port}({port})" for port in base_inputs + inputs + outputs]
-            )
+            ",\n".join([f".{port}({port})" for port in base_inputs + inputs + outputs])
         ),
         "\t",
     )

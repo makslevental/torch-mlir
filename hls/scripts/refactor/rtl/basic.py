@@ -1,8 +1,6 @@
 import random
-from collections import defaultdict
-from textwrap import dedent
-
 from dataclasses import dataclass
+from textwrap import dedent, indent
 
 
 @dataclass(frozen=True)
@@ -33,11 +31,23 @@ def make_constant(v, precision):
     return f"{precision}'d{random.randint(0, 2 ** precision - 1)}"
 
 
-def make_always_tree(left, right, cond):
-    return dedent(
-        f"""\
-        always @ (*) begin
+def make_always_tree(conds, vals_to_init):
+    vals_to_init = [
+        f"\t{v} = 'x;"
+        for v in vals_to_init
+        if isinstance(v, Reg) and "cst" not in f"{v}"
+    ]
+    return "\n".join(["always @ (*) begin"] + vals_to_init + conds + ["end"])
+
+
+def make_always_branch(left, right, cond):
+    return indent(
+        dedent(
+            f"""\
             if ({cond}) begin
                 {left} = {right}; 
-        end"""
+            end
+        """
+        ),
+        "\t",
     )

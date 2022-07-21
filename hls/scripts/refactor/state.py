@@ -6,7 +6,6 @@ import networkx as nx
 logging.basicConfig(encoding="utf-8", level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-
 INPUT = "INPUT"
 MEMREF_ARG = "MEMREF_ARG"
 GLOBAL_MEMREF_ARG = "GLOBAL_MEMREF_ARG"

@@ -4,10 +4,7 @@ from ast import Assign, Mult, Add, BinOp, Name, Call, IfExp, Compare
 
 import astor
 
-from hls.scripts.refactor.parse import (
-    parse_mlir_module,
-    reg_idents,
-)
+from hls.scripts.refactor.parse import parse_mlir_module, reg_idents
 
 
 class RemoveMAC(ast.NodeTransformer):
@@ -26,9 +23,7 @@ class RemoveMAC(ast.NodeTransformer):
                     Assign(
                         targets=[fma],
                         value=Call(
-                            func=Name(id="FMAC"),
-                            args=self.body_args,
-                            keywords=[],
+                            func=Name(id="FMAC"), args=self.body_args, keywords=[]
                         ),
                         type_comment=None,
                     ),

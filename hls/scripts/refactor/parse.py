@@ -1,16 +1,12 @@
 import ast
 import re
-from collections import namedtuple
+from dataclasses import dataclass
+from typing import Tuple, Dict
 
-from torch_mlir._mlir_libs._mlir.ir import (
-    Context,
-    Module,
-    OpView,
-    FunctionType,
-)
 from torch_mlir._mlir_libs._torchMlir import get_val_identifier
 
-from hls.scripts.refactor.ops import OPS
+from hls.scripts.refactor.ops import OPS, OpType
+from torch_mlir._mlir_libs._mlir.ir import Context, Module, OpView, FunctionType
 
 
 def traverse_op_region_block_iterators(op, handler):
@@ -49,7 +45,24 @@ def module_ops_iter(module_str):
         yield line
 
 
-OpIdData = namedtuple("OpIdData", "res_val opr pe_idx op_inputs start_time")
+@dataclass
+class OpIdData:
+    res_val: str
+    opr: OpType
+    pe_idx: Tuple[int, ...]
+    op_inputs: Dict[str, str]
+    start_time: int
+
+    def __iter__(self):
+        return iter(
+            (self.res_val, self.opr, self.pe_idx, self.op_inputs, self.start_time)
+        )
+
+    def __post_init__(self):
+        object.__setattr__(self, "start_time", (self.start_time or 0) + 1)
+
+    def __getitem__(self, item):
+        return tuple(self)[item]
 
 
 def parse_mlir_module(module_str):
@@ -108,10 +121,7 @@ def parse_mlir_module(module_str):
 def parse_mlir_module_using_mlir(module_str):
     ctx = Context()
     ctx.allow_unregistered_dialects = True
-    module = Module.parse(
-        module_str,
-        ctx,
-    )
+    module = Module.parse(module_str, ctx)
     op = module.operation
 
     def handler(mlir_op):

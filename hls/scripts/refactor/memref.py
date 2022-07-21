@@ -1,12 +1,12 @@
 import itertools
+from dataclasses import dataclass
 from typing import Tuple
 
 import numpy as np
-from dataclasses import dataclass
 
-from hls.scripts.refactor.state import idx_to_str
-from hls.scripts.refactor.ops import make_constant, Val
 from hls.scripts.refactor import state
+from hls.scripts.refactor.ops import make_constant, Val
+from hls.scripts.refactor.state import idx_to_str
 
 MemRefIndex = Tuple[int, ...]
 

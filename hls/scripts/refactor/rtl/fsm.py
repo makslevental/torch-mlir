@@ -47,7 +47,7 @@ class FSM:
         first_state = str(1).zfill(self.fsm_idx_width)
         fsm = dedent(
             f"""\
-                always @ (posedge clock) begin
+                always @ (posedge clk) begin
                     if (reset == 1'b1) begin
                         current_state_fsm <= fsm_state{first_state};
                     end else begin
