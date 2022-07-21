@@ -2,7 +2,7 @@ import numpy as np
 
 # fmt: off
 from hls.scripts.refactor.memref import MemRef, GlobalMemRef
-from hls.scripts.refactor.ops import Alias, FMAC, ReLU
+from hls.scripts.refactor.ops import Alias, FMAC, ReLU, ReduceAdd
 from hls.scripts.refactor.runner import parfor, Forward
 
 __constant_4x2x3x3xf32 = np.array(
@@ -32,11 +32,13 @@ __constant_2xf32 = np.array([1.039099e-01, -1.627121e-01, ]).reshape(2, )
 
 
 # fmt: on
-
+from hls.scripts.refactor import state
+pref = ".macs" if state.COLLAPSE_MACS else ""
+state.state = state.State(__file__.replace(".py", pref + ".mlir"))
 
 def forward(
     _arg0=MemRef("_arg0", 1, 2, 7, 7, input=True),
-    _arg1=MemRef("_arg1", 1, 2, 3, 3, output=True),
+    _arg1=MemRef("_arg1", 1, output=True),
     _0=GlobalMemRef("__constant_2xf32", __constant_2xf32),
     _1=GlobalMemRef("__constant_2x4x3x3xf32", __constant_2x4x3x3xf32),
     _2=GlobalMemRef("__constant_4xf32", __constant_4xf32),
@@ -89,12 +91,15 @@ def forward(
                     _14 = _12 + _13
                     _7[_arg2, _arg3, _arg4, _arg5] = _14
 
+    _88 = MemRef("_arg1", 1, 2, 3, 3, output=True)
     @parfor(ranges=(range(0, 1, 1), range(0, 2, 1), range(0, 3, 1), range(0, 3, 1)))
     def body(_arg2, _arg3, _arg4, _arg5):
         _8 = _7[0, _arg3, _arg4, _arg5]
         _9 = _8 > 0.000000
         _10 = _8 if _9 else 0.000000
-        _arg1[_arg2, _arg3, _arg4, _arg5] = _10
+        _88[_arg2, _arg3, _arg4, _arg5] = _10
+
+    _arg1[0] = ReduceAdd(list(_88.registers.flatten()))
 
 
 if __name__ == "__main__":

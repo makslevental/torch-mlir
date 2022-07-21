@@ -94,6 +94,7 @@ def parfor(ranges):
 
 def Forward(forward, fp):
     pref = ".macs" if COLLAPSE_MACS else ""
-    state.state = state.State(fp.replace(".py", pref + ".mlir"))
+    if state.state is None:
+        state.state = state.State(fp.replace(".py", pref + ".mlir"))
     args = get_default_args(forward)
     MLIRForward(args, forward)

@@ -131,8 +131,8 @@ class Neg(ReLUOrNegIP):
 class PE:
     fadd: FAdd
     fmul: FMul
-    relu: ReLU
-    neg: Neg
+    frelu: ReLU
+    fneg: Neg
 
 
 if __name__ == "__main__":

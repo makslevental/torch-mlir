@@ -54,11 +54,9 @@ def make_pe_always(fsm, pe, op_datas, vals, input_wires):
         res_val = vals.get(data.res_val, data.res_val)
         vals_to_init.add(res_val)
         in_a = vals.get(args[0], input_wires.get(args[0], args[0]))
-        vals_to_init.add(in_a)
 
         if op in {OpType.MUL, OpType.DIV, OpType.ADD, OpType.SUB, OpType.GT}:
             in_b = vals.get(args[1], input_wires.get(args[1], args[1]))
-            vals_to_init.add(in_b)
             tree_conds.append(
                 make_always_branch(ip.x, in_a, fsm.make_fsm_states([start_time]))
             )
@@ -138,7 +136,7 @@ def main(mac_rewritten_sched_mlir_fp, precision):
         else:
             emit(val_reg.instantiate())
 
-    fsm = FSM(50, max_fsm_stage=return_time)
+    fsm = FSM(50, max_fsm_stage=return_time + 1)
     emit(fsm.make_fsm_params())
     emit(fsm.make_fsm_wires())
 
@@ -151,10 +149,10 @@ def main(mac_rewritten_sched_mlir_fp, precision):
         emit(fadd.instantiate())
         fmul = FMul(pe_idx, precision)
         emit(fmul.instantiate())
-        relu = ReLU(pe_idx, precision)
-        emit(relu.instantiate())
-        neg = Neg(pe_idx, precision)
-        pes[pe_idx] = PE(fadd, fmul, relu, neg)
+        frelu = ReLU(pe_idx, precision)
+        emit(frelu.instantiate())
+        fneg = Neg(pe_idx, precision)
+        pes[pe_idx] = PE(fadd, fmul, frelu, fneg)
 
     pe_to_ops = cluster_pes(pes, op_id_data)
     for pe, op_datas in pe_to_ops.items():

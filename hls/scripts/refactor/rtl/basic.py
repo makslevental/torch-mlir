@@ -33,7 +33,7 @@ def make_constant(v, precision):
 
 def make_always_tree(conds, vals_to_init):
     vals_to_init = [
-        f"\t{v} = 'x;"
+        f"\t{v} = 1'bx;"
         for v in vals_to_init
         if isinstance(v, Reg) and "cst" not in f"{v}"
     ]

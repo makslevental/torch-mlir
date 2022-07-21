@@ -100,7 +100,7 @@ class FSM:
         )
 
         fsm_2bit_width = math.ceil(math.log2(self.max_fsm_stage))
-        for i in range(1, self.max_fsm_stage):
+        for i in range(1, self.max_fsm_stage + 1):
             fsm += dedent(
                 f"""\
             assign current_state_fsm_state{str(i).zfill(self.fsm_idx_width)} = current_state_fsm[{fsm_2bit_width}'d{i - 1}];
