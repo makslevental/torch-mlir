@@ -4,9 +4,12 @@ from hls.scripts.refactor.memref import MemRef, GlobalMemRef
 from hls.scripts.refactor.ops import Alias, ReduceAdd, FMAC
 from hls.scripts.refactor.runner import parfor, Forward
 
+from hls.scripts.refactor import state
+pref = ".macs" if state.COLLAPSE_MACS else ""
+state.state = state.State(__file__.replace(".py", pref + ".mlir"))
 
 def forward(
-    _arg1=MemRef("_arg1", 1, 2, 3, 3, output=True),
+    _arg1=MemRef("_arg1", 1, output=True),
     _19=GlobalMemRef("_19", np.random.rand(2, 4, 1, 1)),
     _23=GlobalMemRef("_23", np.random.rand(1, 4, 3, 3)),
     _24=GlobalMemRef("_24", np.random.rand(1, 2, 3, 3)),
@@ -37,7 +40,7 @@ def forward(
 
     _25 = MemRef("_25", 1, 2, 3, 3)
     _25[:, :, :, :] = np.apply_along_axis(ReduceAdd, 0, _255.registers)
-    Alias(_arg1, _25)
+    _arg1[0] = ReduceAdd(list(_25.registers.flatten()))
 
 
 if __name__ == "__main__":
