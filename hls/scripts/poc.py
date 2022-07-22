@@ -189,7 +189,6 @@ BUFFERIZATION_PIPELINE = [
 LOWERING_PIPELINE = [
     "func.func(cse)",
     # TODO: use this correctly in promoteallocs
-    "torch-hls-drop-public-return",
     "func.func(cse)",
     # "func.func(convert-linalg-to-loops)",
     # "func.func(convert-linalg-to-affine-loops)",
